@@ -1,7 +1,10 @@
 {
   "expo": {
+    "splash": {
+      "image": "./assets/image4.jpeg",
     "name": "myproject",
     "slug": "myproject",
     "version": "1.0.0"
   }
+}
 }
