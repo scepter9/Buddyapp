@@ -759,8 +759,8 @@ app.get('/messages', (req, res) => {
       console.log('Received message data:', data);
       
       
-      const sql = 'INSERT INTO messages(sender_id, receiver_id, type, text, image_uri) VALUES (?, ?, ?, ?, ?)';
-      db.query(sql, [senderId, receiverId, type, text, imageUri], (err, result) => {
+      const sql = 'INSERT INTO messages(sender_id, receiver_id, type, text, image_uri, is_read) VALUES (?,?, ?, ?, ?, ?)';
+      db.query(sql, [senderId, receiverId, type, text, imageUri,false], (err, result) => {
         if (err) {
           console.error('Database error on message insertion:', err);
           // Send a failure response back to the sender.
@@ -781,6 +781,7 @@ app.get('/messages', (req, res) => {
           text,
           imageUri,
           timestamp: new Date().toISOString(),
+          isRead: false,
         };
   
         // Get the socket ID of the receiver from our connectedUsers map.
@@ -802,9 +803,259 @@ app.get('/messages', (req, res) => {
       }
     });
   });
+
+
+app.get('/conversations', (req, res) => {
+    const { userId } = req.query; // This is the ID of the user requesting their inbox
+
+    if (!userId) {
+        return res.status(400).json({ error: 'User ID is required.' });
+    }
+
+    const sql = `
+        SELECT
+            p.ID AS other_user_id,
+            p.FULLNAME AS other_user_name,
+            p.image AS other_user_image_uri,
+            last_message.text AS last_message_text,
+            last_message.created_at AS last_message_timestamp,
+            last_message.sender_id AS last_message_sender_id,
+            COALESCE(unread_counts.count, 0) AS unread_count -- This is the new part
+        FROM (
+            SELECT
+                IF(sender_id = ?, receiver_id, sender_id) AS other_person_id,
+                MAX(created_at) AS last_message_time
+            FROM messages
+            WHERE sender_id = ? OR receiver_id = ?
+            GROUP BY other_person_id
+        ) AS latest_messages_per_conversation
+        JOIN messages AS last_message ON (
+            (last_message.sender_id = ? AND last_message.receiver_id = latest_messages_per_conversation.other_person_id)
+            OR
+            (last_message.receiver_id = ? AND last_message.sender_id = latest_messages_per_conversation.other_person_id)
+        ) AND last_message.created_at = latest_messages_per_conversation.last_message_time
+        JOIN projecttables AS p ON latest_messages_per_conversation.other_person_id = p.ID
+        LEFT JOIN ( -- Join to get unread counts for each conversation
+            SELECT
+                sender_id AS other_person_id_for_unread,
+                COUNT(*) AS count
+            FROM messages
+            WHERE receiver_id = ? AND is_read = FALSE
+            GROUP BY sender_id
+        ) AS unread_counts ON unread_counts.other_person_id_for_unread = latest_messages_per_conversation.other_person_id
+        ORDER BY last_message_timestamp DESC;
+    `;
+
+    // Note: There are 6 parameters now due to the added LEFT JOIN subquery
+    const params = [userId, userId, userId, userId, userId, userId];
+
+    db.query(sql, params, (err, results) => {
+        if (err) {
+            console.error('Error fetching conversations:', err);
+            return res.status(500).json({ error: 'Failed to fetch conversations.' });
+        }
+        res.status(200).json(results);
+    });
+});
+
+
   
+app.get('/following', (req, res) => {
+    const sender_id = req.session.user?.id;
+
+    if (!sender_id) {
+        return res.status(401).json({ error: 'User not logged in' });
+    }
+
+    const sql = `
+        SELECT 
+            p.id, 
+            p.FULLNAME, 
+            p.username, 
+            p.image, 
+            f.created_at AS follow_date
+        FROM follows f
+        JOIN projecttables p ON f.receiver_id = p.id
+        WHERE f.sender_id = ?
+        ORDER BY f.created_at DESC
+    `;
+
+    db.query(sql, [sender_id], (err, results) => {
+        if (err) {
+            console.error('Error fetching following list:', err);
+            return res.status(500).json({ error: 'Failed to fetch following list.' });
+        }
+        res.status(200).json(results);
+    });
+});
+
+app.get('/followers', (req, res) => {
+    const currentUserId = req.session.user?.id;
+    if (!currentUserId) return res.status(401).json({ error: 'Not logged in' });
   
+    const sql = `
+      SELECT 
+        p.id,
+        p.FULLNAME,
+        p.username,
+        p.email,
+        p.image,
+        f.created_at AS follow_date,
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 
+            FROM follows 
+            WHERE sender_id = ? AND receiver_id = p.id
+          ) THEN 1 ELSE 0
+        END AS isFollowing
+      FROM follows f
+      JOIN projecttables p ON f.sender_id = p.id
+      WHERE f.receiver_id = ?
+      ORDER BY f.created_at DESC
+    `;
   
+    db.query(sql, [currentUserId, currentUserId], (err, results) => {
+      if (err) {
+        console.error('Error fetching followers:', err);
+        return res.status(500).json({ error: 'Failed to load followers.' });
+      }
+      res.status(200).json(results);
+    });
+  });
+  app.get('/users/:userId/following', (req, res) => {
+    const requestedUserId = req.params.userId;
+    const currentUserId = req.session.user?.id;
+
+    if (!currentUserId) {
+        return res.status(401).json({ error: 'User not logged in' });
+    }
+
+    const sql = `
+        SELECT 
+            p.id, 
+            p.FULLNAME, 
+            p.username, 
+            p.image, 
+            f.created_at AS follow_date,
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1 
+                    FROM follows 
+                    WHERE sender_id = ? AND receiver_id = p.id
+                ) THEN 1 ELSE 0
+            END AS isFollowing
+        FROM follows f
+        JOIN projecttables p ON f.receiver_id = p.id
+        WHERE f.sender_id = ?
+        ORDER BY f.created_at DESC
+    `;
+
+    db.query(sql, [currentUserId, requestedUserId], (err, results) => {
+        if (err) {
+            console.error('Error fetching user following list:', err);
+            return res.status(500).json({ error: 'Failed to fetch following list.' });
+        }
+        res.status(200).json(results);
+    });
+});
+app.get('/users/:userId/followers', (req, res) => {
+    const requestedUserId = req.params.userId;
+    const currentUserId = req.session.user?.id;
+
+    if (!currentUserId) return res.status(401).json({ error: 'Not logged in' });
+
+    const sql = `
+      SELECT 
+        p.id,
+        p.FULLNAME,
+        p.username,
+        p.email,
+        p.image,
+        f.created_at AS follow_date,
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 
+            FROM follows 
+            WHERE sender_id = ? AND receiver_id = p.id
+          ) THEN 1 ELSE 0
+        END AS isFollowing
+      FROM follows f
+      JOIN projecttables p ON f.sender_id = p.id
+      WHERE f.receiver_id = ?
+      ORDER BY f.created_at DESC
+    `;
+ 
+    db.query(sql, [currentUserId, requestedUserId], (err, results) => {
+      if (err) {
+        console.error('Error fetching user followers:', err);
+        return res.status(500).json({ error: 'Failed to load followers.' });
+      }
+      res.status(200).json(results);
+    });
+});
+  // New API endpoint to mark messages in a specific conversation as read
+app.post('/messages/mark-as-read', (req, res) => {
+    const { senderId, receiverId } = req.body; // senderId here is the person the logged-in user is chatting WITH
+  
+    if (!senderId || !receiverId) {
+      return res.status(400).json({ error: 'Sender ID and Receiver ID are required.' });
+    }
+  
+    // Update messages where the logged-in user is the receiver and messages are from the specific sender
+    const updateSql = `
+      UPDATE messages
+      SET is_read = TRUE
+      WHERE receiver_id = ? AND sender_id = ? AND is_read = FALSE;
+    `;
+  
+    db.query(updateSql, [receiverId, senderId], (err, updateResult) => {
+      if (err) {
+        console.error('Error marking messages as read:', err);
+        return res.status(500).json({ error: 'Failed to mark messages as read.' });
+      }
+      console.log(`Marked ${updateResult.affectedRows} messages as read for receiver ${receiverId} from sender ${senderId}.`);
+  
+      // After updating, fetch the *total* unread count for the receiver
+      const countSql = `
+        SELECT COUNT(*) AS unreadCount
+        FROM messages
+        WHERE receiver_id = ? AND is_read = FALSE;
+      `;
+      db.query(countSql, [receiverId], (countErr, countResult) => {
+        if (countErr) {
+          console.error('Error fetching new unread count:', countErr);
+          return res.status(500).json({ error: 'Failed to fetch new unread count.' });
+        }
+  
+        const newUnreadCount = countResult[0].unreadCount;
+        res.status(200).json({ message: 'Messages marked as read', newUnreadCount });
+      });
+    });
+  });
+  
+  // New API endpoint to get the initial total unread count for a user
+  app.get('/unread-messages-count', (req, res) => {
+    const { userId } = req.query;
+  
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required.' });
+    }
+  
+    const sql = `
+      SELECT COUNT(*) AS count
+      FROM messages
+      WHERE receiver_id = ? AND is_read = FALSE;
+    `;
+  
+    db.query(sql, [userId], (err, results) => {
+      if (err) {
+        console.error('Error fetching unread messages count:', err);
+        return res.status(500).json({ error: 'Failed to fetch unread messages count.' });
+      }
+      res.status(200).json({ count: results[0].count });
+    });
+  });
+
 server.listen(3000, () => {
   console.log('Server running on http://localhost:3000');
 });

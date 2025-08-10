@@ -20,7 +20,6 @@ function Profile({ navigation, route }) {
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isFollowActionLoading, setIsFollowActionLoading] = useState(false);
 
-  // Determine if the currently viewed profile belongs to the logged-in user
   const isViewingOwnProfile = !route.params?.userId || route.params.userId === loggedInUserId;
 
   const fetchProfileData = useCallback(async () => {
@@ -122,26 +121,6 @@ function Profile({ navigation, route }) {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/logout`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        navigation.replace('Login');
-      } else {
-        const errorData = await response.json();
-        Alert.alert('Logout Failed', errorData.error || 'Could not log out.');
-        console.log('Logout failed:', errorData.error);
-      }
-    } catch (error) {
-      console.error('Logout request error:', error);
-      Alert.alert('Network Error', 'Could not log out due to network issues.');
-    }
-  };
-
   const handleFindFriends = () => {
     navigation.navigate('UserSearch');
   };
@@ -149,7 +128,7 @@ function Profile({ navigation, route }) {
   if (isLoadingProfile || !userProfile) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1A5252" />
+        <ActivityIndicator size="large" color="#607D8B" />
         <Text style={styles.loadingText}>Loading Profile...</Text>
       </View>
     );
@@ -162,9 +141,9 @@ function Profile({ navigation, route }) {
   return (
     <View style={styles.fullScreenContainer}>
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
-        <View style={styles.upperSection}>
+        <View style={styles.mainContentCard}>
           <View style={styles.profileHeader}>
-            <View style={styles.imageWrapper}>
+            <View style={styles.profileImageWrapper}>
               {imageSource ? (
                 <Image source={imageSource} style={styles.profileImage} />
               ) : (
@@ -196,27 +175,30 @@ function Profile({ navigation, route }) {
                 </View>
               )}
             </View>
+            <Text style={styles.profileHandle}>@{userProfile.email.split('@')[0]}</Text>
             <Text style={styles.joinDateText}>📅 Joined {userProfile.joinDate}</Text>
-            <Text style={styles.profileEmail}>{userProfile.email}</Text>
+            
             <Text style={styles.bioText}>
               {userProfile.about?.trim() || (isViewingOwnProfile
                 ? 'You have not added a bio yet.'
-                : 'This user has not added a bio.')}
+                : 'This user has put the department.')}
             </Text>
           </View>
-
-          <View style={styles.statsSection}>
-            <View style={styles.statItem}>
-              <Text style={styles.statCount}>{userProfile.following ?? 0}</Text>
-              <Text style={styles.statLabel}>Following</Text>
+          
+          <TouchableOpacity onPress={() => navigation.navigate('FriendList', { userId: userProfile.id })}>
+            <View style={styles.statsContainer}>
+              <View style={styles.statItem}>
+                <Text style={styles.statCount}>{userProfile.following ?? 0}</Text>
+                <Text style={styles.statLabel}>Following</Text>
+              </View>
+              <View style={styles.statSeparator} />
+              <View style={styles.statItem}>
+                <Text style={styles.statCount}>{userProfile.followers ?? 0}</Text>
+                <Text style={styles.statLabel}>Followers</Text>
+              </View>
             </View>
-            <View style={styles.separatorLine} />
-            <View style={styles.statItem}>
-              <Text style={styles.statCount}>{userProfile.followers ?? 0}</Text>
-              <Text style={styles.statLabel}>Followers</Text>
-            </View>
-          </View>
-
+          </TouchableOpacity>
+          
           {isViewingOwnProfile ? (
             <View style={styles.ownProfileActions}>
               <TouchableOpacity
@@ -225,16 +207,19 @@ function Profile({ navigation, route }) {
               >
                 <Text style={styles.findFriendsButtonText}>➕ Find Friends</Text>
               </TouchableOpacity>
-
-              <View style={styles.buttonSpacing} />
+              {/* Commented out Logout button as requested */}
+              {/*
+              <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+                <Text style={styles.logoutButtonText}>Logout</Text>
+              </TouchableOpacity>
+              */}
             </View>
           ) : (
-            // This is the updated section with both the Follow and Message buttons
-            <View style={styles.otherUserActions}>
+            <View style={styles.buttonContainer}>
               <TouchableOpacity
                 style={[
-                  isFollowing ? styles.unfollowButton : styles.followButton,
                   styles.actionButton,
+                  isFollowing ? styles.unfollowButton : styles.followButton,
                 ]}
                 onPress={handleFollowToggle}
                 disabled={isFollowActionLoading}
@@ -245,11 +230,13 @@ function Profile({ navigation, route }) {
               </TouchableOpacity>
               
               <TouchableOpacity
-                style={[styles.messageButton, styles.actionButton]}
+                style={[styles.actionButton, styles.messageButton]}
                 onPress={() => {
-                  // This assumes you have a ChatScreen set up in your navigator
-                  navigation.navigate('MessageUser', {  recipientId: userProfile.id,      // This passes the ID
-                  recipientName: userProfile.name, recipientImage:`${API_BASE_URL}/uploads/${userProfile.image}`});
+                  navigation.navigate('MessageUser', { 
+                    recipientId: userProfile.id, 
+                    recipientName: userProfile.name, 
+                    recipientImage: `${API_BASE_URL}/uploads/${userProfile.image}` 
+                  });
                 }}
               >
                 <Text style={styles.messageButtonText}>Message</Text>
@@ -267,191 +254,262 @@ function Profile({ navigation, route }) {
 const styles = StyleSheet.create({
   fullScreenContainer: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F7F9FC',
   },
   scrollViewContent: {
-    paddingBottom: 75,
+    paddingBottom: 80,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F7F9FC',
   },
   loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
+    marginTop: 12,
+    fontSize: 17,
+    color: '#607D8B',
+    fontWeight: '500',
   },
-  upperSection: {
-    width: '100%',
-    backgroundColor: '#fdfdfd',
-    minHeight: 480,
+
+  mainContentCard: {
+    margin: 15,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 30,
     alignItems: 'center',
-    paddingTop: 40,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#34495e',
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 15,
+    elevation: 8,
   },
+  
+  // Profile Header with new full-width profile picture
   profileHeader: {
-    width: 320,
-    marginBottom: 20,
+    width: '100%',
     alignItems: 'center',
-    position: 'relative',
+    marginBottom: 20,
   },
-  imageWrapper: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'white',
-    borderWidth: 2,
-    borderColor: '#1A5252',
+  // New profile image shape: full-width, rounded top corners
+  profileImageWrapper: {
+    width: 150,
+    height: 150,
+    borderRadius: 75, // This is all you need for a circle
+    backgroundColor: '#E0F2F1',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
     overflow: 'hidden',
+    marginBottom: -100, // Pull up the content below the image
+},
+  profileImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
-  profileImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   noProfileImagePlaceholder: {
-    backgroundColor: '#eee',
+    backgroundColor: '#B0BEC5',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  noProfileImageText: { color: '#aaa' },
+  noProfileImageText: {
+    color: '#607D8B',
+    fontWeight: '700',
+    fontSize: 14,
+  },
   editProfileButton: {
     position: 'absolute',
-    right: 0,
-    top: 10,
-    backgroundColor: '#f0f0f0',
+    right: 15,
+    bottom: 15, // Align button to the bottom right of the image
+    backgroundColor: '#AAB7B8',
     borderRadius: 20,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#1A5252',
+    shadowColor: '#495057',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 3,
   },
-  editProfileButtonText: { fontSize: 13, color: '#333', fontWeight: '500' },
-  profileDetails: { alignItems: 'center', marginTop: 12 },
-  nameAndBadgeContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  profileName: { fontSize: 24, fontWeight: '700', color: '#222' },
-  proUserBadge: {
-    backgroundColor: '#28a745',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  editProfileButtonText: {
+    fontSize: 13,
+    color: 'white',
+    fontWeight: '600',
   },
-  proUserText: { color: 'white', fontSize: 11, fontWeight: '700' },
-  joinDateText: { fontSize: 13, color: '#888', marginTop: 4 },
-  profileEmail: { fontSize: 13, color: '#888', marginTop: 2 },
-  bioText: {
-    marginTop: 15,
-    color: '#333',
-    fontWeight: '400',
-    fontStyle: 'italic',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderRadius: 10,
-    maxWidth: 320,
-    textAlign: 'center',
-    backgroundColor: '#fff',
-    borderColor: '#ddd',
-    borderWidth: 1,
+  profileDetails: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 25,
+    marginTop: 100, // Push content down to avoid overlapping the full-width image
   },
-  statsSection: {
+  nameAndBadgeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 15,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    gap: 10,
   },
-  statItem: { alignItems: 'center', marginHorizontal: 15 },
-  statCount: { fontSize: 18, fontWeight: '700', color: '#1A5252' },
-  statLabel: { fontSize: 12, color: '#555', marginTop: 2 },
-  separatorLine: { height: '80%', width: 1, backgroundColor: '#ddd', marginHorizontal: 10 },
-  ownProfileActions: {
+  profileName: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#2C3E50',
+    letterSpacing: 0.5,
+    marginBottom: 5,
+  },
+  profileHandle: {
+    fontSize: 16,
+    color: '#7F8C8D',
+    fontWeight: '500',
+    marginBottom: 10,
+  },
+  proUserBadge: {
+    backgroundColor: '#F39C12',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    shadowColor: '#F39C12',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  proUserText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  joinDateText: {
+    fontSize: 14,
+    color: '#95A5A6',
+    marginTop: 6,
+    fontWeight: '600',
+  },
+  bioText: {
     marginTop: 20,
+    color: '#495057',
+    fontWeight: '400',
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 300,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
+    width: '80%',
+    backgroundColor: '#ECF0F1',
+    borderRadius: 15,
+    paddingVertical: 12,
+    marginBottom: 25,
+    shadowColor: '#BDC3C7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statCount: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#2C3E50',
+  },
+  statLabel: {
+    fontSize: 13,
+    color: '#495057',
+    marginTop: 3,
+    fontWeight: '600',
+  },
+  statSeparator: {
+    height: 25,
+    width: 1,
+    backgroundColor: '#BDC3C7',
+  },
+  ownProfileActions: {
+    alignItems: 'center',
+    marginTop: 20,
     width: '100%',
   },
   findFriendsButton: {
     backgroundColor: '#1A5252',
-    borderRadius: 25,
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    width: 200,
+    borderRadius: 30,
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    width: '80%',
     alignItems: 'center',
+    shadowColor: '#1A5252',
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.6,
+    shadowRadius: 14,
+    elevation: 9,
   },
   findFriendsButtonText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: 'white',
+    fontWeight: '700',
     fontSize: 16,
+    letterSpacing: 0.7,
   },
-  buttonSpacing: {
-    height: 10,
-  },
-  otherUserActions: {
+  buttonContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 20,
-    width: '100%',
-    paddingHorizontal: 20,
+    width: '85%',
   },
   actionButton: {
-    
-    width:120 // Let buttons take up available space
+    flex: 1,
+    borderRadius: 30,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginHorizontal: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 5,
   },
   followButton: {
-    backgroundColor: '#1A5252',
-    borderRadius: 25,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginRight: 10, // Added spacing to the right of the button
+    backgroundColor: '#3498DB',
+    shadowColor: '#3498DB',
   },
   unfollowButton: {
-    backgroundColor: '#d63031',
-    borderRadius: 15,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginRight: 10, // Added spacing to the right of the button
+    backgroundColor: '#E74C3C',
+    shadowColor: '#E74C3C',
   },
   buttonText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: 'white',
+    fontWeight: '700',
     fontSize: 16,
   },
   messageButton: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 15,
-    paddingVertical: 12,
-    alignItems: 'center',
+    backgroundColor: '#ECF0F1',
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: '#BDC3C7',
+    shadowColor: '#BDC3C7',
   },
   messageButtonText: {
-    color: '#333',
-    fontWeight: '600',
+    color: '#2C3E50',
+    fontWeight: '700',
     fontSize: 16,
   },
   logoutButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    backgroundColor: '#ff4d4d',
-    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    backgroundColor: '#E74C3C',
+    borderRadius: 30,
     alignItems: 'center',
-    width: 150,
+    width: '80%',
+    marginTop: 20,
+    shadowColor: '#E74C3C',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 8,
   },
   logoutButtonText: {
     color: 'white',
-    fontWeight: '600',
-    fontSize: 15,
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.6,
   },
 });
 

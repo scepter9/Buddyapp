@@ -16,7 +16,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { io } from 'socket.io-client';
 import { AuthorContext } from './AuthorContext';
-import { UnreadMessagesContext } from './UnreadMessagesContext' // Import the context
+import { UnreadMessagesContext } from './contexts/UnreadMessagesContext'; // Import the context
 
 const API_BASE_URL = 'http://172.20.10.4:3000';
 
@@ -118,7 +118,7 @@ function MessageUser({ navigation, route }) {
       receiverId: recipientId,
       text: currentMessage,
       type: 'text',
-      imageUri: recipientImage, // Set to null if no image is being sent
+      imageUri: null, // Set to null if no image is being sent
     };
 
     if (socket) {

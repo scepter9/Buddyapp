@@ -17,7 +17,10 @@ import BottomNavigator from './screens/BottomNavigator';
 import NotificationsScreen from './screens/NotificationsScreen'
 import Messages from './screens/Messages'
 import MessageUser from './screens/MessageUser'
+import NewMessage from './screens/NewMessage';
+import FriendList from './screens/FriendList';
 import { AuthProvider } from './screens/Authcontext';
+import { UnreadMessagesProvider } from './screens/UnreadMessagesContext';
 import { AuthorProvider } from './screens/AuthorContext';
 
 const Stack = createNativeStackNavigator();
@@ -35,13 +38,13 @@ export default function App() {
 
   return (
     <  AuthorProvider>
-
+ <UnreadMessagesProvider>
     <NavigationContainer>
   <Stack.Navigator initialRouteName="Splash">
     <Stack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Login" component={Login} options={{ headerShown: false }} />
     <Stack.Screen name="About" component={About} options={{ headerShown: false }} />
-    <Stack.Screen name="Profile" component={Profile} options={{ headerShown: true }} />
+    <Stack.Screen name="Profile" component={Profile} options={{ headerShown: false }} />
     <Stack.Screen name="Register" component={Register} options={{ headerShown: false }} />
     <Stack.Screen name="Editprofile" component={Editprofile} options={{ headerShown: true }} />
     <Stack.Screen name="ForgotPass" component={ForgotPass} options={{ headerShown: false }} />
@@ -51,8 +54,11 @@ export default function App() {
     <Stack.Screen name="BottomNavigator" component={BottomNavigator} options={{ headerShown: true }} />
     <Stack.Screen name="Messages" component={Messages} options={{ headerShown: false}} />
     <Stack.Screen name="MessageUser" component={MessageUser} options={{ headerShown: false}} />
+    <Stack.Screen name="FriendList" component={FriendList} options={{ headerShown: false}} />
+    <Stack.Screen name="NewMessage" component={NewMessage} options={{ headerShown: false}} />
   </Stack.Navigator>
 </NavigationContainer>
+</UnreadMessagesProvider>
 </  AuthorProvider>
   );
 }

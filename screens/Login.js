@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect , useContext} from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,11 @@ import {
   Alert,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { AuthorContext } from './AuthorContext';
+
 
 export default function Login({ navigation }) {
+  const { setUser } = useContext(AuthorContext);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [usernameError, setUsernameError] = useState('');
@@ -46,12 +49,14 @@ export default function Login({ navigation }) {
       const response = await fetch('http://172.20.10.4:3000/Login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ username, password }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
+        setUser(data.user);
         navigation.replace('About');
       } else {
         if (data.error === 'Invalid username') setUsernameError('Invalid username');
@@ -74,7 +79,8 @@ export default function Login({ navigation }) {
       .then(res => res.json())
       .then(data => {
         if (data.loggedIn) {
-          navigation.replace('About', { user: data.user });
+          setUser(data.user);
+          navigation.replace('About');
         }
       })
       .catch(err => {

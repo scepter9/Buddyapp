@@ -147,7 +147,7 @@ export default function About({ navigation }) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#1A5252" />
-        <Text style={styles.loadingText}>Loading Buddy...</Text>
+        <Text style={styles.loadingText}>Loading Homepage...</Text>
       </View>
     );
   }

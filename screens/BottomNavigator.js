@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react'; // Import useContext
 import {
     View,
     Text,
@@ -14,46 +14,50 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
+import { UnreadMessagesContext } from './UnreadMessagesContext'
 
-// Make sure to pass the 'navigation' prop to BottomNavigator if you're using it for navigation.
-// It looks like this component is being used without being part of a Navigator itself,
-// so 'navigation' needs to be passed down from a parent screen (like About.js).
-function BottomNavigator({ navigation }) { // <-- Added navigation prop here
-    // Removed darkMode as it's not defined or passed here.
-    // The component will now consistently use light theme styles.
+function BottomNavigator({ navigation }) {
+    const { unreadCount } = useContext(UnreadMessagesContext); // Access the unreadCount
 
     return (
-        <View style={[styles.bottomNav, { backgroundColor: 'white' }]}> {/* Hardcoded to light background */}
+        <View style={[styles.bottomNav, { backgroundColor: 'white' }]}>
             <TouchableOpacity onPress={() => navigation.navigate('About')} style={styles.navButton}>
-                <Text style={[styles.navIcon, styles.navTextLight]}> {/* Used navTextLight directly */}
-                    <Feather name="home" size={25} color="black" /> {/* Hardcoded icon color */}
+                <Text style={[styles.navIcon, styles.navTextLight]}>
+                    <Feather name="home" size={25} color="black" />
                 </Text>
                 <Text style={[styles.navLabel, styles.navTextLight]}></Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.navButton}>
-                <Text style={[styles.navIcon, styles.navTextLight]}> {/* Used navTextLight directly */}
-                    <Feather name="compass" size={25} color="black" /> {/* Hardcoded icon color */}
+                <Text style={[styles.navIcon, styles.navTextLight]}>
+                    <Feather name="compass" size={25} color="black" />
                 </Text>
                 <Text style={[styles.navLabel, styles.navTextLight]}></Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.navButton}>
-                <Text style={[styles.navIcon, styles.navTextLight]}> {/* Used navTextLight directly */}
-                    <Feather name="settings" size={25} color="black" /> {/* Hardcoded icon color */}
+                <Text style={[styles.navIcon, styles.navTextLight]}>
+                    <Feather name="settings" size={25} color="black" />
                 </Text>
                 <Text style={[styles.navLabel, styles.navTextLight]}></Text>
             </TouchableOpacity>
+
             <TouchableOpacity onPress={() => navigation.navigate('Messages')} style={styles.navButton}>
-                <Feather name="mail" size={25} color="black" /> {/* Hardcoded icon color */}
-                <Text style={[styles.navLabel, styles.navTextLight]}>
-
-                </Text>
+                <View style={{ position: 'relative' }}>
+                    <Feather name="mail" size={25} color="black" />
+                    {/* Conditionally render the badge only if unreadCount > 0 */}
+                    {unreadCount > 0 && (
+                        <View style={styles.badgeContainer}>
+                            <Text style={styles.badgeText}>{unreadCount}</Text>
+                        </View>
+                    )}
+                </View>
+                <Text style={[styles.navLabel, styles.navTextLight]}></Text>
             </TouchableOpacity>
-
         </View>
     );
 }
+
 const styles = StyleSheet.create({
     bottomNav: {
         position: 'absolute',
@@ -68,28 +72,40 @@ const styles = StyleSheet.create({
         borderTopColor: '#ddd',
         paddingBottom: 2,
     },
-
     navButton: {
         justifyContent: 'center',
         alignItems: 'center',
     },
-
     navIcon: {
         fontSize: 24,
     },
-
+    badgeContainer: {
+        position: 'absolute',
+        top: -6,
+        right: -6,
+        backgroundColor: 'red',
+        borderRadius: 8,
+        minWidth: 16,
+        height: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 4,
+    },
+    badgeText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
     navLabel: {
         fontSize: 12,
         marginTop: 2,
     },
-
     navTextLight: {
         color: '#000',
     },
-
     navTextDark: {
         color: '#fff',
     },
-
 });
+
 export default BottomNavigator;
