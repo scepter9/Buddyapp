@@ -18,6 +18,7 @@ import { Feather } from '@expo/vector-icons';
 import BottomNavigator from './BottomNavigator';
 import { AuthorContext } from './AuthorContext';
 import { io } from 'socket.io-client';
+import { useFocusEffect } from '@react-navigation/native';
 
 const API_BASE_URL = 'http://172.20.10.4:3000';
 
@@ -85,10 +86,11 @@ const MessageScreen = ({ navigation }) => {
       recipientImage: recipient.image ? `${API_BASE_URL}/uploads/${recipient.image}` : null,
     });
   };
-
-  useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchConversations();
+    }, [fetchConversations])
+  );
 
   useEffect(() => {
     if (!myUserId) return;

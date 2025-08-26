@@ -11,7 +11,7 @@ import { Feather } from '@expo/vector-icons';
 const API_BASE_URL = 'http://172.20.10.4:3000';
 
 // Add `route` to the component props to access navigation parameters
-const FriendList = ({ navigation, route }) => {
+const FriendList = ({ navigation, route }) => { 
   const [activeTab, setActiveTab] = useState('following');
   const [following, setFollowing] = useState([]);
   const [followers, setFollowers] = useState([]);

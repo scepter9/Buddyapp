@@ -218,8 +218,8 @@ useEffect(() => {
 
     const socket = io(API_BASE_URL, {
       withCredentials: true,
-    });
-
+    }); 
+ 
     socket.on('connect', () => {
       console.log('Connected to WebSocket server');
       if (loggedInUserId) {

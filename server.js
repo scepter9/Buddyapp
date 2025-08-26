@@ -10,9 +10,10 @@ const multer = require('multer');
 const path = require('path');
 const http = require('http'); // Import http module
 const { Server } = require('socket.io'); // Import Server from socket.io
+const { log } = require('console');
 
 
-// CORS middleware
+// CORS middleware 
 app.use(cors({
     origin: true, // Or specify your frontend origin like 'http://localhost:19006'
     credentials: true
@@ -49,6 +50,7 @@ const io = new Server(server, {
 
 // Store connected users and their socket IDs (optional, but useful for direct messaging/notifications)
 const connectedUsers = new Map(); // Map userId to socket.id
+const activeAnonymousRooms=new Map();
 
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
@@ -88,21 +90,21 @@ const transporter = nodemailer.createTransport({
     }
 });
 // Database
-const db = mysql.createConnection({
+const db = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_DATABASE,
-});
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+  });
+  
+  console.log('MySQL pool created');
+  
 
 
-db.connect((err) => {
-    if (err) {
-        console.error('MySQL connection failed:', err.message);
-    } else {
-        console.log('Connected to MySQL database');
-    }
-});
+
 
 // Register route
 app.post('/Register', (req, res) => {
@@ -157,8 +159,7 @@ app.post('/Login', (req, res) => {
     });
 });
 
-// **FIXED** Profile route — uses session
-// You had this route duplicated below, I've moved the correct one here
+
 app.get('/Profile', (req, res) => {
     if (!req.session.user) {
         return res.status(401).json({ error: 'Not authenticated' });
@@ -292,9 +293,7 @@ app.post('/forgot-password', (req, res) => {
 });
 
 
-// Note: bcrypt is imported but not used in the reset-password route's update.
-// This is fine if you're not hashing passwords, but be aware of the security implications.
-// const bcrypt = require('bcrypt'); // This import was out of scope. Moved to the top if needed globally.
+
 
 app.post('/reset-password', async (req, res) => {
     const { code, email, newPassword } = req.body;
@@ -350,10 +349,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// The original Profile route was duplicated; I've used the first one.
-// This route '/get-profile' appears to be a duplicate or unused.
-// If it's intended to be a different endpoint, clarify its purpose.
-// If not, it can likely be removed to avoid confusion.
+
 app.get('/get-profile', (req, res) => {
     const userId = req.session.user?.id;
 
@@ -563,8 +559,7 @@ app.post('/checkuser', (req, res) => {
     });
 })
 
-// Remove the /create-notification route as it's no longer needed for real-time
-// app.post('/create-notification', (req, res) => { /* ... */ });
+
 app.post('/unfollow', (req, res) => {
     const { receiver_id } = req.body;
     const sender_id = req.session.user?.id;
@@ -625,27 +620,6 @@ app.post('/unfollow', (req, res) => {
         });
     });
 });
-
-
-
-
-
-
-// app.post('/create-notification',(req,res)=>{
-//   const{sender_id,receiver_id,message}=req.body;
-//   if(!sender_id || !receiver_id || !message){
-//     return res.status(400).json({error:'sender,receiver and messages are required'})
-//   }
-//   const sql='INSERT INTO notifications(sender_id,receiver_id,message) VALUES(?,?,?)';
-//   db.query(sql, [sender_id, receiver_id,message], (err ) => {
-//     if (err) {
-//       console.error('Failed to create notification:', err);
-//       return res.status(500).json({ error: 'Database error' });
-//     }
-//     res.json({success:true})
-//   });
-// })
-
 
 app.get('/notifications', (req, res) => {
   const receiver_id = req.session.user?.id;
@@ -742,67 +716,102 @@ app.get('/messages', (req, res) => {
   
   // --- Socket.IO Real-Time Communication ---
   io.on('connection', (socket) => {
-    // Get the user ID from the query parameters when the user connects.
     const userId = socket.handshake.query.userId;
     console.log(`User connected with ID: ${userId}`);
   
-    // Store user and their socket ID in the map for real-time lookups.
     if (userId) {
       connectedUsers.set(userId, socket.id);
       console.log(`User ${userId} assigned to socket ID: ${socket.id}`);
     }
   
-    // Listen for 'sendMessage' events from the frontend.
-    // The 'callback' parameter is used to send a response back to the sender.
+    db.query(
+      'INSERT INTO users_online (user_id, socket_id, is_online, last_seen) VALUES (?, ?, TRUE, NOW()) ON DUPLICATE KEY UPDATE socket_id = VALUES(socket_id), is_online = TRUE, last_seen = NOW()',
+      [userId, socket.id]
+    );
+  
+    io.emit('user_online', userId);
+  
+    // --- sendMessage with block check ---
     socket.on('sendMessage', (data, callback) => {
       const { senderId, receiverId, type, text, imageUri } = data;
-      console.log('Received message data:', data);
-      
-      
-      const sql = 'INSERT INTO messages(sender_id, receiver_id, type, text, image_uri, is_read) VALUES (?,?, ?, ?, ?, ?)';
-      db.query(sql, [senderId, receiverId, type, text, imageUri,false], (err, result) => {
-        if (err) {
-          console.error('Database error on message insertion:', err);
-          // Send a failure response back to the sender.
-          if (callback) callback({ error: 'Database error: Message could not be saved.' });
-          return;
+  
+      // 1️⃣ Check if either user blocked the other
+      const checkBlockSQL = `
+        SELECT 1 FROM blocked_users
+        WHERE (blocker_id = ? AND blocked_id = ?)
+           OR (blocker_id = ? AND blocked_id = ?)
+      `;
+      db.query(checkBlockSQL, [senderId, receiverId, receiverId, senderId], (err, results) => {
+        if (err) return callback({ error: 'Database error' });
+  
+        if (results.length > 0) {
+          return callback({ error: 'Cannot send message — user is blocked' });
         }
   
-        console.log('Message saved to database.');
-        // Send a success response back to the sender.
-        if (callback) callback({ success: true, messageId: result.insertId });
+        // 2️⃣ Save message to DB
+        const sql = 'INSERT INTO messages(sender_id, receiver_id, type, text, image_uri, is_read) VALUES (?, ?, ?, ?, ?, ?)';
+        db.query(sql, [senderId, receiverId, type, text, imageUri, false], (err, result) => {
+          if (err) {
+            console.error('Database error on message insertion:', err);
+            return callback({ error: 'Database error: Message could not be saved.' });
+          }
   
-        // Create a new message object with a generated ID and timestamp.
-        const newMessage = {
-          id: result.insertId.toString(),
-          senderId,
-          receiverId,
-          type,
-          text,
-          imageUri,
-          timestamp: new Date().toISOString(),
-          isRead: false,
-        };
+          if (callback) callback({ success: true, messageId: result.insertId });
   
-        // Get the socket ID of the receiver from our connectedUsers map.
-        const receiverSocketId = connectedUsers.get(String(receiverId));
-        
-        // If the receiver is currently connected, emit the new message to them.
-        if (receiverSocketId) {
-          console.log(`Broadcasting new message to receiver: ${receiverId}`);
-          io.to(receiverSocketId).emit('newMessage', newMessage);
+          const newMessage = {
+            id: result.insertId.toString(),
+            senderId,
+            receiverId,
+            type,
+            text,
+            imageUri,
+            timestamp: new Date().toISOString(),
+            isRead: false,
+          };
+  
+          // Send to receiver if online
+          const receiverSocketId = connectedUsers.get(String(receiverId));
+          if (receiverSocketId) {
+            io.to(receiverSocketId).emit('newMessage', newMessage);
+          }
+        });
+      });
+    });
+  
+    // --- Block / Unblock events ---
+    socket.on('blockUser', ({ blockedId }) => {
+      const sql = 'INSERT INTO blocked_users (blocker_id, blocked_id) VALUES (?, ?)';
+      db.query(sql, [userId, blockedId], (err) => {
+        if (!err) {
+          io.to(socket.id).emit('user_blocked', blockedId);
+          const blockedSocketId = connectedUsers.get(String(blockedId));
+          if (blockedSocketId) io.to(blockedSocketId).emit('blocked_by_user', userId);
         }
       });
     });
   
-    // Handle disconnection event.
+    socket.on('unblockUser', ({ blockedId }) => {
+      const sql = 'DELETE FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?';
+      db.query(sql, [userId, blockedId], (err) => {
+        if (!err) {
+          io.to(socket.id).emit('user_unblocked', blockedId);
+          const unblockedSocketId = connectedUsers.get(String(blockedId));
+          if (unblockedSocketId) io.to(unblockedSocketId).emit('unblocked_by_user', userId);
+        }
+      });
+    });
+  
+    // --- Disconnect ---
     socket.on('disconnect', () => {
+      db.query('UPDATE users_online SET is_online = FALSE, last_seen = NOW() WHERE socket_id = ?', [socket.id]);
+  
       if (userId) {
         connectedUsers.delete(userId);
         console.log(`User disconnected: ${userId}`);
       }
     });
   });
+  
 
 
 app.get('/conversations', (req, res) => {
@@ -1055,6 +1064,361 @@ app.post('/messages/mark-as-read', (req, res) => {
       res.status(200).json({ count: results[0].count });
     });
   });
+
+  app.delete('/messages/:id', async (req, res) => {
+    const { id } = req.params;
+    const sqlvalue = 'DELETE FROM messages WHERE id = ?';
+  
+    db.query(sqlvalue, [id], (err) => {
+      if (err) {
+        console.error('Error deleting message:', err);
+        return res.status(500).json({ error: 'Failed to delete message' });
+      }
+  
+      // ✅ Only emit after a successful delete
+      io.emit('message_deleted', id);
+  
+      res.json({ success: true });
+    });
+  });
+  
+  // Block a user
+app.post('/block/:blockedId', (req, res) => {
+    const blockerId = req.session.user?.id;
+    const blockedId = req.params.blockedId;
+  
+    if (!blockerId) return res.status(401).json({ error: 'Not logged in' });
+  
+    const sql = 'INSERT INTO blocked_users (blocker_id, blocked_id) VALUES (?, ?)';
+    db.query(sql, [blockerId, blockedId], (err) => {
+      if (err) return res.status(500).json({ error: 'Failed to block user' });
+  
+      // Notify both clients in real-time
+      io.to(`user_${blockerId}`).emit('user_blocked', blockedId);
+      io.to(`user_${blockedId}`).emit('blocked_by_user', blockerId);
+  
+      res.json({ success: true });
+    });
+  });
+  app.get('/isBlocked/:userId', (req, res) => {
+    const myId = req.session.user?.id;
+    const userId = req.params.userId;
+    if (!myId) return res.status(401).json({ error: 'Not logged in' });
+  
+    const sql = `
+      SELECT * FROM blocked_users 
+      WHERE (blocker_id = ? AND blocked_id = ?) 
+         OR (blocker_id = ? AND blocked_id = ?) 
+      LIMIT 1
+    `;
+    db.query(sql, [myId, userId, userId, myId], (err, results) => {
+      if (err) return res.status(500).json({ error: 'Failed to fetch status' });
+      res.json({ blocked: results.length > 0 });
+    });
+  });
+  
+  
+  // Unblock a user
+  app.delete('/block/:blockedId', (req, res) => {
+    const blockerId = req.session.user?.id;
+    const blockedId = req.params.blockedId;
+  
+    const sql = 'DELETE FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?';
+    db.query(sql, [blockerId, blockedId], (err) => {
+      if (err) return res.status(500).json({ error: 'Failed to unblock user' });
+  
+      // Notify both clients
+      io.to(`user_${blockerId}`).emit('user_unblocked', blockedId);
+      io.to(`user_${blockedId}`).emit('unblocked_by_user', blockerId);
+  
+      res.json({ success: true });
+    });
+  });
+  app.post('/Createmeet', (req, res) => {
+    const { title, vibe, date, time, location, size, description } = req.body;
+  
+    const sql = `
+      INSERT INTO meetups (title, vibe, date, time, location, size, description)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+  
+    db.query(sql, [title, vibe, date, time, location, size, description], (err, result) => {
+      if (err) {
+        console.error('Error inserting meetup:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.status(201).json({ message: 'Meetup created successfully', id: result.insertId });
+    });
+  });
+  app.get('/Createmeet', (req, res) => {
+    const sql = 'SELECT * FROM meetups ORDER BY created_at DESC';
+  
+    db.query(sql, (err, results) => {
+      if (err) {
+        console.error('Error fetching meetups:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.json(results); // send all meetups as JSON
+    });
+  });
+    app.post('/api/submit-answers', (req, res) => {
+    // Extract the userId and answers object from the request body.
+    const { userId, answers } = req.body;
+
+    if (!userId || !answers || Object.keys(answers).length === 0) {
+        return res.status(400).json({ error: 'Invalid data provided.' });
+    }
+
+    // Step 1: Delete all previous answers for this user
+    const deleteSql = `
+        DELETE FROM user_answers
+        WHERE user_id = ?
+    `;
+    
+    db.query(deleteSql, [userId], (err, result) => {
+        if (err) {
+            console.error('Error deleting old answers:', err);
+            return res.status(500).json({ error: 'Database error on delete' });
+        }
+
+        // Step 2: Prepare a multi-row INSERT query for all new answers
+        // We'll dynamically build the query and the values array.
+        const values = [];
+        const placeholders = [];
+
+        for (const questionId in answers) {
+            const answer = answers[questionId];
+            if (answer) {
+                // Add values for each row: [userId, questionId, answer]
+                values.push(userId, parseInt(questionId), answer);
+                // Create a placeholder string for each row: (?, ?, ?)
+                placeholders.push('(?, ?, ?)');
+            }
+        }
+        
+        // Join the placeholders to create the final SQL string.
+        const insertSql = `
+            INSERT INTO user_answers (user_id, question_id, answer)
+            VALUES ${placeholders.join(', ')}
+        `;
+
+        // Execute the multi-row insert query
+        db.query(insertSql, values, (err, result) => {
+            if (err) {
+                console.error('Error inserting new answers:', err);
+                return res.status(500).json({ error: 'Database error on insert' });
+            }
+            
+            res.status(201).json({ 
+                message: 'Answers submitted successfully!', 
+                affectedRows: result.affectedRows 
+            });
+        });
+    });
+});
+app.get('/api/matches/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // A SQL query that finds users with the most matching answers, joining the projectables table
+    const sql = `
+      SELECT
+        u2.id,
+        p.name,
+        p.image,
+        COUNT(*) AS score
+      FROM user_answers AS ua1
+      JOIN user_answers AS ua2 ON ua1.question_id = ua2.question_id AND ua1.answer = ua2.answer
+      JOIN users AS u2 ON ua2.user_id = u2.id
+      JOIN projectables AS p ON u2.id = p.user_id
+      WHERE
+        ua1.user_id = ?
+        AND u2.id != ?
+      GROUP BY
+        u2.id
+      ORDER BY
+        score DESC
+      LIMIT 10;
+    `;
+
+    const [rows] = await db.query(sql, [userId, userId]);
+    
+    // The total number of questions is needed for the percentage score
+    const totalQuestions = 20;
+    
+    // Map the database rows to a clean format for the frontend
+    const matches = rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      score: `${Math.round((row.score / totalQuestions) * 100)}%`,
+      img: row.image,
+      desc: 'No description provided.' // This would be from your projectables table if you add it
+    }));
+
+    res.status(200).json(matches);
+
+  } catch (error) {
+    console.error('Error fetching matches:', error);
+    res.status(500).json({ error: 'Failed to fetch matches.' });
+  }
+});
+// Assuming you already created io with socket.io
+// const server = http.createServer(app);
+// const io = new Server(server, { cors: { origin: "*" } });
+
+app.post('/postscorevalue', (req, res) => {
+  const { username, score } = req.body;
+
+  const findUserSql = 'SELECT ID FROM projecttables WHERE USERNAME = ?';
+  db.query(findUserSql, [username], (err, userResult) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    if (userResult.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    const userId = userResult[0].ID;
+
+    const upsertScoreSql = `
+      INSERT INTO user_scores (user_id, score) 
+      VALUES (?, ?)
+      ON DUPLICATE KEY UPDATE score = VALUES(score)
+    `;
+
+    db.query(upsertScoreSql, [userId, score], (upsertErr) => {
+      if (upsertErr) return res.status(500).json({ error: 'Database error' });
+
+      // ✅ after saving, fetch updated leaderboard
+      const sql = `
+        SELECT 
+            p.USERNAME AS name, 
+            s.score 
+        FROM 
+            user_scores s
+        JOIN 
+            projecttables p ON s.user_id = p.ID
+        ORDER BY 
+            s.score DESC
+      `;
+
+      db.query(sql, (err, results) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+
+        // ✅ broadcast leaderboard to all sockets
+        io.emit("leaderboardUpdate", results);
+
+        res.status(200).json({ message: 'Score posted successfully' });
+      });
+    });
+  });
+});
+ 
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+
+  // send initial leaderboard when a client connects
+  const sql = `
+    SELECT 
+        p.USERNAME AS name, 
+        s.score 
+    FROM 
+        user_scores s
+    JOIN 
+        projecttables p ON s.user_id = p.ID
+    ORDER BY 
+        s.score DESC
+  `;
+  db.query(sql, (err, results) => {
+    if (!err) {
+      socket.emit("leaderboardUpdate", results);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
+});
+
+
+app.post('/newAnonroom', (req, res) => {
+  const { roomName, tags, duration, roomRandomCode } = req.body;
+  
+  // The VALUES list should match the number of placeholders
+  const inputSql = 'INSERT INTO newAnongroup(roomName, tags, duration, roomRandomCode) VALUES(?, ?, ?, ?)';
+  
+  // The array of values should match the placeholders
+  db.query(inputSql, [roomName, tags, duration, roomRandomCode], (error, value) => {
+    if (error) {
+      console.error('Error upserting score:', error);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    console.log(value);
+    // You should send the roomRandomCode back to the client here
+    res.status(200).json({ message: 'Room created', roomCode: roomRandomCode });
+  });
+});
+app.get('/getanonroom/:roomcode',(req,res)=>{
+  const sql='SELECT id ,roomName,roomRandomCode , duration  FROM newAnongroup WHERE roomRandomCode=?  ';
+db.query(sql,[req.params.roomcode],(err,result)=>{
+  if(err){
+    console.log(`${err} Detected`);
+  }
+  if(result.length===0){
+    return res.status(404).json({
+      error:'Room not found '
+    })
+  }
+  res.json(result[0]);
+})
+})
+
+
+io.on('connection', (socket) => {
+  console.log(`Socket connected: ${socket.id}`);
+
+  // This listener for a socket's disconnection MUST be inside the connection block.
+  socket.on('disconnecting', () => {
+    socket.rooms.forEach(roomCode => {
+      if (roomCode !== socket.id) {
+        if (activeAnonymousRooms.has(roomCode)) {
+          activeAnonymousRooms.get(roomCode).members.delete(socket.id);
+          io.to(roomCode).emit('userLeft', `${socket.id} has left the chat.`);
+          if (activeAnonymousRooms.get(roomCode).members.size === 0) {
+            activeAnonymousRooms.delete(roomCode);
+            console.log(`Room ${roomCode} is now empty and has been deleted.`);
+          }
+        }
+      }
+    });
+    console.log(`Socket disconnected: ${socket.id}`);
+  });
+
+  socket.on('joinRoom', (roomCode) => {
+    if (!activeAnonymousRooms.has(roomCode)) {
+      activeAnonymousRooms.set(roomCode, {
+        members: new Set()
+      });
+      console.log(`Created new room: ${roomCode}`); // Corrected variable
+    }
+
+    socket.join(roomCode);
+    activeAnonymousRooms.get(roomCode).members.add(socket.id); // Corrected variable
+    console.log(`User ${socket.id} joined room: ${roomCode}`);
+
+    io.to(roomCode).emit('userJoined', `${socket.id} has joined the chat.`);
+  });
+
+  socket.on('sendMessage', (data) => {
+    const { roomCode, text, senderId } = data;
+    console.log(`Message received for room ${roomCode}: ${text}`);
+
+    if (activeAnonymousRooms.has(roomCode)) {
+      io.to(roomCode).emit('newMessage', {
+        id: Date.now().toString(),
+        text: text,
+        senderId: senderId,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+});
 
 server.listen(3000, () => {
   console.log('Server running on http://localhost:3000');

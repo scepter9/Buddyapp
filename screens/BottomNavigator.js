@@ -1,111 +1,150 @@
-import React, { useState, useRef, useEffect, useContext } from 'react'; // Import useContext
+import React, { useContext, useEffect, useRef } from "react";
 import {
-    View,
-    Text,
-    TouchableOpacity,
-    Image,
-    Platform,
-    ScrollView,
-    Animated,
-    Dimensions,
-    SafeAreaView,
-    Pressable,
-    StyleSheet,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Feather } from '@expo/vector-icons';
-import { UnreadMessagesContext } from './UnreadMessagesContext'
+  View,
+  Text,
+  TouchableOpacity,
+  Animated,
+  StyleSheet,
+  Platform,
+} from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { UnreadMessagesContext } from "./UnreadMessagesContext";
 
 function BottomNavigator({ navigation }) {
-    const { unreadCount } = useContext(UnreadMessagesContext); // Access the unreadCount
+  const { unreadCount } = useContext(UnreadMessagesContext);
 
-    return (
-        <View style={[styles.bottomNav, { backgroundColor: 'white' }]}>
-            <TouchableOpacity onPress={() => navigation.navigate('About')} style={styles.navButton}>
-                <Text style={[styles.navIcon, styles.navTextLight]}>
-                    <Feather name="home" size={25} color="black" />
-                </Text>
-                <Text style={[styles.navLabel, styles.navTextLight]}></Text>
-            </TouchableOpacity>
+  // Animated pulse for badge
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
-            <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.navButton}>
-                <Text style={[styles.navIcon, styles.navTextLight]}>
-                    <Feather name="compass" size={25} color="black" />
-                </Text>
-                <Text style={[styles.navLabel, styles.navTextLight]}></Text>
-            </TouchableOpacity>
+  useEffect(() => {
+    if (unreadCount > 0) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.15,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    }
+  }, [unreadCount]);
 
-            <TouchableOpacity style={styles.navButton}>
-                <Text style={[styles.navIcon, styles.navTextLight]}>
-                    <Feather name="settings" size={25} color="black" />
-                </Text>
-                <Text style={[styles.navLabel, styles.navTextLight]}></Text>
-            </TouchableOpacity>
+  return (
+  //   <LinearGradient
+  //   colors={["#2E1065", "#4338CA", "#1E293B"]}
+  //   start={{ x: 0, y: 0 }}
+  //   end={{ x: 1, y: 1 }}
+  //   style={styles.bottomNav}
+  // >
+//   <LinearGradient
+//   colors={["#1E293B", "#334155", "#475569"]}
+//   start={{ x: 0, y: 0 }}
+//   end={{ x: 1, y: 1 }}
+//   style={styles.bottomNav}
+// >
+<LinearGradient
+  colors={["#0F172A", "#1E293B", "#64748B"]}
+  start={{ x: 0, y: 0 }}
+  end={{ x: 1, y: 1 }}
+  style={styles.bottomNav}
+>
 
-            <TouchableOpacity onPress={() => navigation.navigate('Messages')} style={styles.navButton}>
-                <View style={{ position: 'relative' }}>
-                    <Feather name="mail" size={25} color="black" />
-                    {/* Conditionally render the badge only if unreadCount > 0 */}
-                    {unreadCount > 0 && (
-                        <View style={styles.badgeContainer}>
-                            <Text style={styles.badgeText}>{unreadCount}</Text>
-                        </View>
-                    )}
-                </View>
-                <Text style={[styles.navLabel, styles.navTextLight]}></Text>
-            </TouchableOpacity>
+
+  
+      {/* Home */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate("About")}
+        style={styles.navButton}
+      >
+        <Feather name="home" size={26} color="#9CA3AF" />
+      </TouchableOpacity>
+
+      {/* Compass */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate("CampusNexus")}
+        style={styles.navButton}
+      >
+        <Feather name="compass" size={26} color="#9CA3AF" />
+      </TouchableOpacity>
+
+      {/* Settings */}
+      <TouchableOpacity style={styles.navButton}>
+        <Feather name="settings" size={26} color="#9CA3AF" />
+      </TouchableOpacity>
+
+      {/* Messages */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate("Messages")}
+        style={styles.navButton}
+      >
+        <View style={{ position: "relative" }}>
+          <Feather name="mail" size={26} color="#9CA3AF" />
+          {unreadCount > 0 && (
+            <Animated.View
+              style={[
+                styles.badgeContainer,
+                { transform: [{ scale: pulseAnim }] },
+              ]}
+            >
+              <Text style={styles.badgeText}>{unreadCount}</Text>
+            </Animated.View>
+          )}
         </View>
-    );
+      </TouchableOpacity>
+    </LinearGradient>
+  );
 }
 
 const styles = StyleSheet.create({
-    bottomNav: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 65,
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        borderTopWidth: 1,
-        borderTopColor: '#ddd',
-        paddingBottom: 2,
-    },
-    navButton: {
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    navIcon: {
-        fontSize: 24,
-    },
-    badgeContainer: {
-        position: 'absolute',
-        top: -6,
-        right: -6,
-        backgroundColor: 'red',
-        borderRadius: 8,
-        minWidth: 16,
-        height: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 4,
-    },
-    badgeText: {
-        color: 'white',
-        fontSize: 10,
-        fontWeight: 'bold',
-    },
-    navLabel: {
-        fontSize: 12,
-        marginTop: 2,
-    },
-    navTextLight: {
-        color: '#000',
-    },
-    navTextDark: {
-        color: '#fff',
-    },
+  bottomNav: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    height: 70,
+    borderRadius: 24,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+    paddingBottom: Platform.OS === "ios" ? 20 : 0,
+  },
+  navButton: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  badgeContainer: {
+    position: "absolute",
+    top: -6,
+    right: -8,
+    backgroundColor: "#DC2626", // deeper red (not neon)
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  badgeText: {
+    color: "white",
+    fontSize: 11,
+    fontWeight: "600",
+  },
 });
 
 export default BottomNavigator;
