@@ -12,7 +12,8 @@ const http = require('http'); // Import http module
 const { Server } = require('socket.io'); // Import Server from socket.io
 const { log } = require('console');
 
-
+//"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" -u root -p buddy > backup.sql
+//very important
 // CORS middleware 
 app.use(cors({
     origin: true, // Or specify your frontend origin like 'http://localhost:19006'
@@ -51,6 +52,7 @@ const io = new Server(server, {
 // Store connected users and their socket IDs (optional, but useful for direct messaging/notifications)
 const connectedUsers = new Map(); // Map userId to socket.id
 const activeAnonymousRooms=new Map();
+const MeetupRoom= new Map();
 
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
@@ -691,6 +693,23 @@ app.post('/notifications/mark-as-read', (req, res) => {
 
 });
 
+app.get('/notifications/unread/count', (req, res) => {
+  const userId = req.session.user?.id;
+  if (!userId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  const sql = 'SELECT COUNT(*) AS unreadCount FROM notifications WHERE receiver_id = ? AND is_read = FALSE';
+
+  db.query(sql, [userId], (err, results) => {
+    if (err) {
+      console.error('Error fetching unread count:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    res.json({ unreadCount: results[0].unreadCount });
+  });
+});
+
 
 app.get('/messages', (req, res) => {
     const { senderId, receiverId } = req.query;
@@ -1135,21 +1154,60 @@ app.post('/block/:blockedId', (req, res) => {
     });
   });
   app.post('/Createmeet', (req, res) => {
-    const { title, vibe, date, time, location, size, description } = req.body;
+    const host_id = req.session.user?.id;
+    const {
+      title,
+      vibe,
+      location,
+      size,
+      description,
+      selectedYear,
+      selectedMonth,
+      selectedDay,
+      selectedHour,
+      selectedMinute,
+      meetupcodeval,
+    } = req.body;
+  
+    const isaccepted = 0;
   
     const sql = `
-      INSERT INTO meetups (title, vibe, date, time, location, size, description)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO meetups (
+        host_id, title, vibe, location, size, description, isaccepted,
+        year, month, day, hour, minute,roomvalue
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)
     `;
   
-    db.query(sql, [title, vibe, date, time, location, size, description], (err, result) => {
-      if (err) {
-        console.error('Error inserting meetup:', err);
-        return res.status(500).json({ error: 'Database error' });
+    db.query(
+      sql,
+      [
+        host_id,
+        title,
+        vibe,
+        location,
+        size,
+        description,
+        isaccepted,
+        selectedYear,
+        selectedMonth,
+        selectedDay,
+        selectedHour,
+        selectedMinute,
+        meetupcodeval,
+      ],
+      (err, result) => {
+        if (err) {
+          console.error('Error inserting meetup:', err);
+          return res.status(500).json({ error: 'Database error', details: err });
+        }
+        res
+          .status(201)
+          .json({ message: 'Meetup created successfully', id: result.insertId });
       }
-      res.status(201).json({ message: 'Meetup created successfully', id: result.insertId });
-    });
+    );
   });
+  
   app.get('/Createmeet', (req, res) => {
     const sql = 'SELECT * FROM meetups ORDER BY created_at DESC';
   
@@ -1161,6 +1219,196 @@ app.post('/block/:blockedId', (req, res) => {
       res.json(results); // send all meetups as JSON
     });
   });
+  app.get('/meetupusers',(req,res)=>{
+    const sql='SELECT * FROM meetup_participants ORDER BY created_at DESC';
+    db.query(sql, (err, results) => {
+      if (err) {
+        console.error('Error fetching meetups users:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.json(results); // send all meetups as JSON
+    });
+  })
+  app.post('/joinRequest', (req, res) => {
+    const senderId = req.session.user?.id;
+    const { meetupId } = req.body;
+  
+    if (!senderId) return res.status(401).json({ error: 'Not logged in' });
+    if (!meetupId) return res.status(400).json({ error: 'meetupId required' });
+  
+    // Step 1: get sender info,
+    const userSql = 'SELECT image, FULLNAME FROM projecttables WHERE ID=?';
+    db.query(userSql, [senderId], (err, results) => {
+      if (err) return res.status(500).json({ error: 'DB error' });
+      if (results.length === 0) return res.status(404).json({ error: 'User not found' });
+  
+      const senderName = results[0].FULLNAME;
+      const senderImage = results[0].image;
+  
+      // Step 2: get meetup host
+      db.query('SELECT host_id, title FROM meetups WHERE id = ?', [meetupId], (err2, rows) => {
+        if (err2) return res.status(500).json({ error: 'DB error' });
+        if (rows.length === 0) return res.status(404).json({ error: 'Meetup not found' });
+  
+        const hostId = rows[0].host_id;
+  
+        // Step 3: prevent duplicate requests
+        db.query('SELECT id FROM join_requests WHERE meetup_id = ? AND sender_id = ?', [meetupId, senderId], (err3, exists) => {
+          if (err3) return res.status(500).json({ error: 'DB error' });
+          if (exists.length) return res.status(409).json({ error: 'Already requested' });
+  
+          // Step 4: insert join request
+          db.query('INSERT INTO join_requests (meetup_id, sender_id) VALUES (?, ?)', [meetupId, senderId], (err4, result) => {
+            if (err4) return res.status(500).json({ error: 'Failed to create request' });
+  
+            const message = `${senderName} wants to join your meetup "${rows[0].title}"`;
+  
+            // Step 5: insert notification
+            db.query(
+              'INSERT INTO notifications (sender_id, receiver_id, message, type) VALUES (?, ?, ?, ?)',
+              [senderId, hostId, message, 'JoinRoom'],
+              (notifErr) => {
+                if (notifErr) console.error('Notification insert failed:', notifErr);
+  
+                // Respond with useful info
+                res.json({
+                  success: true,
+                  message: 'Join request sent successfully',
+                  notification: {
+                    sender_id: senderId,
+                    receiver_id: hostId,
+                    sender_name: senderName,
+                    sender_image: senderImage,
+                    text: message,
+                    type: 'JoinRoom'
+                  }
+                });
+
+                const Sendnotifi = connectedUsers.get(String(hostId));
+if (Sendnotifi) {
+  io.to(Sendnotifi).emit("newNotification", {
+    text: message,
+    sender_id: senderId,
+    meetup_id: meetupId
+  });
+}
+
+              }
+            );
+          });
+        });
+      });
+    });
+  });
+  
+  
+  
+
+
+  app.post('/acceptJoinRequest', (req, res) => {
+
+    const hostId = req.session.user?.id;
+    const { requestId } = req.body;
+  
+    if (!hostId) return res.status(401).json({ error: 'Not logged in' });
+    if (!requestId) return res.status(400).json({ error: 'requestId required' });
+  
+    // Ensure request exists and that the logged-in user is the meetup host
+    const getSql = `
+      SELECT jr.id, jr.meetup_id, jr.sender_id, m.host_id
+      FROM join_requests jr
+      JOIN meetups m ON m.id = jr.meetup_id
+      WHERE jr.sender_id = ?
+    `;
+    db.query(getSql, [requestId], (err, rows) => {
+      if (err) return res.status(500).json({ error: 'DB error' });
+      if (rows.length === 0) return res.status(404).json({ error: 'Request not found' });
+  
+      const row = rows[0];
+      if (row.host_id !== hostId) return res.status(403).json({ error: 'Not authorized' });
+  
+      // update request status
+      db.query('UPDATE join_requests SET status = ?, responded_at = NOW() WHERE id = ?', ['accepted', requestId], (err2) => {
+        if (err2) return res.status(500).json({ error: 'Failed to update request' });
+  
+        // optionally add to participants
+        db.query('INSERT IGNORE INTO meetup_participants (meetup_id, user_id) VALUES (?, ?)', [row.meetup_id, row.sender_id], (err3) => {
+          if (err3) console.error('Failed to add participant:', err3);
+  
+          // notify the requester their request was accepted
+          const notifMsg = `Your request to join meetup "${row.meetup_id}" was accepted`;
+          db.query('INSERT INTO notifications (sender_id, receiver_id, message, type) VALUES (?, ?, ?, ?)', [hostId, row.sender_id, notifMsg, 'JoinAccepted'], (notifErr) => {
+            // ignore notifErr or handle
+            res.json({ success: true, message: 'Request accepted' });
+            const acceptvalue=connectedUsers.get(String(requestId))
+            if(acceptvalue){
+              io.to(acceptvalue).emit("newNotification", {
+                text: notifMsg,
+                sender_id: requestId,
+                meetup_id: hostId
+              });
+            }
+          });
+        });
+      });
+    });
+  });
+  
+  app.get('/accepted', (req, res) => {
+    const { meetupId } = req.query;
+    const userId = req.session.user?.id;
+  
+    if (!userId) return res.status(401).json({ error: 'Not logged in' });
+    if (!meetupId) return res.status(400).json({ error: 'meetupId required' });
+  
+    const sql = `
+      SELECT status 
+      FROM join_requests 
+      WHERE sender_id=? AND meetup_id=? 
+      ORDER BY responded_at DESC 
+      LIMIT 1
+    `;
+    db.query(sql, [userId, meetupId], (err, results) => {
+      if (err) return res.status(500).json({ error: 'An error occurred with the database' });
+      if (results.length === 0) return res.status(404).json({ error: 'No request found' });
+  
+      res.json(results[0]); // returns { status: "accepted" }
+    });
+  });
+  
+
+ 
+  app.get('/meetupsmembers', (req, res) => {
+    const { meetupid } = req.query;
+  
+    const sqlmeet = `
+      SELECT 
+        hostuser.ID AS meetupid,
+        hostuser.FULLNAME AS meetupname,
+        hostuser.image AS meetupimage,
+        JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'senduserid', senduser.ID,
+            'sendusername', senduser.FULLNAME,
+            'senduserimage', senduser.image
+          )
+        ) AS attendees
+      FROM meetup_participants AS mu
+      JOIN projecttables hostuser ON mu.meetup_id = hostuser.ID
+      JOIN projecttables senduser ON mu.user_id = senduser.ID
+      WHERE mu.meetup_id = ?
+      GROUP BY hostuser.ID, hostuser.FULLNAME, hostuser.image
+    `;
+  
+    db.query(sqlmeet, [meetupid], (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: `A database error occurred ${err}` });
+      }
+      res.json({ results });
+    });
+  });
+  
+
     app.post('/api/submit-answers', (req, res) => {
     // Extract the userId and answers object from the request body.
     const { userId, answers } = req.body;
@@ -1338,13 +1586,13 @@ io.on("connection", (socket) => {
 
 
 app.post('/newAnonroom', (req, res) => {
-  const { roomName, tags, duration, roomRandomCode } = req.body;
+  const { roomName, tags, duration, selectedHour,selectedMinute, roomRandomCode } = req.body;
   
   // The VALUES list should match the number of placeholders
-  const inputSql = 'INSERT INTO newAnongroup(roomName, tags, duration, roomRandomCode) VALUES(?, ?, ?, ?)';
+  const inputSql = 'INSERT INTO newAnongroup(roomName, tags,  roomRandomCode,selectedHour,selectedMinute,) VALUES(?, ?, ?, ?,?)';
   
   // The array of values should match the placeholders
-  db.query(inputSql, [roomName, tags, duration, roomRandomCode], (error, value) => {
+  db.query(inputSql, [roomName, tags, roomRandomCode,selectedHour,selectedMinute,], (error, value) => {
     if (error) {
       console.error('Error upserting score:', error);
       return res.status(500).json({ error: 'Database error' });
@@ -1418,7 +1666,10 @@ io.on('connection', (socket) => {
       });
     }
   });
+  
+  
 });
+
 
 server.listen(3000, () => {
   console.log('Server running on http://localhost:3000');

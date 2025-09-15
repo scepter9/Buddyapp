@@ -1,9 +1,10 @@
 import React from "react";
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity ,SafeAreaView} from "react-native";
 import BottomNavigator from "../BottomNavigator";
 
 export default function CampusNexus({ navigation }) {
   return (
+    <SafeAreaView style={styles.wrapper}>
     <View style={{ flex: 1, backgroundColor: "#0f172a" }}>
       <ScrollView
         style={styles.container}
@@ -11,11 +12,15 @@ export default function CampusNexus({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         {/* Campus Pulse */}
+        <TouchableOpacity
+              style={{ width: "100%" }}
+              onPress={() => navigation.navigate("CampusPulse")}
+            >
         <View style={styles.pulseTile}>
           <Text style={styles.pulseTitle}>Campus Pulse</Text>
-          <Text style={styles.pulseDesc}>🔥 Trending: Hackathon starts Friday!</Text>
+          <Text style={styles.pulseDesc}>📢 Real Stories. Real Students. Real Campus Life.”</Text>
         </View>
-
+        </TouchableOpacity>
         {/* Campus Hangouts */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Campus Hangouts</Text>
@@ -190,12 +195,18 @@ export default function CampusNexus({ navigation }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
-      <BottomNavigator navigation={navigation} />
+      
     </View>
+    <BottomNavigator navigation={navigation} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper:{
+    flex:1,
+     backgroundColor: "#1e293b",
+  },
   container: { flex: 1, padding: 20 },
 
   /* Pulse */

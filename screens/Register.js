@@ -23,11 +23,11 @@ export default function Register({ navigation }) {
   const validate = () => {
     const newErrors = {};
 
-    if (!/^[a-zA-Z ]{3,}$/.test(fullname))
+    if (!/^[a-zA-Z ]{2,}$/.test(fullname))
       newErrors.fullname = 'Full name must be at least 3 letters.';
-
-    if (!/^[a-zA-Z0-9_.-]{3,}$/.test(username))
-      newErrors.username = 'Username must be at least 3 characters and can contain letters, numbers, _, -, or .';
+username=username.trim()
+    if (!/^[a-zA-Z0-9_.-]{2,}$/.test(username))
+      newErrors.username = 'Username must be at least 3 characters and no whitespace';
 
     if (!/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/.test(email))
       newErrors.email = 'Invalid email address.';

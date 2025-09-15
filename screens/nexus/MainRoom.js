@@ -15,6 +15,7 @@ import {
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { Picker } from "@react-native-picker/picker";
 
 const API_BASE_URL = "http://172.20.10.4:3000";
 
@@ -33,6 +34,10 @@ export default function MainRoom({ navigation }) {
   const [tags, setTags] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [openModal, setOpenModal] = useState(false);
+  const [selectedHour, setSelectedHour] = useState(null);
+  const [selectedMinute, setSelectedMinute] = useState(null);
+  const hours=Array.from({length:24},(_,i)=>(i<10 ? `0${i}` :`${i}`));
+  const minutes=Array.from({length:60},(_,i)=>(i<10 ?`0${i}` :`${i}`))
 
   const getAnon = async () => {
     try {
@@ -42,7 +47,8 @@ export default function MainRoom({ navigation }) {
       if (responseval.ok) {
         navigation.navigate("Room", {
           Roomname: data.roomName,
-          Roomduration: data.duration,
+          RoomHour: data.hour,
+          RoomMinute: data.hour,
           roomCode:data.roomRandomCode,
         });
       } else {
@@ -63,7 +69,7 @@ export default function MainRoom({ navigation }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ roomName, tags, duration, roomRandomCode }),
+        body: JSON.stringify({ roomName, tags, selectedHour,selectedMinute, roomRandomCode }),
       });
 
       if (response.ok) {
@@ -100,14 +106,30 @@ export default function MainRoom({ navigation }) {
                   value={roomName}
                   onChangeText={setRoomName}
                 />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Duration (hrs)"
-                  placeholderTextColor="#aaa"
-                  keyboardType="numeric"
-                  value={duration}
-                  onChangeText={setDuration}
-                />
+           
+           <Text style={styles.cardTitle}>Enter duration</Text>
+            <View style={styles.pickerRow}>
+            <Picker
+                    selectedValue={selectedHour}
+                    onValueChange={(itemValue) => setSelectedHour(itemValue)}
+                    style={styles.picker}
+                  >
+                    <Picker.Item label="Hour" value={null} />
+                    {hours.map((hour) => (
+                      <Picker.Item key={hour} label={hour} value={hour} />
+                    ))}
+                  </Picker>
+                  <Picker
+                    selectedValue={selectedMinute}
+                    onValueChange={(itemValue) => setSelectedMinute(itemValue)}
+                    style={styles.picker}
+                  >
+                    <Picker.Item label="Min" value={null} />
+                    {minutes.map((minute) => (
+                      <Picker.Item key={minute} label={minute} value={minute} />
+                    ))}
+                  </Picker>
+            </View>
                 <TextInput
                   style={styles.input}
                   placeholder="Tags (music, chat, study...)"
@@ -184,10 +206,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0f0f17",
   },
+  field: { flex: 1, marginBottom: 14 },
   header: {
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.1)",
+  },
+  picker: {
+    flex: 1,
+    color: "#fff",
   },
   headerText: {
     color: "#fff",
@@ -289,5 +316,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
     fontSize: 16,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 12,
   },
 });

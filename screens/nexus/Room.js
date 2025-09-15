@@ -25,7 +25,9 @@ const randomEmojis = ["👻", "🦊", "🐼", "🐙", "🐸", "🦉", "🐺", "�
 
 export default function Room({ navigation, route }) {
   // Extract parameters from the navigation route.
-  const { roomName, duration, roomCode } = route.params;
+  const { roomName, duration, roomCode ,RoomHour,RoomMinute} = route.params;
+  
+ const time =(RoomHour + RoomMinute);
   
  
   const { user } = useContext(AuthorContext);
@@ -35,7 +37,7 @@ export default function Room({ navigation, route }) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [socket, setSocket] = useState(null);
-  const [timeLeft, setTimeLeft] = useState(parseInt(duration) * 60 || 900); // Convert hours to seconds, default to 15 mins
+  const [timeLeft, setTimeLeft] = useState(parseInt(time)*60 || 900); // Convert hours to seconds, default to 15 mins
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [emojiMap, setEmojiMap] = useState(new Map());
 

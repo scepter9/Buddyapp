@@ -8,6 +8,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  SafeAreaView
 } from 'react-native';
 
 import BottomNavigator from './BottomNavigator';
@@ -139,6 +140,7 @@ function Profile({ navigation, route }) {
     : null;
 
   return (
+    <SafeAreaView style={styles.wrapper}>
     <View style={styles.fullScreenContainer}>
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
         <View style={styles.mainContentCard}>
@@ -246,12 +248,18 @@ function Profile({ navigation, route }) {
         </View>
       </ScrollView>
 
-      <BottomNavigator navigation={navigation} />
+    
     </View>
+    <BottomNavigator navigation={navigation} />
+      </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: "#f8faff",
+  },
   fullScreenContainer: {
     flex: 1,
     backgroundColor: '#F7F9FC',

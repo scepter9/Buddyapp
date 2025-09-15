@@ -11,21 +11,22 @@ import {
 } from 'react-native';
 import io from 'socket.io-client';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient'; // Import LinearGradient
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons'; // Import Ionicons for the clear button
 
-import BottomNavigator from './BottomNavigator'; 
+import BottomNavigator from './BottomNavigator';
 
-
-const API_BASE_URL = 'http://172.20.10.4:3000'; 
+const API_BASE_URL = 'http://172.20.10.4:3000';
 
 const NOTIFICATION_TYPES = {
   FOLLOW: 'follow',
   LIKE: 'like',
   COMMENT: 'comment',
   MESSAGE: 'message',
+  JOINMEET: 'JoinRoom',
 };
 
-const NotificationItem = React.memo(({ notification, onFollowPress, navigation }) => {
+const NotificationItem = React.memo(({ notification, onFollowPress, onAcceptJoinPress, navigation, disvalue }) => {
   const { sender_name, sender_image, message, created_at, type, sender_id } = notification;
 
   const formatTimeAgo = (dateString) => {
@@ -62,7 +63,7 @@ const NotificationItem = React.memo(({ notification, onFollowPress, navigation }
               style={notificationItemStyles.followButton}
               onPress={() => onFollowPress(sender_id)}
             >
-              <Text style={notificationItemStyles.followButtonText}>Follow </Text>
+              <Text style={notificationItemStyles.followButtonText}>Follow</Text>
             </TouchableOpacity>
           </View>
         );
@@ -83,6 +84,23 @@ const NotificationItem = React.memo(({ notification, onFollowPress, navigation }
           <Text style={notificationItemStyles.messageText}>
             <Text style={notificationItemStyles.senderName} onPress={handleProfileView}>{sender_name}</Text> sent you a message.
           </Text>
+        );
+      case NOTIFICATION_TYPES.JOINMEET:
+        return (
+          <View style={notificationItemStyles.followContent}>
+            <Text style={notificationItemStyles.messageText}>
+              <Text style={notificationItemStyles.senderName} onPress={handleProfileView}>
+                {sender_name}
+              </Text> wants to join your meetup.
+            </Text>
+            <TouchableOpacity
+              style={notificationItemStyles.followButton}
+              onPress={() => onAcceptJoinPress(sender_id)}
+              disabled={disvalue}
+            >
+              <Text style={notificationItemStyles.followButtonText}>Accept</Text>
+            </TouchableOpacity>
+          </View>
         );
       default:
         return (
@@ -123,6 +141,8 @@ const NotificationScreen = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [loggedInUserId, setLoggedInUserId] = useState(null);
+  const [disabledRequests, setDisabledRequests] = useState({});
+
 
   const fetchLoggedInUserId = useCallback(async () => {
     try {
@@ -147,7 +167,7 @@ const NotificationScreen = () => {
     try {
       const response = await fetch(`${API_BASE_URL}/notifications`, {
         method: 'GET',
-        credentials: 'include', // Correct for sending cookies
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -159,7 +179,7 @@ const NotificationScreen = () => {
       }
 
       const data = await response.json();
-      setNotifications(data); // Assumes backend directly provides 'type'
+      setNotifications(data);
     } catch (err) {
       console.error('Error fetching notifications:', err);
       setError(err.message);
@@ -168,7 +188,25 @@ const NotificationScreen = () => {
     }
   }, []);
 
-  // New function to mark notifications as read
+  const clearAllNotifications = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/notifications/clear-all`, {
+        method: 'DELETE', // DELETE is a good verb for clearing a resource
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to clear notifications on the server.');
+      }
+
+      setNotifications([]); // Clear local state
+      Alert.alert('Success', 'All notifications have been cleared.');
+    } catch (err) {
+      console.error('Error clearing notifications:', err);
+      Alert.alert('Error', `Failed to clear notifications: ${err.message}`);
+    }
+  };
+
   const markNotificationsAsRead = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/notifications/mark-as-read`, {
@@ -177,8 +215,6 @@ const NotificationScreen = () => {
       });
       if (response.ok) {
         console.log('Notifications marked as read in backend.');
-        // If your badge is handled by a global state, update it here.
-        // Otherwise, BottomNavigator will need to re-fetch its count.
       } else {
         const errorData = await response.json();
         console.error('Failed to mark notifications as read:', errorData.error);
@@ -188,38 +224,13 @@ const NotificationScreen = () => {
     }
   }, []);
 
-// Inside your NotificationsScreen component
-
-useEffect(() => {
-  // This function should be called when the NotificationsScreen loads
-  const markNotificationsAsRead = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/notifications/mark-as-read`, {
-        method: 'POST', // Or PATCH, depending on your API design
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        throw new Error('Failed to mark notifications as read');
-      }
-      console.log('Notifications marked as read on the server.');
-      
-      // OPTIONAL: If you have a way to update the state of the other screen, do it here.
-      // For instance, if you're using a global state manager like Redux or Zustand, you'd dispatch an action here.
-    } catch (error) {
-      console.error('Error marking notifications as read:', error);
-    }
-  };
-
-  markNotificationsAsRead();
-}, []);
-
   useEffect(() => {
-    fetchLoggedInUserId(); // Fetch logged-in user ID initially
+    fetchLoggedInUserId();
 
     const socket = io(API_BASE_URL, {
       withCredentials: true,
-    }); 
- 
+    });
+
     socket.on('connect', () => {
       console.log('Connected to WebSocket server');
       if (loggedInUserId) {
@@ -248,13 +259,10 @@ useEffect(() => {
     };
   }, [fetchNotifications, loggedInUserId, fetchLoggedInUserId]);
 
-  // Use useFocusEffect to fetch data and mark notifications as read when screen is focused
   useFocusEffect(
-
     useCallback(() => {
-      fetchNotifications(); // Re-fetch all notifications
-      markNotificationsAsRead(); // Mark them as read in the backend
-      // No cleanup needed for fetch, as it's a one-time call
+      fetchNotifications();
+      markNotificationsAsRead();
     }, [fetchNotifications, markNotificationsAsRead])
   );
 
@@ -275,15 +283,49 @@ useEffect(() => {
         throw new Error(data.error || 'Failed to follow back');
       }
       Alert.alert('Success', 'Followed back successfully!');
-      fetchNotifications(); // Re-fetch to update the notification list
+      fetchNotifications();
     } catch (err) {
       console.error('Error following back:', err);
       Alert.alert('Error', `Error following back: ${err.message}`);
     }
   };
 
+  // Change this function
+  const handleAcceptJoinRequest = async (requestId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/acceptJoinRequest`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId }),
+      });
+  
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to accept join request');
+  
+      Alert.alert('Success', 'You accepted the join request!');
+  
+      // Mark only this request as disabled
+      setDisabledRequests(prev => ({ ...prev, [requestId]: true }));
+  
+      fetchNotifications();
+    } catch (err) {
+      console.error('Error accepting join request:', err);
+      Alert.alert('Error', err.message);
+    }
+  };
+  
+
+
   const renderNotification = ({ item }) => (
-    <NotificationItem notification={item} onFollowPress={handleFollowBack} navigation={navigation} />
+    <NotificationItem
+  notification={item}
+  onFollowPress={handleFollowBack}
+  onAcceptJoinPress={handleAcceptJoinRequest}
+  navigation={navigation}
+  disvalue={!!disabledRequests[item.sender_id]} // only disable that one
+/>
+
   );
 
   if (loading) {
@@ -308,13 +350,20 @@ useEffect(() => {
 
   return (
     <LinearGradient
-      colors={['#e0f7fa', '#ffffff']} // Light blue to white gradient
+      colors={['#f0f9ff', '#e0f7fa']}
       style={styles.container}
     >
-      <Text style={styles.header}>Notifications</Text>
+      <View style={styles.headerContainer}>
+        <Text style={styles.header}>Notifications</Text>
+        {notifications.length > 0 && (
+          <TouchableOpacity onPress={clearAllNotifications} style={styles.clearButton}>
+            <Ionicons name="trash-outline" size={24} color="#1A5252" />
+          </TouchableOpacity>
+        )}
+      </View>
 
       {notifications.length === 0 ? (
-        <Text style={styles.noNotificationsText}>No notifications yet.</Text>
+        <Text style={styles.noNotificationsText}>No notifications yet. You're all caught up! 🎉</Text>
       ) : (
         <FlatList
           data={notifications}
@@ -333,73 +382,73 @@ const notificationItemStyles = StyleSheet.create({
   notificationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 12, // Slightly more rounded
-    marginBottom: 10,
-    // Stronger shadow for depth
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    padding: 16,
+    borderRadius: 20,
+    marginBottom: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 }, // Increased offset
-    shadowOpacity: 0.15, // Increased opacity
-    shadowRadius: 6, // Increased radius
-    elevation: 6, // Increased elevation for Android
-    borderColor: '#eee',
-    borderWidth: 1,
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.05)',
   },
   profileSection: {
     marginRight: 15,
   },
   profileImage: {
-    width: 40, // Slightly larger image
-    height: 40,
-    borderRadius: 20, // Half of width/height for perfect circle
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: '#e0e0e0',
-    borderWidth: 1,
-    borderColor: '#1A5252', // Border matching theme
+    borderWidth: 2,
+    borderColor: '#1A5252',
   },
   profileImagePlaceholder: {
-    width: 55,
-    height: 55,
-    borderRadius: 27.5,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: '#ccc',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#aaa',
   },
   contentSection: {
     flex: 1,
   },
   messageText: {
-    fontSize: 15, // Slightly smaller
+    fontSize: 16,
     color: '#333',
-    marginBottom: 4, // Reduced margin
-    lineHeight: 22, // Improved readability
+    marginBottom: 4,
+    lineHeight: 22,
   },
   senderName: {
-    fontWeight: 'bold',
-    color: '#1A5252', // Theme color for sender name
+    fontWeight: '700',
+    color: '#1A5252',
   },
   timestamp: {
-    fontSize: 11, // Slightly smaller
+    fontSize: 12,
     color: '#777',
+    marginTop: 2,
   },
   followContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
+    flexWrap: 'wrap',
   },
   followButton: {
     backgroundColor: '#1A5252',
-    paddingVertical: 7, // Slightly more padding
-    paddingHorizontal: 14,
-    borderRadius: 25, // More rounded button
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 30,
     marginLeft: 10,
+    minWidth: 90,
+    alignItems: 'center',
   },
   followButtonText: {
     color: 'white',
-    fontSize: 14, // Slightly larger font
+    fontSize: 14,
     fontWeight: '600',
   },
 });
@@ -407,24 +456,31 @@ const notificationItemStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // LinearGradient replaces backgroundColor here
-    paddingHorizontal: 20, // Horizontal padding moved here
-    paddingTop: 50, // Adjust for status bar/header
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+  },
+  header: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#1A5252',
+  },
+  clearButton: {
+    padding: 8,
   },
   centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f8f8', // Keep fallback background
-  },
-  header: {
-    alignSelf: 'center',
-    fontSize: 30, // Larger header
-    fontWeight: '800', // Bolder header
-    color: '#2c3e50', // Darker, more prominent color
-    marginBottom: 30, // More space below header
+    backgroundColor: '#f8f8f8',
   },
   flatListContent: {
+    paddingHorizontal: 20,
     paddingBottom: 20,
   },
   noNotificationsText: {
@@ -432,6 +488,7 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     marginTop: 50,
+    paddingHorizontal: 40,
   },
   loadingText: {
     marginTop: 10,

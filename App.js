@@ -30,6 +30,9 @@ import MainRoom from './screens/nexus/MainRoom';
 import Match from './screens/nexus/Match';
 import GoalCard from './screens/nexus/GoalCard';
 import Room from './screens/nexus/Room';
+import AttendeesScreen from './screens/nexus/AttendeesScreen';
+import ChatScreen from './screens/nexus/ChatScreen';
+import CampusPulse from './screens/nexus/CampusPulsed';
 
 import { UnreadMessagesProvider } from './screens/UnreadMessagesContext';
 import { AuthorProvider } from './screens/AuthorContext';
@@ -71,12 +74,16 @@ export default function App() {
     <Stack.Screen name="CreateMeetup" component={CreateMeetup} options={{ headerShown: false }} />
     <Stack.Screen name="JoinMeetup" component={JoinMeetup} options={{ headerShown: false }} />
     <Stack.Screen name="CampusTrivia" component={CampusTrivia} options={{ headerShown: false }} />
+    <Stack.Screen name="CampusPulse" component={CampusPulse} options={{ headerShown: false }} />
     <Stack.Screen name="MainRoom" component={MainRoom} options={{ headerShown: true }} />
     <Stack.Screen name="Room" component={Room} options={{ headerShown: false }} />
     <Stack.Screen name="Personalized" component={Personalized} options={{ headerShown: false }} />
     <Stack.Screen name="Daily" component={Daily} options={{ headerShown: false }} />
     <Stack.Screen name="InterestRoom" component={InterestRoom} options={{ headerShown: false }} />
     <Stack.Screen name="Match" component={Match} options={{ headerShown: false }} />
+    <Stack.Screen name="ChatScreen" component={ChatScreen} options={{ headerShown: true }} />
+    <Stack.Screen name="AttendeesScreen" component={AttendeesScreen} options={{ headerShown: false }} />
+    
     <Stack.Screen name="GoalCard" component={GoalCard} options={{ headerShown: false }} />
   </Stack.Navigator>
 </NavigationContainer>

@@ -88,10 +88,8 @@ const Daily = ({ navigation }) => {
     <SafeAreaView style={styles.wrapper}>
       {/* ScrollView for the content */}
       <ScrollView
-        // Remove flex: 1 from here
         style={styles.container}
-        // Add padding here instead
-        contentContainerStyle={{ padding: 18 }}
+        contentContainerStyle={styles.scrollContainer}
       >
         <View style={styles.topbar}>
           <View style={styles.dotNotch}>
@@ -175,7 +173,13 @@ const styles = StyleSheet.create({
   container: {
     // The container style no longer needs flex: 1
     // It is just a style object now
+    flex: 1,
     backgroundColor: "#f6f7fb",
+  },
+  scrollContainer: {
+    padding: 18,
+    // Add extra padding at the bottom to ensure the last GoalCard is visible above the navigator
+    paddingBottom: 150,
   },
   // ... rest of the styles are unchanged
   topbar: {

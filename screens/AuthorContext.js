@@ -7,7 +7,7 @@ export const AuthorContext = createContext(null);
 export const AuthorProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
+  
   // This is where you would do your initial session check
   const checkSession = () => {
     fetch('http://172.20.10.4:3000/check-session', {

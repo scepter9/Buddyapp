@@ -101,7 +101,7 @@ const fadeAnim = useRef(new Animated.Value(0)).current;
       setIsBlocked(true); // update UI immediately
     }
   };
-  
+   
   const handleUnblockUser = () => {
     if (socket) {
       socket.emit('unblockUser', { blockedId: recipientId });

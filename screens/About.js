@@ -41,7 +41,7 @@ export default function About({ navigation }) {
     } finally {
       setIsLoadingUser(false);
     }
-  }, []);
+  }, []); 
 
   const fetchNotificationCount = useCallback(async () => {
     try {
@@ -54,7 +54,7 @@ export default function About({ navigation }) {
       );
       if (!response.ok) throw new Error("Failed to fetch notifications");
       const data = await response.json();
-      setNotificationCount(data.count || 0);
+      setNotificationCount(data.unreadCount || 0); // 
     } catch (err) {
       console.error("Error fetching notification count:", err);
     }
