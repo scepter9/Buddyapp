@@ -1220,7 +1220,7 @@ app.post('/block/:blockedId', (req, res) => {
     });
   });
   app.get('/meetupusers',(req,res)=>{
-    const sql='SELECT * FROM meetup_participants ORDER BY created_at DESC';
+    const sql='SELECT * FROM meetup_participants ';
     db.query(sql, (err, results) => {
       if (err) {
         console.error('Error fetching meetups users:', err);
@@ -1328,7 +1328,7 @@ if (Sendnotifi) {
       if (row.host_id !== hostId) return res.status(403).json({ error: 'Not authorized' });
   
       // update request status
-      db.query('UPDATE join_requests SET status = ?, responded_at = NOW() WHERE id = ?', ['accepted', requestId], (err2) => {
+      db.query('UPDATE join_requests SET status = ?, responded_at = NOW() WHERE id = ?', ['accepted', row.id], (err2) => {
         if (err2) return res.status(500).json({ error: 'Failed to update request' });
   
         // optionally add to participants
@@ -1382,22 +1382,25 @@ if (Sendnotifi) {
     const { meetupid } = req.query;
   
     const sqlmeet = `
-      SELECT 
-        hostuser.ID AS meetupid,
-        hostuser.FULLNAME AS meetupname,
-        hostuser.image AS meetupimage,
-        JSON_ARRAYAGG(
-          JSON_OBJECT(
-            'senduserid', senduser.ID,
-            'sendusername', senduser.FULLNAME,
-            'senduserimage', senduser.image
-          )
-        ) AS attendees
-      FROM meetup_participants AS mu
-      JOIN projecttables hostuser ON mu.meetup_id = hostuser.ID
-      JOIN projecttables senduser ON mu.user_id = senduser.ID
-      WHERE mu.meetup_id = ?
-      GROUP BY hostuser.ID, hostuser.FULLNAME, hostuser.image
+    SELECT 
+    m.id AS meetupid,
+    m.title AS meetuptitle,
+    hostuser.FULLNAME AS meetupname,
+hostuser.image AS meetupimage,
+    JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'senduserid', senduser.ID,
+        'sendusername', senduser.FULLNAME,
+        'senduserimage', senduser.image
+      )
+    ) AS attendees
+FROM meetups m
+JOIN projecttables hostuser ON m.host_id = hostuser.ID
+LEFT JOIN meetup_participants mu ON mu.meetup_id = m.id
+LEFT JOIN projecttables senduser ON mu.user_id = senduser.ID
+WHERE m.id = 12
+GROUP BY m.id, m.title, hostuser.FULLNAME, hostuser.image;
+
     `;
   
     db.query(sqlmeet, [meetupid], (err, results) => {
@@ -1408,7 +1411,20 @@ if (Sendnotifi) {
     });
   });
   
-
+app.get('/meetupchat',(req,res)=>{
+  const {meetupId}=req.query;
+  const sql='SELECT * FROM meetups WHERE id=?'
+   db.query(sql,[meetupId],(err,result)=>{
+    if(err){
+      console.error(err)
+      res.status(500).json({Error:'An error occured'})
+    }
+    if(result.length===0){
+      return res.status(400).json({message:'No meetups found'})
+    }
+    res.json(result[0]);
+   })
+})
     app.post('/api/submit-answers', (req, res) => {
     // Extract the userId and answers object from the request body.
     const { userId, answers } = req.body;

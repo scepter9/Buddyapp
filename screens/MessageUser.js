@@ -1,621 +1,826 @@
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  SafeAreaView,
-  Platform,
-  KeyboardAvoidingView,
-  ActivityIndicator,
-  Image,
-  Alert,
-  Animated,
-   Clipboard,
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    ScrollView,
+    StyleSheet,
+    SafeAreaView,
+    Platform,
+    KeyboardAvoidingView,
+    ActivityIndicator,
+    Image,
+    Alert,
+    Animated,
+    Clipboard,
     TouchableWithoutFeedback,
+    Dimensions,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+ 
 import { io } from 'socket.io-client';
 import { AuthorContext } from './AuthorContext';
 import { UnreadMessagesContext } from './UnreadMessagesContext' // Import the context
-
+import * as ImagePicker from 'expo-image-picker';
+import { Feather } from "@expo/vector-icons";
 const API_BASE_URL = 'http://172.20.10.4:3000';
+const { height: screenHeight } = Dimensions.get('window');
+
+// Custom component for the message bubble to handle long press
+const MessageBubble = ({ msg, onLongPress, onPress, children, isMenuOpen }) => (
+    <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={onPress} // Tap to close the menu
+        onLongPress={() => onLongPress(msg.id)} // Long press to open the menu
+        delayLongPress={400} // Added a slight delay for long press
+        style={[
+            styles.messageContainer,
+            msg.isMine ? styles.sent : styles.received,
+            isMenuOpen && (msg.isMine ? styles.sentActive : styles.receivedActive), // Optional: Add a highlight
+            msg.type === 'image' && styles.imageMessageContainer, // Adjust padding/margin for image
+        ]}
+    >
+        {children}
+    </TouchableOpacity>
+);
+
 
 function MessageUser({ navigation, route }) {
-  const [messages, setMessages] = useState([]);
-  const [currentMessage, setCurrentMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSending, setIsSending] = useState(false);
-  const [isRecipientOnline, setIsRecipientOnline] = useState(false);
-  const [isBlocked, setIsBlocked] = useState(false);
-  const [socket, setSocket] = useState(null);
-  const [selectedMessageId, setSelectedMessageId] = useState(null);
-  const [activeMessageId, setActiveMessageId] = useState(null);
-  const [replyingTo, setReplyingTo] = useState(null);
+    const [messages, setMessages] = useState([]);
+    const [currentMessage, setCurrentMessage] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSending, setIsSending] = useState(false);
+    const [isRecipientOnline, setIsRecipientOnline] = useState(false);
+    const [isBlocked, setIsBlocked] = useState(false);
+    const [socket, setSocket] = useState(null);
+    const [activeMessageId, setActiveMessageId] = useState(null);
+    const [replyingTo, setReplyingTo] = useState(null);
+    const [dropdownPosition, setDropdownPosition] = useState({ x: 0, y: 0, align: 'left' });
+    const [image,setimage]=useState(null)
 
-const fadeAnim = useRef(new Animated.Value(0)).current;
+    // Animations for the dropdown menu
+    const opacityAnim = useRef(new Animated.Value(0)).current;
+    const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
-  const scrollViewRef = useRef();
+    const scrollViewRef = useRef();
+    const messageRefs = useRef({}); // To store refs for each message view
 
-  const { user } = useContext(AuthorContext);
-  const myUserId = user?.id;
-  const { recipientId, recipientName, recipientImage } = route.params;
+    const { user } = useContext(AuthorContext);
+    const myUserId = user?.id;
+    const { recipientId, recipientName, recipientImage } = route.params;
 
-  // Use the unread messages context
-  const { resetUnreadCountForConversation } = useContext(UnreadMessagesContext);
+    // Use the unread messages context
+    const { resetUnreadCountForConversation } = useContext(UnreadMessagesContext);
 
-  const scrollToBottom = () => {
-    scrollViewRef.current?.scrollToEnd({ animated: true });
-  };
-  const handleDelete = async (id) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/messages/${id}`, {
-        method: 'DELETE',
-      });
-  
-      if (!response.ok) throw new Error();
-  
-      // Remove locally
-      setMessages(prev => prev.filter(m => m.id !== id));
-    } catch {
-      Alert.alert('Error', 'Could not delete the message.');
-    } finally {
-      setSelectedMessageId(null);
-    }
-  };
-  
-  
-  const handleCopy = (text) => {
-    Clipboard.setString(text);
-    closeDropdown();
-  };
-  
-  const openDropdown = (id) => {
-    setActiveMessageId(id);
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 150,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const closeDropdown = () => {
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 150,
-      useNativeDriver: true,
-    }).start(() => setActiveMessageId(null));
-  };
-
-
-  const handleReply = (msg) => {
-    setReplyingTo(msg);
-    closeDropdown();
-  };
-  
-  const handleBlockUser = () => {
-    if (socket) {
-      socket.emit('blockUser', { blockedId: recipientId });
-      setIsBlocked(true); // update UI immediately
-    }
-  };
-   
-  const handleUnblockUser = () => {
-    if (socket) {
-      socket.emit('unblockUser', { blockedId: recipientId });
-      setIsBlocked(false); // update UI immediately
-    }
-  };
-
-  
-  const fetchBlockStatus = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/isBlocked/${recipientId}`);
-      if (!res.ok) throw new Error('Failed to fetch block status');
-      const data = await res.json();
-      setIsBlocked(data.blocked);
-    } catch (err) {
-      console.error('Block status check failed', err);
-    }
-  };
-
-
-  const fetchHistoricalMessages = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/messages?senderId=${myUserId}&receiverId=${recipientId}`);
-      if (!response.ok) throw new Error('Failed to fetch messages');
-      const data = await response.json();
-
-      const formattedMessages = data.map(msg => ({
-        id: msg.id,
-        senderId: msg.sender_id,
-        receiverId: msg.receiver_id,
-        type: msg.type,
-        text: msg.text,
-        imageUri: msg.image_uri,
-        timestamp: msg.timestamp,
-        isMine: msg.sender_id === myUserId,
-      }));
-
-      setMessages(formattedMessages);
-      // After fetching historical messages, mark them as read
-      // Only mark as read if there are messages and the current user is the receiver
-      if (formattedMessages.length > 0) {
-        resetUnreadCountForConversation(recipientId, myUserId); // Pass senderId as recipientId and receiverId as myUserId
-      }
-
-    } catch (error) {
-      Alert.alert('Error', 'Failed to load messages.');
-    } finally {
-      setIsLoading(false);
-      scrollToBottom();
-    }
-  }, [myUserId, recipientId, resetUnreadCountForConversation]);
- 
-
-  useEffect(() => {
-    const newSocket = io(API_BASE_URL, {
-      query: { userId: myUserId },
-      transports: ['websocket'],
-    });
-    setSocket(newSocket);
-  
-    newSocket.on('user_online', (onlineUserId) => {
-      if (onlineUserId === recipientId) setIsRecipientOnline(true);
-    });
-  
-    newSocket.on('user_offline', (offlineUserId) => {
-      if (offlineUserId === recipientId) setIsRecipientOnline(false);
-    });
-  
-    newSocket.on('message_deleted', (deletedId) => {
-      setMessages(prev => prev.filter(m => m.id !== deletedId));
-    });
-  
-    newSocket.on('user_blocked', (blockedId) => {
-      if (blockedId === recipientId) setIsBlocked(true);
-    });
-  
-    newSocket.on('blocked_by_user', (blockerId) => {
-      if (blockerId === recipientId) setIsBlocked(true);
-    });
-  
-    newSocket.on('user_unblocked', (unblockedId) => {
-      if (unblockedId === recipientId) setIsBlocked(false);
-    });
-  
-    newSocket.on('unblocked_by_user', (unblockerId) => {
-      if (unblockerId === recipientId) setIsBlocked(false);
-    });
-  
-    newSocket.on('newMessage', (message) => {
-      const isForThisConversation =
-        (message.senderId === myUserId && message.receiverId === recipientId) ||
-        (message.senderId === recipientId && message.receiverId === myUserId);
-  
-      if (isForThisConversation) {
-        const isMine = message.senderId === myUserId;
-        setMessages(prev => [...prev, { ...message, isMine }]);
-        if (!isMine) resetUnreadCountForConversation(recipientId, myUserId);
-      }
-    });
-  
-    // ✅ Cleanup function
-    return () => {
-      newSocket.disconnect();
-      newSocket.off('user_blocked');
-      newSocket.off('blocked_by_user');
-      newSocket.off('user_unblocked');
-      newSocket.off('unblocked_by_user');
-      newSocket.off('newMessage');
-      newSocket.off('user_online');
-      newSocket.off('user_offline');
-      newSocket.off('message_deleted');
-    };
-  }, [myUserId, recipientId, resetUnreadCountForConversation]);
-  
-
-  useEffect(() => {
-    if (myUserId) {
-      fetchHistoricalMessages();
-      fetchBlockStatus();
-    }
-  }, [fetchHistoricalMessages]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const handleSendMessage = () => {
-    if (currentMessage.trim() === '' || isSending) return;
-    setIsSending(true);
-
-    const messageData = {
-      senderId: myUserId,
-      receiverId: recipientId,
-      text: currentMessage,
-      type: 'text',
-      imageUri: recipientImage, // Set to null if no image is being sent
+    const scrollToBottom = () => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
     };
 
-    if (socket) {
-      socket.emit('sendMessage', messageData, (response) => {
-        setIsSending(false);
-        if (response?.error) {
-          Alert.alert('Error', 'Message failed to send.');
-        } else {
-          setCurrentMessage('');
-        }
-      });
-    }
+    const handleDelete = async (id) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/messages/${id}`, {
+                method: 'DELETE',
+            });
 
-    setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      ...messageData,
-      isMine: true,
-      timestamp: new Date().toISOString(),
-    }]);
-  };
+            if (!response.ok) throw new Error();
 
-  const handleImagePicker = () => {
-    // This is a simplified image picker, in a real app you'd use a library
-    const imageMessage = {
-      senderId: myUserId,
-      receiverId: recipientId,
-      imageUri: `https://placehold.co/200x200?text=IMG`,
-      type: 'image',
-      text: null, // Set text to null for image messages
-    };
-
-    if (socket) {
-      socket.emit('sendMessage', imageMessage);
-    }
-
-    setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      ...imageMessage,
-      isMine: true,
-      timestamp: new Date().toISOString(),
-    }]);
-  };
-
-  const renderMessage = (msg) => {
-    const isMenuOpen = activeMessageId === msg.id;
-  
-    return (
-      <View key={msg.id} style={{ position: 'relative' }}>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => (isMenuOpen ? closeDropdown() : openDropdown(msg.id))}
-        >
-          <View
-            style={[
-              styles.messageContainer,
-              msg.isMine ? styles.sent : styles.received,
-            ]}
-          >
-            {msg.type === 'image' ? (
-              <Image source={{ uri: msg.imageUri }} style={styles.chatImage} />
-            ) : (
-              <Text style={styles.messageText}>{msg.text}</Text>
-            )}
-          </View>
-        </TouchableOpacity>
-  
-        {isMenuOpen && (
-  <TouchableWithoutFeedback onPress={closeDropdown}>
-    <View style={styles.overlay}>
-      <Animated.View
-        style={[
-          styles.dropdownMenu,
-          { opacity: fadeAnim },
-          { alignSelf: msg.isMine ? 'flex-end' : 'flex-start', marginTop: 6 }
-        ]}
-      >
-        {msg.text && (
-          <TouchableOpacity
-            style={[styles.dropdownItem, styles.dropdownItemBorder]}
-            activeOpacity={0.6}
-            onPress={() => {
-              handleCopy(msg.text);
-              closeDropdown();
-            }}
-          >
-            <Feather name="copy" size={18} color="#333" style={styles.dropdownIcon} />
-            <Text style={styles.dropdownText}>Copy</Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={[styles.dropdownItem, styles.dropdownItemBorder]}
-          activeOpacity={0.6}
-          onPress={() => {
-            handleReply(msg);
+            // Remove locally
+            setMessages(prev => prev.filter(m => m.id !== id));
+        } catch {
+            Alert.alert('Error', 'Could not delete the message.');
+        } finally {
             closeDropdown();
-          }}
-        >
-          <Feather name="corner-up-left" size={18} color="#333" style={styles.dropdownIcon} />
-          <Text style={styles.dropdownText}>Reply</Text>
-        </TouchableOpacity>
-
-        {msg.isMine && (
-          <TouchableOpacity
-            style={styles.dropdownItem}
-            activeOpacity={0.6}
-            onPress={() => {
-              handleDelete(msg.id);
-              closeDropdown();
-            }}
-          >
-            <Feather name="trash-2" size={18} color="red" style={styles.dropdownIcon} />
-            <Text style={[styles.dropdownText, { color: 'red' }]}>Delete</Text>
-          </TouchableOpacity>
-        )}
-      </Animated.View>
-    </View>
-  </TouchableWithoutFeedback>
-)}
+        }
+    };
 
 
+    const handleCopy = (text) => {
+        Clipboard.setString(text);
+        closeDropdown();
+    };
 
-      </View>
+    const openDropdown = (id) => {
+        // Find the layout of the message bubble
+        messageRefs.current[id]?.measureInWindow((x, y, width, height) => {
+            const dropdownWidth = 160;
+            const dropdownHeight = 150; // A rough estimate for 3-4 items
+
+            let finalX = x;
+            let align = 'left';
+
+            if (messages.find(m => m.id === id)?.isMine) {
+                // Sent message: align dropdown to the right of the bubble
+                finalX = x + width - dropdownWidth;
+                align = 'right';
+            } else {
+                // Received message: align dropdown to the left of the bubble
+                finalX = x;
+                align = 'left';
+            }
+
+            // Simple collision check for top edge
+            let finalY = y - dropdownHeight - 10; // Position above the message bubble
+
+            if (finalY < 100) { // If it collides with the header or top
+                finalY = y + height + 10; // Position below the message bubble
+            }
+
+            // Collision check for left/right screen edges
+            if (finalX < 10) finalX = 10;
+            if (finalX + dropdownWidth > Dimensions.get('window').width - 10) {
+                finalX = Dimensions.get('window').width - dropdownWidth - 10;
+            }
+
+
+            setDropdownPosition({ x: finalX, y: finalY, align });
+            setActiveMessageId(id);
+
+            Animated.parallel([
+                Animated.timing(opacityAnim, {
+                    toValue: 1,
+                    duration: 200,
+                    useNativeDriver: true,
+                }),
+                Animated.spring(scaleAnim, {
+                    toValue: 1,
+                    friction: 7,
+                    tension: 50,
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        });
+    };
+
+    const closeDropdown = () => {
+        Animated.parallel([
+            Animated.timing(opacityAnim, {
+                toValue: 0,
+                duration: 150,
+                useNativeDriver: true,
+            }),
+            Animated.timing(scaleAnim, {
+                toValue: 0.8,
+                duration: 150,
+                useNativeDriver: true,
+            }),
+        ]).start(() => setActiveMessageId(null));
+    };
+
+
+    const handleReply = (msg) => {
+        setReplyingTo(msg);
+        setCurrentMessage(`@${msg.isMine ? 'You' : recipientName} `);
+        closeDropdown();
+    };
+
+    const handleBlockUser = () => {
+        if (socket) {
+            socket.emit('blockUser', { blockedId: recipientId });
+            setIsBlocked(true); // update UI immediately
+        }
+    };
+
+    const handleUnblockUser = () => {
+        if (socket) {
+            socket.emit('unblockUser', { blockedId: recipientId });
+            setIsBlocked(false); // update UI immediately
+        }
+    };
+
+
+    const fetchBlockStatus = async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/isBlocked/${recipientId}`);
+            if (!res.ok) throw new Error('Failed to fetch block status');
+            const data = await res.json();
+            setIsBlocked(data.blocked);
+        } catch (err) {
+            console.error('Block status check failed', err);
+        }
+    };
+
+
+    const fetchHistoricalMessages = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const response = await fetch(`${API_BASE_URL}/messages?senderId=${myUserId}&receiverId=${recipientId}`);
+            if (!response.ok) throw new Error('Failed to fetch messages');
+            const data = await response.json();
+
+            const formattedMessages = data.map(msg => ({
+                id: msg.id,
+                senderId: msg.sender_id,
+                receiverId: msg.receiver_id,
+                type: msg.type,
+                text: msg.text,
+                imageUri: msg.image_uri,
+                timestamp: msg.timestamp,
+                isMine: msg.sender_id === myUserId,
+            }));
+
+            setMessages(formattedMessages);
+            // After fetching historical messages, mark them as read
+            // Only mark as read if there are messages and the current user is the receiver
+            if (formattedMessages.length > 0) {
+                resetUnreadCountForConversation(recipientId, myUserId); // Pass senderId as recipientId and receiverId as myUserId
+            }
+
+        } catch (error) {
+            Alert.alert('Error', 'Failed to load messages.');
+        } finally {
+            setIsLoading(false);
+            scrollToBottom();
+        }
+    }, [myUserId, recipientId, resetUnreadCountForConversation]);
+
+
+    useEffect(() => {
+        const newSocket = io(API_BASE_URL, {
+            query: { userId: myUserId },
+            transports: ['websocket'],
+        });
+        setSocket(newSocket);
+
+        newSocket.on('user_online', (onlineUserId) => {
+            if (onlineUserId === recipientId) setIsRecipientOnline(true);
+        });
+
+        newSocket.on('user_offline', (offlineUserId) => {
+            if (offlineUserId === recipientId) setIsRecipientOnline(false);
+        });
+
+        newSocket.on('message_deleted', (deletedId) => {
+            setMessages(prev => prev.filter(m => m.id !== deletedId));
+        });
+
+        newSocket.on('user_blocked', (blockedId) => {
+            if (blockedId === recipientId) setIsBlocked(true);
+        });
+
+        newSocket.on('blocked_by_user', (blockerId) => {
+            if (blockerId === recipientId) setIsBlocked(true);
+        });
+
+        newSocket.on('user_unblocked', (unblockedId) => {
+            if (unblockedId === recipientId) setIsBlocked(false);
+        });
+
+        newSocket.on('unblocked_by_user', (unblockerId) => {
+            if (unblockerId === recipientId) setIsBlocked(false);
+        });
+
+        newSocket.on('newMessage', (message) => {
+            const isForThisConversation =
+                (message.senderId === myUserId && message.receiverId === recipientId) ||
+                (message.senderId === recipientId && message.receiverId === myUserId);
+
+            if (isForThisConversation) {
+                const isMine = message.senderId === myUserId;
+                setMessages(prev => [...prev, { ...message, isMine }]);
+                if (!isMine) resetUnreadCountForConversation(recipientId, myUserId);
+            }
+        });
+
+        // ✅ Cleanup function
+        return () => {
+            newSocket.disconnect();
+            newSocket.off('user_blocked');
+            newSocket.off('blocked_by_user');
+            newSocket.off('user_unblocked');
+            newSocket.off('unblocked_by_user');
+            newSocket.off('newMessage');
+            newSocket.off('user_online');
+            newSocket.off('user_offline');
+            newSocket.off('message_deleted');
+        };
+    }, [myUserId, recipientId, resetUnreadCountForConversation]);
+
+
+    useEffect(() => {
+        if (myUserId) {
+            fetchHistoricalMessages();
+            fetchBlockStatus();
+        }
+    }, [fetchHistoricalMessages]);
+
+    useEffect(() => {
+        // Use a slight delay to ensure the scroll happens after render and layout calculation
+        const timer = setTimeout(() => {
+            scrollToBottom();
+        }, 100);
+        return () => clearTimeout(timer);
+    }, [messages]);
+
+
+    
+    const handleSendMessage = () => {
+        if (currentMessage.trim() === '' || isSending) return;
+        setIsSending(true);
+
+        const replyToMessageId = replyingTo?.id || null;
+
+        const messageData = {
+            senderId: myUserId,
+            receiverId: recipientId,
+            text: currentMessage,
+            type: 'text',
+            imageUri: null,
+            replyToId: replyToMessageId,
+        };
+
+        if (socket) {
+            socket.emit('sendMessage', messageData, (response) => {
+                setIsSending(false);
+                if (response?.error) {
+                    Alert.alert('Error', 'Message failed to send.');
+                } else {
+                    setCurrentMessage('');
+                    setReplyingTo(null);
+                }
+            });
+        }
+
+        // Optimistic update
+        setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            ...messageData,
+            isMine: true,
+            timestamp: new Date().toISOString(),
+        }]);
+        setCurrentMessage('');
+        setReplyingTo(null);
+    };
+
+    const handleImagePicker = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (status !== 'granted') {
+            alert('Permission required to access photos');
+            return;
+        }
+
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: false, // Changed to false for simplicity, as per original. Can be 'true' if needed.
+            quality: 1,
+        });
+
+        if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+        const imageUri = result.assets[0].uri;
+        setimage(imageUri)
+        const replyToMessageId = replyingTo?.id || null;
+
+        const imageMessage = {
+            senderId: myUserId,
+            receiverId: recipientId,
+            imageUri,
+            type: 'image',
+            text: null,
+            replyToId: replyToMessageId,
+        };
+
+        if (socket) {
+            socket.emit('sendMessage', imageMessage);
+        }
+
+        // Optimistic update
+        setMessages(prev => [
+            ...prev,
+            {
+                id: Date.now().toString(),
+                ...imageMessage,
+                isMine: true,
+                timestamp: new Date().toISOString(),
+            },
+        ]);
+        setReplyingTo(null);
+    };
+
+    const handleViewimage=()=>{
+      navigation.navigate('ViewImage',{imagevalue:image})
+    }
+
+
+
+    const renderMessage = (msg) => {
+        const isMenuOpen = activeMessageId === msg.id;
+        const dropdownAlignment = msg.isMine ? styles.dropdownMenuSent : styles.dropdownMenuReceived;
+
+        // Find the replied-to message locally for display
+        const repliedToMsg = messages.find(m => m.id === msg.replyToId);
+        const repliedToText = repliedToMsg ? (repliedToMsg.type === 'image' ? 'Image' : (repliedToMsg.text || '')) : 'Deleted Message';
+        const repliedToAuthor = repliedToMsg ? (repliedToMsg.isMine ? 'You' : recipientName) : 'User';
+
+        return (
+            <View
+                key={msg.id}
+                ref={el => (messageRefs.current[msg.id] = el)}
+                style={{
+                    alignSelf: msg.isMine ? 'flex-end' : 'flex-start',
+                    marginBottom: 10,
+                }}
+            >
+                <MessageBubble
+                    msg={msg}
+                    isMenuOpen={isMenuOpen}
+                    onPress={isMenuOpen ? closeDropdown : () => {}} // Tap on bubble to close dropdown
+                    onLongPress={openDropdown}
+                    style={[
+                      styles.messageContainer,
+                      msg.type === 'image'
+                        ? { backgroundColor: 'transparent', padding: 0 } // override for images
+                        : msg.isMine
+                          ? styles.sent
+                          : styles.received,
+                      msg.type === 'image' && styles.imageMessageContainer,
+                    ]}
+                >
+                    {msg.replyToId && (
+                        <View style={styles.inReplyToContainer}>
+                            <Text style={styles.inReplyToAuthor} numberOfLines={1}>
+                                {repliedToAuthor}
+                            </Text>
+                            <Text style={styles.inReplyToText} numberOfLines={1}>
+                                {repliedToText}
+                            </Text>
+                        </View>
+                    )}
+
+                    {msg.type === 'image' ? (
+                      <TouchableOpacity   activeOpacity={0.8}
+                      onPress={()=>handleViewimage()}>
+                        <Image source={{ uri: msg.imageUri }} style={styles.chatImage} />
+                        </TouchableOpacity>
+                    ) : (
+                        <Text style={msg.isMine ? styles.sentMessageText : styles.receivedMessageText}>{msg.text}</Text>
+                    )}
+                </MessageBubble>
+            </View>
+        );
+    };
+
+    const renderDropdown = () => {
+        if (!activeMessageId) return null;
+
+        const msg = messages.find(m => m.id === activeMessageId);
+        if (!msg) return null;
+
+        const isText = msg.type === 'text' && msg.text;
+
+        return (
+            <TouchableWithoutFeedback onPress={closeDropdown}>
+                <View style={styles.fullScreenOverlay}>
+                    <Animated.View
+                        style={[
+                            styles.dropdownMenu,
+                            {
+                                opacity: opacityAnim,
+                                transform: [{ scale: scaleAnim }],
+                                top: dropdownPosition.y,
+                                left: dropdownPosition.x,
+                                // Align the arrow/menu to the bubble's side
+                                alignItems: dropdownPosition.align === 'right' ? 'flex-end' : 'flex-start',
+                            },
+                        ]}
+                    >
+                        {isText && (
+                            <TouchableOpacity
+                                style={[styles.dropdownItem, styles.dropdownItemBorder]}
+                                activeOpacity={0.7}
+                                onPress={() => handleCopy(msg.text)}
+                            >
+                                <Feather name="copy" size={18} color="#333" style={styles.dropdownIcon} />
+                                <Text style={styles.dropdownText}>Copy</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        <TouchableOpacity
+                            style={[styles.dropdownItem, isText && styles.dropdownItemBorder]}
+                            activeOpacity={0.7}
+                            onPress={() => handleReply(msg)}
+                        >
+                            <Feather name="corner-up-left" size={18} color="#333" style={styles.dropdownIcon} />
+                            <Text style={styles.dropdownText}>Reply</Text>
+                        </TouchableOpacity>
+
+                        {msg.isMine && (
+                            <TouchableOpacity
+                                style={styles.dropdownItem}
+                                activeOpacity={0.7}
+                                onPress={() => handleDelete(msg.id)}
+                            >
+                                <Feather name="trash-2" size={18} color="#e74c3c" style={styles.dropdownIcon} />
+                                <Text style={[styles.dropdownText, { color: '#e74c3c' }]}>Delete</Text>
+                            </TouchableOpacity>
+                        )}
+                    </Animated.View>
+                </View>
+            </TouchableWithoutFeedback>
+        );
+    };
+
+
+    return (
+        <SafeAreaView style={styles.container}>
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    <Feather name="chevron-left" size={24} color="#000" />
+                </TouchableOpacity>
+                <View style={styles.userSection}>
+                    <Image
+                        source={recipientImage ? { uri: recipientImage } : require('../assets/image16.jpeg')}
+                        style={styles.avatar}
+                    />
+                    {isRecipientOnline && (
+                        <View style={styles.onlineDot} />
+                    )}
+                    <Text style={styles.username}>{recipientName}</Text>
+                </View>
+                <View style={styles.actionButtons}>
+                    <TouchableOpacity style={styles.iconButton} onPress={isBlocked ? handleUnblockUser : handleBlockUser}>
+                        <Feather name={isBlocked ? "user-check" : "user-x"} size={24} color={isBlocked ? '#2ecc71' : '#e74c3c'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.iconButton}>
+                        <Feather name="menu" size={24} color="#000" />
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            <KeyboardAvoidingView
+                style={styles.keyboardAvoidingView}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+            >
+                {isLoading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color="#007bff" />
+                        <Text style={styles.loadingText}>Loading messages...</Text>
+                    </View>
+                ) : (
+                    <ScrollView ref={scrollViewRef} contentContainerStyle={styles.chatBody} onScrollBeginDrag={closeDropdown}>
+                        {messages.map(renderMessage)}
+                    </ScrollView>
+                )}
+                {renderDropdown()}
+
+                {isBlocked ? (
+                    <View style={styles.blockedMessageBox}>
+                        <Text style={styles.blockedText}>You are blocked or have blocked this user.</Text>
+                    </View>
+                ) : (
+                    <View style={styles.inputArea}>
+                        {replyingTo && (
+                            <View style={styles.replyPreview}>
+                                <View style={styles.replyContent}>
+                                    <Text style={styles.replyAuthor}>
+                                        Replying to {replyingTo.isMine ? 'You' : recipientName}
+                                    </Text>
+                                    <Text style={styles.replyText} numberOfLines={1}>
+                                        {replyingTo.type === 'image' ? 'Image' : replyingTo.text}
+                                    </Text>
+                                </View>
+                                <TouchableOpacity onPress={() => setReplyingTo(null)} style={styles.closeReply}>
+                                    <Feather name="x" size={18} color="#555" />
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                        <View style={styles.messageBox}>
+                            <TouchableOpacity style={styles.iconButton} onPress={handleImagePicker}>
+                                <Feather name="image" size={24} color="#007bff" />
+                            </TouchableOpacity>
+                            <TextInput
+                                style={styles.messageInput}
+                                placeholder="Type a message..."
+                                value={currentMessage}
+                                onChangeText={setCurrentMessage}
+                                placeholderTextColor="#888"
+                                multiline={true}
+                                editable={!isSending}
+                            />
+                            <TouchableOpacity style={styles.iconButton}>
+                                <Feather name="mic" size={24} color="#007bff" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.sendButton, (currentMessage.trim() === '' || isSending) && styles.disabledSendButton]}
+                                onPress={handleSendMessage}
+                                disabled={currentMessage.trim() === '' || isSending}
+                            >
+                                {isSending ? <ActivityIndicator color="#fff" /> : <Feather name="send" size={20} color="white" />}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
+            </KeyboardAvoidingView>
+        </SafeAreaView>
     );
-  };
-  
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Feather name="chevron-left" size={24} color="#000" />
-        </TouchableOpacity>
-        <View style={styles.userSection}>
-          <Image
-            source={recipientImage ? { uri: recipientImage } : require('../assets/image16.jpeg')}
-            style={styles.avatar}
-          />
-           {isRecipientOnline && (
-      <View style={styles.onlineDot} />
-    )}
-          <Text style={styles.username}>{recipientName}</Text>
-        </View>
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.iconButton}  onPress={isBlocked ? handleUnblockUser : handleBlockUser}>
-            <Feather name="user-x" size={24} color='red' />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
-            <Feather name="menu" size={24} color="#000" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <KeyboardAvoidingView style={styles.keyboardAvoidingView} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007bff" />
-            <Text style={styles.loadingText}>Loading messages...</Text>
-          </View>
-        ) : (
-          <ScrollView ref={scrollViewRef} contentContainerStyle={styles.chatBody}>
-            {messages.map(renderMessage)}
-          </ScrollView>
-        )}
-{isBlocked ? (
-  <View style={[styles.messageBox,{justifyContent:'center',alignItems:'center'}]}>
-      <Text style={{color:'#888'}}>You can't message this user</Text>
-  </View>
-):(
- 
-  
-        <View style={styles.messageBox}>
- {replyingTo && (
-  <View style={styles.replyPreview}>
-    <View style={styles.replyContent}>
-      <Text style={styles.replyAuthor}>
-        {replyingTo.isMine ? 'You' : replyingTo.senderName}
-      </Text>
-      <Text style={styles.replyText} numberOfLines={1}>
-        {replyingTo.text}
-      </Text>
-    </View>
-    <TouchableOpacity onPress={() => setReplyingTo(null)}>
-      <Feather name="x" size={20} color="#555" />
-    </TouchableOpacity>
-  </View>
-)}
-
-
-
-
-          <TouchableOpacity style={styles.iconButton} onPress={handleImagePicker}>
-            <Feather name="plus" size={24} color="#000" />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.messageInput}
-            placeholder="Type a message..."
-            value={currentMessage}
-            onChangeText={setCurrentMessage}
-            placeholderTextColor="#888"
-            multiline={true}
-            editable={!isSending}
-          />
-          <TouchableOpacity style={styles.iconButton}>
-            <Feather name="mic" size={24} color="#000" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.sendButton, (currentMessage.trim() === '' || isSending) && styles.disabledSendButton]}
-            onPress={handleSendMessage}
-            disabled={currentMessage.trim() === '' || isSending}
-          >
-            {isSending ? <ActivityIndicator color="#fff" /> : <Feather name="send" size={20} color="white" />}
-          </TouchableOpacity>
-        </View>
-        )}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9f9f9' },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    height: 60,
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
-    elevation: 3,
-  },
-  onlineDot: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: 'limegreen',
-    borderWidth: 1,
-    borderColor: '#fff',
-  },
-  
-  backButton: { padding: 8 },
-  userSection: { alignItems: 'center' },
-  avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#ccc' },
-  username: { marginTop: 4, fontWeight: 'bold', fontSize: 15 },
-  actionButtons: { flexDirection: 'row', gap: 8 },
-  iconButton: { padding: 8 },
-  keyboardAvoidingView: { flex: 1 },
-  chatBody: { padding: 16, flexGrow: 1 },
-  messageContainer: {
-    maxWidth: '70%',
-    padding: 10,
-    borderRadius: 14,
-    marginBottom: 10,
-  },
-  sent: {
-    backgroundColor: '#007bff',
-    alignSelf: 'flex-end',
-    borderBottomRightRadius: 0,
-  },
-  received: {
-    backgroundColor: 'gray',
-    alignSelf: 'flex-start',
-    borderBottomLeftRadius: 0,
-  },
-  messageText: {
-    fontSize: 14,
-    color: 'white',
-    flexWrap: 'wrap',
-  },
-  chatImage: { width: 140, height: 140, borderRadius: 10 },
-  messageBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderTopWidth: 1,
-    borderColor: '#ddd',
-    backgroundColor: '#fff',
-  },
-  messageInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    marginHorizontal: 10,
-    minHeight: 50,
-  },
-  sendButton: {
-    backgroundColor: '#007bff',
-    borderRadius: 20,
-    padding: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: 40,
-    width: 40,
-  },
-  disabledSendButton: { backgroundColor: '#aaa' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 10, color: '#555' },
-  dropdownMenu: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingVertical: 4,
-    minWidth: 150,
-    maxWidth: 180,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    zIndex: 999,
-    position: 'absolute',
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  dropdownItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  dropdownIcon: {
-    marginRight: 10,
-  },
-  dropdownText: {
-    fontSize: 15,
-    color: '#333',
-  },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
-    zIndex: 998,
-  },
-  
-  
-  
-  replyPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-    borderLeftWidth: 4,
-    borderLeftColor: '#007bff',
-    padding: 8,
-    marginHorizontal: 10,
-    marginBottom: 5,
-    borderRadius: 8,
-  },
-  replyLabel: {
-    fontSize: 12,
-    color: '#007bff',
-    marginRight: 5,
-  },
-  replyText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#333',
-  },
-  replyImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 5,
-    marginRight: 5,
-  },
-  closeReply: {
-    padding: 4,
-  },
-  
+    container: { flex: 1, backgroundColor: '#f9f9f9' },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        height: 60,
+        paddingHorizontal: 16,
+        backgroundColor: '#fff',
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: '#eee',
+    },
+    onlineDot: {
+        position: 'absolute',
+        bottom: 0,
+        right: -2,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: 'limegreen',
+        borderWidth: 1,
+        borderColor: '#fff',
+    },
+    backButton: { padding: 8 },
+    userSection: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginLeft: 10 },
+    avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#ccc' },
+    username: { fontWeight: '600', fontSize: 16, color: '#333' },
+    actionButtons: { flexDirection: 'row', gap: 4 },
+    iconButton: { padding: 8 },
+    keyboardAvoidingView: { flex: 1 },
+    chatBody: { padding: 16, flexGrow: 1 },
+
+    // --- Message Styles (Updated) ---
+    messageContainer: {
+        maxWidth: '78%',
+        padding: 10,
+        borderRadius: 12,
+        minHeight: 38,
+        justifyContent: 'center',
+    },
+    imageMessageContainer: {
+      backgroundColor: 'transparent',  // remove blue/grey background
+      padding: 0,                      // no extra padding around image
+      borderRadius: 0,                 // prevent extra rounded corners from bubble
+      alignItems: 'flex-start',        // keep alignment consistent
+    },
+    
+    sent: {
+        backgroundColor: '#007bff',
+        alignSelf: 'flex-end',
+        borderBottomRightRadius: 2,
+    },
+    received: {
+        backgroundColor: '#e5e5e5',
+        alignSelf: 'flex-start',
+        borderBottomLeftRadius: 2,
+    },
+    sentMessageText: {
+        fontSize: 15,
+        color: 'white',
+        flexWrap: 'wrap',
+    },
+    receivedMessageText: {
+        fontSize: 15,
+        color: '#333',
+        flexWrap: 'wrap',
+    },
+    chatImage: {
+        width: 200,
+        height: 350,
+        borderRadius: 20,
+    },
+    // --- Reply In-Message Bubble ---
+    inReplyToContainer: {
+        backgroundColor: 'rgba(0,0,0,0.1)',
+        padding: 8,
+        borderRadius: 8,
+        marginBottom: 5,
+        borderLeftWidth: 3,
+        borderLeftColor: 'rgba(255,255,255,0.7)',
+    },
+    inReplyToAuthor: {
+        fontSize: 13,
+        fontWeight: 'bold',
+        color: 'rgba(255,255,255,0.9)',
+    },
+    inReplyToText: {
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.8)',
+    },
+    // --- Input Area ---
+    inputArea: {
+        borderTopWidth: 1,
+        borderColor: '#ddd',
+        backgroundColor: '#fff',
+        paddingTop: 5,
+    },
+    messageBox: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+    },
+    messageInput: {
+        flex: 1,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: '#ccc',
+        borderRadius: 22,
+        paddingHorizontal: 14,
+        fontSize: 16,
+        marginHorizontal: 5,
+        minHeight: 44,
+        maxHeight: 120, // Limit height for multiline
+        paddingTop: Platform.OS === 'ios' ? 12 : 10,
+        paddingBottom: Platform.OS === 'ios' ? 12 : 10,
+    },
+    sendButton: {
+        backgroundColor: '#007bff',
+        borderRadius: 22,
+        padding: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: 44,
+        width: 44,
+        marginLeft: 5,
+    },
+    disabledSendButton: { backgroundColor: '#aaa' },
+    blockedMessageBox: {
+        height: 50,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderTopWidth: 1,
+        borderColor: '#ddd',
+        backgroundColor: '#fff',
+    },
+    blockedText: { color: '#888', fontStyle: 'italic' },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    loadingText: { marginTop: 10, color: '#555' },
+
+    // --- Dropdown Menu (Updated) ---
+    fullScreenOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 998,
+        backgroundColor: 'transparent',
+    },
+    dropdownMenu: {
+        position: 'absolute',
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        paddingVertical: 5,
+        minWidth: 150,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowOffset: { width: 0, height: 4 },
+        shadowRadius: 8,
+        zIndex: 999,
+    },
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 15,
+    },
+    dropdownItemBorder: {
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: '#f0f0f0',
+    },
+    dropdownIcon: {
+        marginRight: 12,
+    },
+    dropdownText: {
+        fontSize: 16,
+        color: '#333',
+        fontWeight: '500',
+    },
+
+    // --- Reply Preview (Updated) ---
+    replyPreview: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f0f0f0',
+        borderLeftWidth: 4,
+        borderLeftColor: '#007bff',
+        padding: 8,
+        marginHorizontal: 10,
+        marginBottom: 5,
+        borderRadius: 6,
+    },
+    replyContent: {
+        flex: 1,
+        paddingRight: 10,
+    },
+    replyAuthor: {
+        fontSize: 13,
+        fontWeight: 'bold',
+        color: '#007bff',
+    },
+    replyText: {
+        fontSize: 14,
+        color: '#555',
+    },
+    closeReply: {
+        padding: 5,
+    },
 });
 
 export default MessageUser;

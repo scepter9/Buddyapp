@@ -215,7 +215,7 @@ export default function About({ navigation }) {
                 : require("../assets/image0.jpeg"),
             label: "🌐 Nexus",
             subtitle: "Meet new people. Build your tribe.",
-            onPress: () => navigation.navigate("Nexus"),
+            onPress: () => navigation.navigate("Match"),
           },
         ].map((item, index) => (
           <Card item={item} key={index} />

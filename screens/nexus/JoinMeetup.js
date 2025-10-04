@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useMemo } from 'react';
-import { View, Text, FlatList, SafeAreaView, TouchableOpacity, ImageBackground, StyleSheet, TextInput, Platform } from 'react-native';
+import { View, Text, FlatList, SafeAreaView, TouchableOpacity, ImageBackground, StyleSheet, TextInput, Platform,Alert } from 'react-native';
 import { Feather } from "@expo/vector-icons";
 import { AuthorContext } from '../AuthorContext';
 
@@ -37,49 +37,61 @@ const NeonSearch = ({ value, onChangeText }) => {
 
 // ===== Card =====
 const MeetupCard = ({ userval,item, sendJoinRequest, navigation ,acceptedrequest,participants}) => {
-  const [buttonText, setButtonText] = useState('Request to Join');
+  const [status, setStatus] = useState('idle'); // idle | pending | accepted
+  const isHost = item.host_id === userval;
+
+  // check if current user is participant
+  const isParticipant = participants?.some((p) => {
+   
+    return p.user_id === userval && p.meetup_id ===item.id;
+  });
+  
   
 
   useEffect(() => {
-    if (item.host_id === userval) {
-      setButtonText('Open group chat');
-    } else {
-      // ✅ now call acceptedrequest and set text based on return
-      acceptedrequest(item.id).then((res) => {
-        if (res?.status === 'accepted') {
-          setButtonText('Open group chat');
-        }
-      });
-    }
-  }, [item, userval]);
-  
-
-
-
-
-
-  const handlePress = async () => {
-    if (buttonText === 'Open group chat') {
-      navigation.navigate('AttendeesScreen',{meetupVal:item.host_id});
+    let mounted = true;
+    if (isHost) {
+      setStatus('accepted');
       return;
     }
-    const ok = await sendJoinRequest(item);
-    if (ok) setButtonText('Pending Approval...');
-    
+    acceptedrequest(item.id).then((res) => {
+      if (!mounted) return;
+      if (res?.status === 'accepted') {
+        setStatus('accepted');
+      } else if (res?.status === 'pending') {
+        setStatus('pending');
+      }
+    });
+    return () => { mounted = false };
+  }, [item.id, isHost, acceptedrequest]);
 
-  };
-  const isParticipant = participants.some(
-    (p) => p.user_id === userId && p.meetup_id === item.host_id
-  );
-  
-  const handleAnotherPress = () => {
-    if (isParticipant) {
-      navigation.navigate('ChatScreen', { meetupId: item.roomValue });
-    } else {
-      Alert.alert('Access denied', 'You must join this meetup to open the group chat.');
+  const handlePress = async () => {
+    if (status === 'accepted') {
+      navigation.navigate('ChatScreen', { meetupId: item.id });
+      return;
+    }
+    if (status === 'idle') {
+      const ok = await sendJoinRequest(item);
+      if (ok) setStatus('pending');
     }
   };
-  
+
+  const handleSeeWho = () => {
+    if (isParticipant || isHost) {
+      navigation.navigate('AttendeesScreen', { meetupVal: item.id });
+    } else {
+      Alert.alert('Access denied', 'You’re not part of this meetup.');
+      console.log(isParticipant,participants)
+    }
+  };
+
+  const buttonText =
+    status === 'accepted'
+      ? 'Open group chat'
+      : status === 'pending'
+      ? 'Pending Approval...'
+      : 'Request to Join';
+
   // Nice fallback initials for “host” bubble (purely visual)
   const hostInitials = useMemo(() => {
     const t = (item?.host || 'New Host').trim().split(/\s+/);
@@ -135,11 +147,11 @@ const MeetupCard = ({ userval,item, sendJoinRequest, navigation ,acceptedrequest
         </View>
 
         <View style={styles.actions}>
-          <TouchableOpacity activeOpacity={0.9} style={[styles.btn, styles.btnPrimary]}  onPress={ handleAnotherPress}>
+          <TouchableOpacity activeOpacity={0.9} style={[styles.btn, styles.btnPrimary]}  onPress={ handlePress}>
             <Feather name="send" size={16} color="#0b1020" />
             <Text style={styles.btnPrimaryText}>{buttonText}</Text>
           </TouchableOpacity>
-          <TouchableOpacity activeOpacity={0.9} style={[styles.btn, styles.btnGhost]}  onPress={handlePress} >
+          <TouchableOpacity activeOpacity={0.9} style={[styles.btn, styles.btnGhost]}  onPress={handleSeeWho} >
             <Feather name="eye" size={16} color="#cfe0ff" />
             <Text style={styles.btnGhostText}>See who’s going</Text>
           </TouchableOpacity>
@@ -155,7 +167,7 @@ export default function JoinMeetup({ navigation }) {
   const [meetups, setMeetups] = useState([]);
   const [query, setQuery] = useState('');
   const [truevalue,settruevalue]=useState(false)
-  cons [participants,setparticipants]=useState([])
+  const [participants,setparticipants]=useState([])
   const userIs=user?.id;
 
   useEffect(() => {
@@ -173,7 +185,7 @@ export default function JoinMeetup({ navigation }) {
 useEffect(()=>{
   const getmeetupUsers=async()=>{
     try{
-      const res=fetch(`${API_BASE_URL}/meetupusers`)
+      const res=await fetch(`${API_BASE_URL}/meetupusers`)
       const data =await res.json()
       setparticipants(data)
     } catch(err){
@@ -184,7 +196,7 @@ useEffect(()=>{
   }
   getmeetupUsers()
   
-},[participants])
+},[])
   const sendJoinRequest = async (item) => {
     try {
       const response = await fetch(`${API_BASE_URL}/joinRequest`, {
@@ -249,7 +261,7 @@ useEffect(()=>{
         <FlatList
           data={meetups}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => <MeetupCard userval={userIs} item={item} sendJoinRequest={sendJoinRequest} navigation={navigation}  acceptedrequest={acceptedrequest}/>}
+          renderItem={({ item }) => <MeetupCard userval={userIs} item={item} sendJoinRequest={sendJoinRequest} navigation={navigation}  acceptedrequest={acceptedrequest} participants={participants}/>}
           ListFooterComponent={<Text style={styles.footer}>© NEXUS — Discover & meet great people near you.</Text>}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
           showsVerticalScrollIndicator={false}

@@ -33,6 +33,7 @@ import Room from './screens/nexus/Room';
 import AttendeesScreen from './screens/nexus/AttendeesScreen';
 import ChatScreen from './screens/nexus/ChatScreen';
 import CampusPulse from './screens/nexus/CampusPulsed';
+import ViewImage from './screens/nexus/ViewImage';
 
 import { UnreadMessagesProvider } from './screens/UnreadMessagesContext';
 import { AuthorProvider } from './screens/AuthorContext';
@@ -83,7 +84,7 @@ export default function App() {
     <Stack.Screen name="Match" component={Match} options={{ headerShown: false }} />
     <Stack.Screen name="ChatScreen" component={ChatScreen} options={{ headerShown: true }} />
     <Stack.Screen name="AttendeesScreen" component={AttendeesScreen} options={{ headerShown: false }} />
-    
+    <Stack.Screen name="ViewImage" component={ViewImage} options={{ headerShown: true }} />
     <Stack.Screen name="GoalCard" component={GoalCard} options={{ headerShown: false }} />
   </Stack.Navigator>
 </NavigationContainer>

@@ -6,6 +6,7 @@ import Profile from './screens/Profile'
 import Register from './screens/Register';
 import NotificationScreen from './screens/NotificationsScreen';
 import Messages from './screens/Messages'
+import Match from './screens/nexus/Match'
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,
