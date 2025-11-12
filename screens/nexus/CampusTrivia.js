@@ -11,7 +11,7 @@ import {
 import BottomNavigator from "../BottomNavigator";
 import { AuthorContext } from "../AuthorContext";
 import { io } from "socket.io-client";
-const API_BASE_URL = "http://172.20.10.4:3000";
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 const CampusTrivia = ({ navigation }) => {
   const { user } = useContext(AuthorContext);

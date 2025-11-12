@@ -8,7 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-const API_BASE_URL = 'http://172.20.10.4:3000';
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 // Add `route` to the component props to access navigation parameters
 const FriendList = ({ navigation, route }) => { 

@@ -17,7 +17,9 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Picker } from "@react-native-picker/picker";
 
-const API_BASE_URL = "http://172.20.10.4:3000";
+import BottomNavigator from "../BottomNavigator";
+
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 const generateRandomCode = () => {
   const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -48,7 +50,7 @@ export default function MainRoom({ navigation }) {
         navigation.navigate("Room", {
           Roomname: data.roomName,
           RoomHour: data.hour,
-          RoomMinute: data.hour,
+          RoomMinute: data.minute,
           roomCode:data.roomRandomCode,
         });
       } else {
@@ -197,6 +199,7 @@ export default function MainRoom({ navigation }) {
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
+      <BottomNavigator/>
     </SafeAreaView>
   );
 }

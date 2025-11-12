@@ -9,6 +9,7 @@ import {
   Alert,
   SafeAreaView,
 } from 'react-native';
+const API_BASE_URL = "http://192.168.0.136:3000";
 import AsyncStorage from '@react-native-async-storage/async-storage'; // npm install @react-native-async-storage/async-storage
 
 export default function Register({ navigation }) {
@@ -72,7 +73,7 @@ username=username.trim()
           password,
         };
   
-        const response = await fetch('http://172.20.10.4:3000/Register', {
+        const response = await fetch(`${API_BASE_URL}/Register`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

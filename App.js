@@ -34,9 +34,18 @@ import AttendeesScreen from './screens/nexus/AttendeesScreen';
 import ChatScreen from './screens/nexus/ChatScreen';
 import CampusPulse from './screens/nexus/CampusPulsed';
 import ViewImage from './screens/nexus/ViewImage';
-
+import FullStory from './screens/nexus/FullStory';
+import RequestToWrite from './screens/nexus/RequestToWrite';
+import QuestionDetails from './screens/nexus/QuestionDetails';
+import CreateRoomScreen from './screens/nexus/CreateRoomScreen'
+import DesignersHubScreen   from './screens/nexus/DesignersHubScreen'  
+import PitchDeck from   './screens/nexus/PitchDeck'                                                                                                                                                                                                                                                                                                                                                      
+import PitchScreen from  './screens/nexus/PitchScreen' 
+import NewPostScreen from './screens/nexus/NewPostScreen'
 import { UnreadMessagesProvider } from './screens/UnreadMessagesContext';
 import { AuthorProvider } from './screens/AuthorContext';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import ShowcaseMain from './screens/battlearena/ShowcaseMain';
 
 const Stack = createNativeStackNavigator();
 
@@ -52,8 +61,9 @@ export default function App() {
   if (!fontsLoaded) return null; // Wait until font is loaded
 
   return (
-    <  AuthorProvider>
+    <AuthorProvider>
  <UnreadMessagesProvider>
+ <GestureHandlerRootView style={{ flex: 1 }}>
     <NavigationContainer>
   <Stack.Navigator initialRouteName="Splash">
     <Stack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />
@@ -76,7 +86,7 @@ export default function App() {
     <Stack.Screen name="JoinMeetup" component={JoinMeetup} options={{ headerShown: false }} />
     <Stack.Screen name="CampusTrivia" component={CampusTrivia} options={{ headerShown: false }} />
     <Stack.Screen name="CampusPulse" component={CampusPulse} options={{ headerShown: false }} />
-    <Stack.Screen name="MainRoom" component={MainRoom} options={{ headerShown: true }} />
+    <Stack.Screen name="MainRoom" component={MainRoom} options={{ headerShown: false }} />
     <Stack.Screen name="Room" component={Room} options={{ headerShown: false }} />
     <Stack.Screen name="Personalized" component={Personalized} options={{ headerShown: false }} />
     <Stack.Screen name="Daily" component={Daily} options={{ headerShown: false }} />
@@ -84,10 +94,20 @@ export default function App() {
     <Stack.Screen name="Match" component={Match} options={{ headerShown: false }} />
     <Stack.Screen name="ChatScreen" component={ChatScreen} options={{ headerShown: true }} />
     <Stack.Screen name="AttendeesScreen" component={AttendeesScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="ViewImage" component={ViewImage} options={{ headerShown: true }} />
+    <Stack.Screen name="ViewImage" component={ViewImage} options={{ headerShown: false }} />
+    <Stack.Screen name="PitchDeck" component={PitchDeck} options={{ headerShown: false }} />
     <Stack.Screen name="GoalCard" component={GoalCard} options={{ headerShown: false }} />
+    <Stack.Screen name="FullStory" component={FullStory} options={{ headerShown: false }} />
+    <Stack.Screen name="RequestToWrite" component={RequestToWrite} options={{ headerShown: false }} />
+    <Stack.Screen name="QuestionDetails" component={QuestionDetails} options={{ headerShown: false }} />
+    <Stack.Screen name="CreateRoomScreen" component={CreateRoomScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="DesignersHubScreen" component={DesignersHubScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="PitchScreen" component={PitchScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="NewPostScreen" component={NewPostScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="ShowcaseMain" component={ShowcaseMain} options={{ headerShown: false }} />
   </Stack.Navigator>
 </NavigationContainer>
+</GestureHandlerRootView >
 </UnreadMessagesProvider>
 </  AuthorProvider>
   );

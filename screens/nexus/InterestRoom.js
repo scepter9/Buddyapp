@@ -1,220 +1,721 @@
-import React, { useState } from "react";
+import React, { useEffect, useState, useContext} from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
   TextInput,
-  ImageBackground,
-} from "react-native";
-import { Feather } from "@expo/vector-icons";
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  FlatList,
+  Alert,
+  Modal
+} from 'react-native';
+import BottomNavigator from '../BottomNavigator';
+import { LinearGradient } from 'expo-linear-gradient';
+import { AuthorContext } from '../AuthorContext';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+const API_BASE_URL = "http://192.168.0.136:3000";
+import { Feather } from '@expo/vector-icons';
+import { FontAwesome } from "@expo/vector-icons";
 
-export default function InterestRoom({ navigation }) {
-  const [postText, setPostText] = useState("");
 
+function ActiveRooms({ item, navigation,variant }) {
+  const { user } = useContext(AuthorContext);
+  const sender = user?.id;
+
+  const [joined, setjoined] = useState(false);
+  const [openmodal, setopenmodal] = useState(false);
+  const [title, setTitle] = useState('');
+  const [checkvalue, setcheckvalue] = useState(false);
+  const storagekey = `${item?.id}_key`;
+  const checkPassword = async () => {
+    if (title.trim().length === 0) {
+      Alert.alert('Please input a value');
+      return;
+    }
+  
+    if (title === item.roompasskey) {
+      try {
+        const valid = item.id;
+        const res = await fetch(`${API_BASE_URL}/postroommembers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ valid, sender }),
+        });
+  
+        if (!res.ok) {
+          console.log('An error occurred');
+        } else {
+          // ✅ Success: Save joined state for private room too
+          // await AsyncStorage.setItem(storagekey, JSON.stringify(true));
+          // setjoined(true);
+  
+          // ✅ Close modal & navigate
+          setopenmodal(false);
+          navigation.navigate('DesignersHubScreen',{roomid:valid});
+        }
+      } catch (err) {
+        console.log(err);
+      }
+    } else {
+      setcheckvalue(true);
+      setTitle('');
+    }
+  };
+  
+  
+
+  const handlemodes = async () => {
+    const valid = item.id;
+    if (joined) {
+      navigation.navigate('DesignersHubScreen',{roomid:valid});
+      return;
+    }
+  
+    else if (!joined && item.selectmode === 'public') {
+      setjoined(true);
+      await AsyncStorage.setItem(storagekey, JSON.stringify(true));
+      try {
+        const valid = item.id;
+        const res = await fetch(`${API_BASE_URL}/postroommembers`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ valid, sender }),
+        });
+        if (!res.ok) console.log('Something went wrong');
+      } catch (err) {
+        console.log(err);
+      }
+    } else if (item.selectmode === 'private') {
+      setopenmodal(true);
+    }
+  };
+  
+  useEffect(() => {
+    const getJoinstate = async () => {
+      try {
+        const value = await AsyncStorage.getItem(storagekey);
+        if (value !== null) {
+          setjoined(JSON.parse(value));
+        }
+      } catch (err) {
+        console.log('Error reading storage', err);
+      }
+    };
+    getJoinstate();
+  }, []);
+  
   return (
-    <ImageBackground
-      // source={{ uri: "https://i.imgur.com/f0vMZJQ.png" }} // gradient bg image
-      style={styles.container}
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>💻 Code-Cave</Text>
-        <TouchableOpacity
-          style={styles.leaveBtn}
-          onPress={() => navigation.navigate("CampusNexus")}
-        >
-          <Feather name="log-out" size={20} color="#fff" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Main */}
-      <View style={styles.main}>
-        {/* Sidebar */}
-        <View style={styles.sidebar}>
-          <Text style={styles.sectionTitle}>MENU</Text>
-          {[
-            { icon: "home", label: "Home" },
-            { icon: "bookmark", label: "Saved" },
-            { icon: "users", label: "Members" },
-            { icon: "settings", label: "Settings" },
-            { icon: "grid", label: "More" },
-          ].map((item, i) => (
-            <TouchableOpacity key={i} style={styles.sidebarItem}>
-              <Feather name={item.icon} size={22} color="#fff" />
-              <Text style={styles.sidebarText}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Feed */}
-        <ScrollView style={styles.feed} showsVerticalScrollIndicator={false}>
-          {/* Create Post */}
-          <View style={styles.createPost}>
+    <View
+    style={[
+      styles.spaceCard,
+      variant === 'search' && styles.searchCard,
+      variant === 'joined' && styles.joinedCard,
+    ]}
+  >
+  
+      {/* Styled Modal */}
+      <Modal
+        visible={openmodal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setopenmodal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>🔐 Enter Room Passcode</Text>
             <TextInput
-              style={styles.textInput}
-              placeholder="✍️ Share something with Code-Cave..."
-              placeholderTextColor="#aaa"
-              value={postText}
-              onChangeText={setPostText}
-              multiline
+              style={styles.modalInput}
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Enter passcode"
+              placeholderTextColor="#999"
+              secureTextEntry
             />
-            <TouchableOpacity style={styles.fab}>
-              <Feather name="send" size={22} color="#fff" />
-            </TouchableOpacity>
-          </View>
+            {checkvalue && (
+              <Text style={styles.errorText}>Incorrect passcode. Try again.</Text>
+            )}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#00d9ff' }]}
+                onPress={checkPassword}
+              >
+                <Text style={styles.modalBtnText}>Check</Text>
+              </TouchableOpacity>
 
-          {/* Example Posts */}
-          <View style={styles.post}>
-            <Text style={styles.postAuthor}>@devmark 🚀</Text>
-            <Text style={styles.postText}>
-              Just built a new feature with React + Tailwind 🔥  
-            </Text>
-            <View style={styles.actions}>
-              <TouchableOpacity style={styles.actionBtn}>
-                <Feather name="thumbs-up" size={18} color="#6C63FF" />
-                <Text style={styles.actionText}>Like</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn}>
-                <Feather name="message-circle" size={18} color="#00C9A7" />
-                <Text style={styles.actionText}>Comment</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn}>
-                <Feather name="share-2" size={18} color="#FF6B6B" />
-                <Text style={styles.actionText}>Share</Text>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: 'rgba(255,255,255,0.1)' }]}
+                onPress={() => setopenmodal(false)}
+              >
+                <Text style={[styles.modalBtnText, { color: '#ccc' }]}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
 
-          <View style={styles.post}>
-            <Text style={styles.postAuthor}>@coderella ✨</Text>
-            <Text style={styles.postText}>
-              Anyone here using Node.js for backend projects? Let’s connect!
-            </Text>
-            <View style={styles.actions}>
-              <TouchableOpacity style={styles.actionBtn}>
-                <Feather name="thumbs-up" size={18} color="#6C63FF" />
-                <Text style={styles.actionText}>Like</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn}>
-                <Feather name="message-circle" size={18} color="#00C9A7" />
-                <Text style={styles.actionText}>Comment</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn}>
-                <Feather name="share-2" size={18} color="#FF6B6B" />
-                <Text style={styles.actionText}>Share</Text>
-              </TouchableOpacity>
-            </View>
+      {/* Room Card */}
+      <View style={styles.spaceTop}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={styles.roomIcon}>
+            <Text style={{ fontSize: 20 }}>{item.icon ||<FontAwesome name="comments" size={20} color="#fff" />
+
+}</Text>
           </View>
-        </ScrollView>
+          <View>
+            <Text style={styles.roomName}># {item.roomname}</Text>
+            <Text style={styles.roomMeta}>{item.members_count || 'No'} members</Text>
+          </View>
+        </View>
+        <Text style={styles.mutedSmall}>{item.selecttype}</Text>
       </View>
-    </ImageBackground>
+
+      <Text style={styles.roomDesc}>{item.roomdescription}</Text>
+
+      <TouchableOpacity
+        onPress={handlemodes}
+        style={[styles.joinBtn, joined && styles.joinedBtn]}
+      >
+        <Text style={[styles.joinText, joined && styles.joinedText]}>
+          {joined ? 'View' : 'Join'}
+        </Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
+function HappeningNow({item}){
+return(
+  <View style={styles.liveCard}>
+              <Text style={styles.meta}>🎯 {item.tag}</Text>
+              <Text style={styles.liveDesc}>{item.desc}</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{item.badge}</Text>
+              </View>
+            </View>
+)
+}
+const InterestRoom = ({navigation}) => {
+  
+  const { user } = useContext(AuthorContext);
+  const sender = user?.id;
+  const [activeroom,Setactiveroom]=useState([])
+  const [IsHappeningNow,SetHappeningNow]=useState([])
+  const [yourroom,setyourroom]=useState([])
+  const [searchQuery,setSearchQuery]=useState('')
+   const [search,setSearch]=useState([])
+  const [loading,setloading]=useState(false)
+
+  useEffect(()=>{
+    if(searchQuery.trim().length===0){
+      setSearch([])
+      
+      return;
+    }
+    const searchInterestroom=setTimeout(async()=>{
+      setloading(true)
+      try{
+        const res=await fetch(`${API_BASE_URL}/searchinterestroom?search=${searchQuery}`);
+        if(!res.ok){
+          console.log('something went wrong');
+          return;
+        }
+        const val=await res.json();
+setSearch(val)
+      }catch(err){
+        console.log('something went wrong');
+      }
+      setloading(false)
+    },300)
+    return()=>clearTimeout(searchInterestroom);
+  },[searchQuery])
+
+useEffect(()=>{
+  const FetchHappeningnow=async()=>{
+    try{
+      const res=await fetch(`${API_BASE_URL}/fetchhappening`)
+      if(!res.ok){
+        console.log('Something went wrong');
+        return;
+      }
+  const answer=await res.json()
+  SetHappeningNow(answer)
+    }catch(err){
+      console.log('An error occured');
+    }
+  }
+  FetchHappeningnow()
+},[])
+  useEffect(()=>{
+
+    const FetchActiveRooms=async()=>{
+      try{
+        const response=await fetch(`${API_BASE_URL}/getactiverooms`);
+        if(!response.ok){
+          console.log('An error occured');
+          return;
+        }
+const data=await response.json();
+Setactiveroom(data)
+      }catch(err){
+        console.log('An error occured');
+      }
+      
+    }
+    FetchActiveRooms()
+  },[])
+
+  useEffect(()=>{
+    const fetchjoinedrooms=async()=>{
+      try{
+        const response=await fetch(`${API_BASE_URL}/getjoinroom?yourid=${sender}`)
+        if(!response.ok){
+          console.log('something happened that caused the issue');
+        }
+        const data=await response.json();
+        setyourroom(data)
+      }catch(err){
+      console.log('An error occured');
+      }
+    }
+    fetchjoinedrooms()
+  },[])
+  return (
+    <SafeAreaView style={styles.safeview}>
+    <ScrollView style={styles.container}
+    contentContainerStyle={{ paddingBottom: 100 }}
+    >
+      {/* TOPBAR */}
+      <View style={styles.topbar}>
+        <View style={styles.brand}>
+          <View style={styles.logo}>
+            <Text style={styles.logoText}>MC</Text>
+          </View>
+          <View>
+            <Text style={styles.brandTitle}>Mission Control</Text>
+            <Text style={styles.brandSubtitle}>
+              Interest Rooms • Collaboration Hub
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity onPress={() => navigation.navigate("CreateRoomScreen")}>
+          <Text style={styles.icon}>Create</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* HERO */}
+      <View style={styles.hero}>
+        <View style={styles.heroTop}>
+          <View style={styles.heroIcon}>
+            <Text style={{ fontSize: 20 }}>🚀</Text>
+          </View>
+          <View>
+            <Text style={styles.heroLabel}>YOUR COLLABORATION HUB</Text>
+            <Text style={styles.heroTitle}>Explore Your Interests</Text>
+            <Text style={styles.heroSubtitle}>
+              Find your tribe, build the future.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.searchBar}>
+          <Text style={{ fontSize: 18 }}>🔍</Text>
+          <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+            style={styles.input}
+            placeholder="Find rooms..."
+            placeholderTextColor="rgba(234,246,255,0.6)"
+          />
+          <Text style={styles.kbd}>⌘K</Text>
+        </View>
+        {loading && (
+          <Text>loading rooms....</Text>
+         
+        )}
+         <FlatList
+         scrollEnabled={false}
+         data={search}
+         keyExtractor={(item)=>`search-${item.id}`}
+         renderItem={({item})=>(
+         <ActiveRooms item={item} navigation={navigation} variant="search"/>
+         )}
+          contentContainerStyle={{gap:16}}
+         
+         />
+      </View>
+
+      {/* LIVE ACTIVITY */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitle}>
+            <Text>🔥</Text>
+            <Text style={styles.sectionTitleText}>Happening Now</Text>
+          </View>
+          <Text style={styles.muted}>Live • real-time</Text>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.live}
+        >
+          <FlatList
+           scrollEnabled={false}
+          data={IsHappeningNow}
+          keyExtractor={(item)=>item.id?.toString()}
+          renderItem={({item})=>(
+            <HappeningNow item={item}/>
+          )}
+          />
+          
+        </ScrollView>
+        
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitleText}> Joined Rooms</Text>
+          <Text style={styles.muted}>Quick access</Text>
+        </View>
+<FlatList
+ scrollEnabled={false}
+data={yourroom}
+keyExtractor={(item)=>`joined-${item.id}`}
+renderItem={({item})=>(
+  <ActiveRooms item={item} navigation={navigation} variant="joined"/>
+)}
+ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+/>
+       
+      </View>
+
+
+
+
+      {/* YOUR SPACES */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitleText}> Active Communities</Text>
+          <Text style={styles.muted}>Quick access</Text>
+        </View>
+<FlatList
+ scrollEnabled={false}
+data={activeroom}
+keyExtractor={(item)=>`active-${item.id}`}
+renderItem={({item})=>(
+  <ActiveRooms item={item} navigation={navigation}  variant="active"/>
+)}
+ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+/>
+       
+      </View>
+
+      {/* PITCH BUTTON SECTION */}
+      <View style={styles.pitchSection}>
+        <Text style={styles.pitchCatch}>
+          💡 Got an idea worth sharing? Turn your thoughts into action with a pitch.
+        </Text>
+        <TouchableOpacity style={styles.pitchBtn} onPress={()=>navigation.navigate('PitchDeck')}>
+          <Text style={styles.pitchBtnText}>View Pitches</Text>
+        </TouchableOpacity>
+      </View>
+    
+
+    </ScrollView>
+    <BottomNavigator navigation={navigation}/>
+    </SafeAreaView>
+  );
+};
+
+export default InterestRoom;
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#1A1A1D" },
-
-  // Header
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 18,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.1)",
+ 
+  safeview:{
+    flex:1,
+    backgroundColor: '#0f1a2c',
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#fff",
-    letterSpacing: 1,
-  },
-  leaveBtn: {
-    backgroundColor: "#FF6B6B",
-    padding: 8,
-    borderRadius: 50,
-  },
-
-  // Main
-  main: { flex: 1, flexDirection: "row" },
-
-  // Sidebar
-  sidebar: {
-    width: 90,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    paddingVertical: 20,
-    borderRightWidth: 1,
-    borderRightColor: "rgba(255,255,255,0.1)",
-    alignItems: "center",
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 20,
-    color: "#fff",
-    opacity: 0.7,
-  },
-  sidebarItem: {
-    marginBottom: 20,
-    alignItems: "center",
-  },
-  sidebarText: { color: "#fff", fontSize: 12, marginTop: 4 },
-
-  // Feed
-  feed: {
+  container: {
     flex: 1,
-    padding: 16,
+    backgroundColor: '#0f1a2c',
+    padding: 20,
   },
-  createPost: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    padding: 14,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalBox: {
+    width: '100%',
+    backgroundColor: '#0f1a2c',
     borderRadius: 16,
-    marginBottom: 20,
-    position: "relative",
+    padding: 20,
+    shadowColor: '#00d9ff',
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 10,
   },
-  textInput: { color: "#fff", fontSize: 14, minHeight: 50 },
-  fab: {
-    position: "absolute",
-    bottom: 10,
-    right: 10,
-    backgroundColor: "#6C63FF",
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#6C63FF",
-    shadowOpacity: 0.6,
+  modalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    color: '#fff',
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 15,
+    marginBottom: 10,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 10,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalBtnText: {
+    color: '#031426',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  errorText: {
+    color: '#ff6b6b',
+    textAlign: 'center',
+    fontSize: 13,
+  },
+
+  topbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  logo: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#00d9ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: { fontWeight: '800', color: '#031426' },
+  brandTitle: { color: '#eaf6ff', fontWeight: '700', fontSize: 14 },
+  brandSubtitle: { color: 'rgba(234,246,255,0.6)', fontSize: 11 },
+  icon: { fontSize: 18, color: 'rgba(234,246,255,0.6)' },
+
+  hero: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 18,
+    padding: 16,
+    marginTop: 16,
+  },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  heroIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#00d9ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroLabel: { color: '#00d9ff', fontWeight: '700', fontSize: 13 },
+  heroTitle: { color: '#fff', fontWeight: '800', fontSize: 22 },
+  heroSubtitle: { color: 'rgba(234,246,255,0.6)', fontSize: 13 },
+
+  spaceCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 20,
+    padding: 16,
+    marginVertical: 6,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#00d9ff',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  spaceTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  roomIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,217,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,217,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#00d9ff',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  roomName: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 17,
+    letterSpacing: 0.3,
+  },
+  roomMeta: {
+    color: 'rgba(234,246,255,0.65)',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  roomDesc: {
+    color: 'rgba(234,246,255,0.75)',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  
+  joinBtn: {
+    marginTop: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    alignSelf: 'flex-start',
+    backgroundColor:'white',
+    // backgroundColor: 'linear-gradient(90deg, #00d9ff, #0077ff)',
+    shadowColor: '#00d9ff',
+    shadowOpacity: 0.4,
     shadowRadius: 6,
     elevation: 5,
   },
-
-  // Posts
-  post: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 16,
+  joinText: {
+    color: '#031426',
+    fontWeight: '800',
+    fontSize: 15,
+    letterSpacing: 0.5,
   },
-  postAuthor: { fontWeight: "700", marginBottom: 6, color: "#fff" },
-  postText: { color: "#f1f1f1", fontSize: 14 },
-  actions: {
-    flexDirection: "row",
+  joinedBtn: {
+    backgroundColor: 'rgba(0,217,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,217,255,0.4)',
+    shadowColor: '#00d9ff',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  joinedText: {
+    color: '#00d9ff',
+    fontWeight: '700',
+  },
+  searchCard: {
+    borderWidth: 1,
+    borderColor: 'rgba(0,217,255,0.5)',
+    backgroundColor: 'rgba(0,217,255,0.07)',
+    shadowColor: '#00d9ff',
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 7,
+  },
+  joinedCard: {
+    backgroundColor: 'rgba(0,255,128,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,255,128,0.4)',
+    shadowColor: '#00ff80',
+    shadowOpacity: 0.35,
+    shadowRadius: 9,
+    elevation: 6,
+  },
+  
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 12,
-    justifyContent: "space-around",
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  actionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+  input: {
+    flex: 1,
+    color: '#fff',
+    marginLeft: 8,
+    fontSize: 15,
   },
-  actionText: {
-    color: "#fff",
-    fontSize: 13,
-    marginLeft: 4,
-    opacity: 0.9,
+  kbd: {
+    fontSize: 11,
+    color: 'rgba(234,246,255,0.6)',
+  },
+
+  section: { marginTop: 28 },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  sectionTitleText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  muted: { color: 'rgba(234,246,255,0.6)', fontSize: 13 },
+  mutedSmall: { color: 'rgba(234,246,255,0.6)', fontSize: 12 },
+
+  live: { marginTop: 10 },
+  liveCard: {
+    minWidth: 200,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 14,
+    padding: 12,
+    marginRight: 12,
+  },
+  meta: { color: 'rgba(234,246,255,0.6)', fontSize: 12, marginBottom: 6 },
+  liveDesc: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  badge: {
+    marginTop: 8,
+    backgroundColor: 'rgba(0,217,255,0.08)',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  badgeText: { color: '#eaf6ff', fontWeight: '700', fontSize: 13 },
+
+  spaces: { marginTop: 14, gap: 12 },
+
+
+  pitchSection: {
+    marginTop: 40,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 18,
+    padding: 18,
+    alignItems: 'center',
+  },
+  pitchCatch: {
+    color: 'rgba(234,246,255,0.8)',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  pitchBtn: {
+    backgroundColor: '#00d9ff',
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    borderRadius: 12,
+  },
+  pitchBtnText: {
+    color: '#031426',
+    fontWeight: '800',
+    fontSize: 15,
   },
 });

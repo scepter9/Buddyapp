@@ -2,7 +2,7 @@ import React, { createContext, useState, useEffect } from 'react';
 
 // Create the Context
 export const AuthorContext = createContext(null);
-
+const API_BASE_URL = "http://192.168.0.136:3000";
 // Create the Provider component
 export const AuthorProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -10,7 +10,7 @@ export const AuthorProvider = ({ children }) => {
   
   // This is where you would do your initial session check
   const checkSession = () => {
-    fetch('http://172.20.10.4:3000/check-session', {
+    fetch(`${API_BASE_URL}/check-session`, {
       method: 'GET',
       credentials: 'include',
     })
@@ -33,7 +33,7 @@ export const AuthorProvider = ({ children }) => {
   // This function can be used by any component to log a user out
   const signOut = () => {
     
-     fetch('http://172.20.10.4:3000/logout').then(() => setUser(null));
+     fetch(`${API_BASE_URL}/logout`).then(() => setUser(null));
     
   };
   

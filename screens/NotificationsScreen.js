@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons'; // Import Ionicons for the clear 
 
 import BottomNavigator from './BottomNavigator';
 
-const API_BASE_URL = 'http://172.20.10.4:3000';
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 const NOTIFICATION_TYPES = {
   FOLLOW: 'follow',

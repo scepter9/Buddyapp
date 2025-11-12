@@ -1,4 +1,4 @@
-import React from "react";
+ import React, { useState ,useEffect,useContext} from "react";
 import {
   View,
   Text,
@@ -6,27 +6,162 @@ import {
   ScrollView,
   TouchableOpacity,
   ImageBackground,
-  SafeAreaView
+  SafeAreaView,
+  Alert,
+  FlatList,
+  
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { FontAwesome } from "@expo/vector-icons";
+
+
+const API_BASE_URL = "http://192.168.0.136:3000";
 import BottomNavigator from '../BottomNavigator';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AuthorContext } from '../AuthorContext';
+
 export default function CampusPulse({navigation}) {
-  const stories = [
-    {
-      id: "1",
-      title: "Life in the Engineering Faculty",
-      author: "Sarah • 2h ago",
-      text: "University life in the engineering faculty is intense but rewarding. Late-night coding, coffee runs, and teamwork taught me more than lectures alone...",
-      img: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80",
-    },
-    {
-      id: "2",
-      title: "My First Year Experience",
-      author: "Daniel • 1d ago",
-      text: "First year was full of surprises—new friends, new environment, and independence. Joining societies and discovering robotics made it unforgettable...",
-      img: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=1200&q=80",
-    },
-  ];
+  const { user } = useContext(AuthorContext);
+    const myUserId = user?.id;
+  const [stories,setstories]=useState([])
+ 
+
+useEffect(()=>{
+  const Fetchstories=async()=>{
+    try{
+      const response=await fetch(`${API_BASE_URL}/pulsedata`)
+      if (!response.ok) throw new Error("Network response not ok");
+const data = await response.json();
+
+      setstories(data)
+    }catch(err){
+      if(err){
+        
+      }console.log(err);
+    }
+  }
+  Fetchstories();
+},[])
+
+
+
+
+function StoryCard({ item, navigation }) {
+  const API_BASE_URL = 'http://172.20.10.4:3000';
+  const likeKey = `like_${item.ID}`;
+  const dislikeKey = `dislike_${item.ID}`;
+
+  const [increase, setIncrease] = useState(0);
+  const [decrease, setDecrease] = useState(0);
+  const [love, setLove] = useState(false);
+  const [hate, setHate] = useState(false);
+
+  useEffect(() => {
+    const fetchValues = async () => {
+      try {
+        const savedLike = await AsyncStorage.getItem(likeKey);
+        const savedDislike = await AsyncStorage.getItem(dislikeKey);
+        if (savedLike) setIncrease(JSON.parse(savedLike));
+        if (savedDislike) setDecrease(JSON.parse(savedDislike));
+      } catch (err) {
+        console.log(err);
+      }
+    };
+    fetchValues();
+  }, []);
+
+  const PositiveCount = async () => {
+    try {
+      if (hate) {
+        const getHate = await AsyncStorage.getItem(dislikeKey);
+        const updateGetHate = JSON.parse(getHate) - 1;
+        setDecrease(updateGetHate);
+        await AsyncStorage.setItem(dislikeKey, JSON.stringify(updateGetHate));
+        setHate(false);
+      }
+
+      if (!love) {
+        const newValue = increase + 1;
+        setIncrease(newValue);
+        setLove(true);
+        await AsyncStorage.setItem(likeKey, JSON.stringify(newValue));
+      }
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const NegativeCount = async () => {
+    try {
+      if (love) {
+        const getLove = await AsyncStorage.getItem(likeKey);
+        const updateGetLove = JSON.parse(getLove) - 1;
+        setIncrease(updateGetLove);
+        await AsyncStorage.setItem(likeKey, JSON.stringify(updateGetLove));
+        setLove(false);
+      }
+
+      if (!hate) {
+        const newValue = decrease + 1;
+        setDecrease(newValue);
+        setHate(true);
+        await AsyncStorage.setItem(dislikeKey, JSON.stringify(newValue));
+      }
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  return (
+    <View style={styles.card}>
+      <ImageBackground
+        source={{
+          uri: item.image ? `${API_BASE_URL}${item.image}` : null,
+        }}
+        style={styles.storyImage}
+        imageStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20 }}
+      >
+        <View style={styles.overlay} />
+        <Text style={styles.storyTitle}>{item.title}</Text>
+      </ImageBackground>
+
+      <View style={styles.storyBody}>
+        <Text style={styles.storyMeta}>{item.author}</Text>
+        <Text style={styles.storyText} numberOfLines={7}>
+          {item.post}
+        </Text>
+
+        <View style={styles.storyFooter}>
+          <View style={styles.likeDislike}>
+            <View style={styles.voteBtn}>
+              <TouchableOpacity onPress={PositiveCount} style={{ alignItems: 'center' }}>
+                <Text style={styles.reaction}>{increase < 1 ? '' : increase}</Text>
+                <FontAwesome name="thumbs-up" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.voteBtn}>
+              <TouchableOpacity onPress={NegativeCount} style={{ alignItems: 'center' }}>
+                <Text style={styles.reaction}>{decrease < 1 ? '' : decrease}</Text>
+                <FontAwesome name="thumbs-down" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.btn}
+            onPress={() => navigation.navigate('FullStory', { StoryID: item.ID })}
+          >
+            <Text style={styles.btnText}>Read More</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+
+  
 
   return (
 <SafeAreaView style={styles.wrapper}>
@@ -34,66 +169,91 @@ export default function CampusPulse({navigation}) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerText}>Campus Pulse ⚡</Text>
+        <Text style={styles.subHeader}>Your Stories. Your Voice.</Text>
       </View>
 
+
       {/* Main Content */}
-      <ScrollView contentContainerStyle={styles.main}>
-        {stories.map((story) => (
-          <View key={story.id} style={styles.card}>
-            <ImageBackground
-              source={{ uri: story.img }}
-              style={styles.storyImage}
-              imageStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20 }}
-            >
-              <View style={styles.overlay} />
-              <Text style={styles.storyTitle}>{story.title}</Text>
-            </ImageBackground>
-            <View style={styles.storyBody}>
-              <Text style={styles.storyMeta}>{story.author}</Text>
-              <Text style={styles.storyText}>{story.text}</Text>
-              <View style={styles.storyFooter}>
-                <View style={styles.likeDislike}>
-                  <TouchableOpacity>
-                    <Text style={styles.reaction}><Feather name="thumbs-up" size={24} color="green" /></Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity>
-                    <Text style={styles.reaction}><Feather name="thumbs-down" size={24} color="red" /></Text>
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity style={styles.btn}>
-                  <Text style={styles.btnText}>Read More</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        ))}
-
-        {/* Request Section */}
-        <View style={styles.requestSection}>
-          <Text style={styles.requestTitle}>Want to Share Your Story?</Text>
-          <Text style={styles.requestText}>
-            Request to write and inspire others with your experiences on Campus
-            Pulse.
-          </Text>
-          <TouchableOpacity style={styles.btn}>
-            <Text style={styles.btnText}>Request to Write ✍️</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            © 2025 Campus Pulse. All Rights Reserved.
-          </Text>
-        </View>
-      </ScrollView>
+      <View style={{ flex: 1 }}>
+  <FlatList
+  ListHeaderComponent={() => (
+    <View style={styles.requestSection}>
+      <Text style={styles.requestTitle}>Want to Share Your Story?</Text>
+      <Text style={styles.requestText}>
+        Request to write and inspire others with your experiences on Campus Pulse.
+      </Text>
+      <TouchableOpacity
+        style={styles.btn}
+        onPress={() => navigation.navigate("RequestToWrite")}
+      >
+        <Text style={styles.btnText}>Request to Write ✍️</Text>
+      </TouchableOpacity>
     </View>
+  )}
+    data={stories}
+    keyExtractor={(item) => item.ID?.toString()}
+    renderItem={({ item }) => (
+      <StoryCard item={item} navigation={navigation} />
+    )}
+    showsVerticalScrollIndicator={false}
+    contentContainerStyle={{
+      padding: 20,
+      paddingBottom: 180, // 👈 ensures footer/request section is visible
+    }}
+    // ListFooterComponent={() => (
+    //   <View>
+    //     {/* Request Section */}
+    //     <View style={styles.requestSection}>
+    //       <Text style={styles.requestTitle}>Want to Share Your Story?</Text>
+    //       <Text style={styles.requestText}>
+    //         Request to write and inspire others with your experiences on Campus Pulse.
+    //       </Text>
+    //       <TouchableOpacity
+    //         style={styles.btn}
+    //         onPress={() => navigation.navigate("RequestToWrite")}
+    //       >
+    //         <Text style={styles.btnText}>Request to Write ✍️</Text>
+    //       </TouchableOpacity>
+    //     </View>
+
+        
+    //     {/* <View style={styles.footerFixed}>
+    //     <Text style={styles.footerText}>© 2025 Campus Pulse. All Rights Reserved.</Text>
+    //   </View> */}
+    //   </View>
+    // )}
+  />
+</View>
+</View>
+
     <BottomNavigator navigation={navigation} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  voteBtn: {
+    backgroundColor: '#2f2f4f', // darker modern shade for contrast
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerFixed: {
+    backgroundColor: "#151527",
+    paddingVertical: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+  },
+  footerText: {
+    fontSize: 12,
+    color: "#9ca3af",
+  },
+  
   wrapper: {
     flex: 1,
     backgroundColor: "#24243d",
@@ -127,11 +287,26 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: "hidden",
     elevation: 6,
+    marginBottom: 40,
   },
   storyImage: {
     height: 200,
     justifyContent: "flex-end",
   },
+  requestSection: {
+    backgroundColor: "#232338",
+    position: 'absolute',
+  bottom: 90, // just above bottom nav
+  left: '10%',
+  right: '10%',
+  paddingVertical: 15,
+  borderRadius: 30,
+  alignItems: 'center',
+  elevation: 5,
+  },
+  
+  
+  
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -145,14 +320,24 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,
   },
+  subHeader: {
+    color: "#e0e7ff",
+    fontSize: 14,
+    marginTop: 4,
+  },
   storyBody: {
     padding: 16,
   },
   storyMeta: {
-    fontSize: 13,
-    color: "#a5b4fc",
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '700',
+    color: "#a5b4fc", // deep slate blue-gray
+    letterSpacing: 0.3,
+    marginBottom:20,
   },
+  
+  
+  
   storyText: {
     fontSize: 14,
     color: "#e5e7eb",

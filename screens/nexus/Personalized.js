@@ -168,7 +168,7 @@ const questions = [
   },
 ];
 
-const API_BASE_URL = 'http://172.20.10.4:3000'; // 
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 export default function Personalized({navigation}) {
   const { user } = useContext(AuthorContext);

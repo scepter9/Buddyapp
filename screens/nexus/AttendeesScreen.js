@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import BottomNavigator from "../BottomNavigator";
-const API_BASE_URL = "http://172.20.10.4:3000";
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 export default function MeetupMembers({ route, navigation }) {
   const { meetupVal, Myownid } = route.params;

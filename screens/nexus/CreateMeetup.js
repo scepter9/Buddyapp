@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect ,useContext} from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -13,9 +13,11 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 
-const API_BASE_URL = "http://172.20.10.4:3000";
+
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 export default function CreateMeetup({ navigation }) {
+  
   const [title, setTitle] = useState("");
   const [vibe, setVibe] = useState("Chill");
   const [date, setDate] = useState("");
@@ -225,6 +227,7 @@ meetupcodeval,
                     selectedValue={selectedYear}
                     onValueChange={handleYearChange}
                     style={styles.picker}
+                   
                   >
                     <Picker.Item label="Year" value={null} />
                     {years.map((year) => (

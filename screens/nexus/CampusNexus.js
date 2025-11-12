@@ -1,10 +1,11 @@
 import React from "react";
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity ,SafeAreaView} from "react-native";
 import BottomNavigator from "../BottomNavigator";
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function CampusNexus({ navigation }) {
   return (
-    <SafeAreaView style={styles.wrapper}>
+    // <SafeAreaView style={styles.wrapper}>
     <View style={{ flex: 1, backgroundColor: "#0f172a" }}>
       <ScrollView
         style={styles.container}
@@ -83,38 +84,42 @@ export default function CampusNexus({ navigation }) {
         </View>
 
         {/* Interest Rooms */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Interest Rooms</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.roomScroll}
-          >
-            <View style={[styles.roomCard, styles.sports]}>
-              <Text style={styles.roomHeader}>● 42 online</Text>
-              <Text style={styles.roomTitle}>🏀 Sports Hub</Text>
-              <Text style={styles.roomDesc}>
-                Talk games, matches, and tournaments
-              </Text>
-            </View>
-
-            <TouchableOpacity onPress={() => navigation.navigate("InterestRoom")}>
-              <View style={[styles.roomCard, styles.coding]}>
-                <Text style={styles.roomHeader}>● 18 online</Text>
-                <Text style={styles.roomTitle}>💻 Code Cave</Text>
-                <Text style={styles.roomDesc}>
-                  Projects, collabs & hackathons
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            <View style={[styles.roomCard, styles.art]}>
-              <Text style={styles.roomHeader}>● 12 online</Text>
-              <Text style={styles.roomTitle}>🎨 Art Vibes</Text>
-              <Text style={styles.roomDesc}>Share, create, inspire</Text>
-            </View>
-          </ScrollView>
+        
+          {/* INTEREST ROOMS CARD */}
+<TouchableOpacity
+  onPress={() => navigation.navigate("InterestRoom")}
+  activeOpacity={0.9}
+>
+  <View style={styles.interestCard}>
+    <LinearGradient
+      colors={['#10213a', '#0b1629']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.interestBg}
+    >
+      <View style={styles.interestContent}>
+        <View style={styles.iconCircle}>
+          <Text style={styles.interestIcon}>🚀</Text>
         </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.interestTitle}>Interest Rooms</Text>
+          <Text style={styles.interestDesc}>
+            Join live spaces, explore passions, and build with others.
+          </Text>
+          <View style={styles.interestStats}>
+            <Text style={styles.statText}>🔥 230+ Active Rooms</Text>
+            <Text style={styles.statText}>👥 1.4k Members</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.interestFooter}>
+        <Text style={styles.joinText}>Enter Mission Control →</Text>
+      </View>
+    </LinearGradient>
+  </View>
+</TouchableOpacity>
+
 
         {/* Campus Spotlight */}
         <View style={styles.sectionCard}>
@@ -162,24 +167,11 @@ export default function CampusNexus({ navigation }) {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Anonymous Zone 🚀</Text>
 
-          {/* Active Rooms Preview */}
-          <Text style={styles.subHeader}>Live Rooms</Text>
-          <TouchableOpacity onPress={() => navigation.navigate("Room")}>
-            <View style={styles.liveCard}>
-              <Text style={styles.liveTopic}>💬 Finals Stress Talk</Text>
-              <Text style={styles.liveMeta}>32 students inside</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate("Room")}>
-            <View style={styles.liveCard}>
-              <Text style={styles.liveTopic}>👀 Secret Campus Gossip</Text>
-              <Text style={styles.liveMeta}>18 students online</Text>
-            </View>
-          </TouchableOpacity>
+         
 
           {/* Question of the Day */}
           <Text style={styles.subHeader}>Question of the Day</Text>
-          <TouchableOpacity onPress={() => navigation.navigate("MainRoom")}>
+          <TouchableOpacity onPress={() => navigation.navigate("QuestionDetails")}>
             <View style={[styles.anonCard, styles.questions]}>
               <Text style={styles.hangTitle}>“What’s the funniest thing you saw this week?”</Text>
               <Text style={styles.hangDesc}>Tap to see answers →</Text>
@@ -195,10 +187,10 @@ export default function CampusNexus({ navigation }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
-      
+      <BottomNavigator navigation={navigation} />
     </View>
-    <BottomNavigator navigation={navigation} />
-    </SafeAreaView>
+    
+    // </SafeAreaView>
   );
 }
 
@@ -208,6 +200,79 @@ const styles = StyleSheet.create({
      backgroundColor: "#1e293b",
   },
   container: { flex: 1, padding: 20 },
+
+  interestCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginTop: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(0,217,255,0.2)',
+    backgroundColor: '#0f172a',
+  },
+
+  interestBg: {
+    borderRadius: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+  },
+
+  interestContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+
+  iconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(0,217,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  interestIcon: {
+    fontSize: 28,
+  },
+
+  interestTitle: {
+    color: '#eaf6ff',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+
+  interestDesc: {
+    color: 'rgba(234,246,255,0.65)',
+    fontSize: 14,
+    marginTop: 4,
+  },
+
+  interestStats: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 10,
+  },
+
+  statText: {
+    color: '#00d9ff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  interestFooter: {
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderColor: 'rgba(0,217,255,0.15)',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+
+  joinText: {
+    color: '#00d9ff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+
 
   /* Pulse */
   pulseTile: {

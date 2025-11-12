@@ -10,7 +10,8 @@ const multer = require('multer');
 const path = require('path');
 const http = require('http'); // Import http module
 const { Server } = require('socket.io'); // Import Server from socket.io
-const { log } = require('console');
+const { log, timeStamp } = require('console');
+const { result } = require('lodash');
 
 //"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" -u root -p buddy > backup.sql
 //very important
@@ -52,7 +53,7 @@ const io = new Server(server, {
 // Store connected users and their socket IDs (optional, but useful for direct messaging/notifications)
 const connectedUsers = new Map(); // Map userId to socket.id
 const activeAnonymousRooms=new Map();
-const MeetupRoom= new Map();
+const MeetupRoomUsers= new Map();
 
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
@@ -160,7 +161,7 @@ app.post('/Login', (req, res) => {
         return res.json({ message: 'Login successful', user: req.session.user });
     });
 });
-
+ 
 
 app.get('/Profile', (req, res) => {
     if (!req.session.user) {
@@ -1398,7 +1399,7 @@ FROM meetups m
 JOIN projecttables hostuser ON m.host_id = hostuser.ID
 LEFT JOIN meetup_participants mu ON mu.meetup_id = m.id
 LEFT JOIN projecttables senduser ON mu.user_id = senduser.ID
-WHERE m.id = 12
+WHERE m.id = ?
 GROUP BY m.id, m.title, hostuser.FULLNAME, hostuser.image;
 
     `;
@@ -1425,6 +1426,23 @@ app.get('/meetupchat',(req,res)=>{
     res.json(result[0]);
    })
 })
+app.get('/searchmeetupusers', (req, res) => {
+  const { searchkey } = req.query;
+  if (!searchkey || searchkey.trim() === '') {
+    return res.json([]); // return empty array, not all meetups
+  }
+
+  const searchquery = `%${searchkey}%`;
+  const sql = 'SELECT * FROM meetups WHERE title LIKE ? ORDER BY created_at DESC LIMIT 5';
+
+  db.query(sql, [searchquery], (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: `An error occurred: ${err.message}` });
+    }
+    res.json(result);
+  });
+});
+
     app.post('/api/submit-answers', (req, res) => {
     // Extract the userId and answers object from the request body.
     const { userId, answers } = req.body;
@@ -1480,52 +1498,46 @@ app.get('/meetupchat',(req,res)=>{
         });
     });
 });
-app.get('/api/matches/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-
-    // A SQL query that finds users with the most matching answers, joining the projectables table
-    const sql = `
-      SELECT
-        u2.id,
-        p.name,
-        p.image,
-        COUNT(*) AS score
-      FROM user_answers AS ua1
-      JOIN user_answers AS ua2 ON ua1.question_id = ua2.question_id AND ua1.answer = ua2.answer
-      JOIN users AS u2 ON ua2.user_id = u2.id
-      JOIN projectables AS p ON u2.id = p.user_id
-      WHERE
-        ua1.user_id = ?
-        AND u2.id != ?
-      GROUP BY
-        u2.id
-      ORDER BY
-        score DESC
-      LIMIT 10;
+app.get('/api/matches',(req,res)=>{
+  const {userId}=req.query;
+  const sql = `
+    SELECT
+    m.other_user_id AS id,
+    p.FULLNAME,
+    p.image,
+    m.match_count,
+    tq.total_questions,
+    ROUND( (m.match_count / tq.total_questions) * 100, 2 ) AS percent_match
+  FROM (
+    SELECT
+      ua2.user_id AS other_user_id,
+      COUNT(*) AS match_count
+    FROM user_answers ua1
+    JOIN user_answers ua2
+      ON ua1.question_id = ua2.question_id
+     AND ua1.answer = ua2.answer
+    WHERE ua1.user_id = ?
+      AND ua2.user_id != ?
+    GROUP BY ua2.user_id
+  ) AS m
+  JOIN (
+    SELECT COUNT(DISTINCT question_id) AS total_questions
+    FROM user_answers
+    WHERE user_id = ?
+  ) AS tq
+    ON 1=1
+  JOIN projecttables p ON p.ID = m.other_user_id
+  WHERE (m.match_count / tq.total_questions) >= 0.5
+  ORDER BY (m.match_count / tq.total_questions) DESC, m.match_count DESC
+  LIMIT 100;
     `;
-
-    const [rows] = await db.query(sql, [userId, userId]);
-    
-    // The total number of questions is needed for the percentage score
-    const totalQuestions = 20;
-    
-    // Map the database rows to a clean format for the frontend
-    const matches = rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      score: `${Math.round((row.score / totalQuestions) * 100)}%`,
-      img: row.image,
-      desc: 'No description provided.' // This would be from your projectables table if you add it
-    }));
-
-    res.status(200).json(matches);
-
-  } catch (error) {
-    console.error('Error fetching matches:', error);
-    res.status(500).json({ error: 'Failed to fetch matches.' });
-  }
-});
+    db.query(sql,[userId,userId,userId],(err,result)=>{
+      if(err){
+        res.status(500).json({error:'An error occured'})
+      }
+      res.json(result)
+    })
+})
 // Assuming you already created io with socket.io
 // const server = http.createServer(app);
 // const io = new Server(server, { cors: { origin: "*" } });
@@ -1605,8 +1617,8 @@ app.post('/newAnonroom', (req, res) => {
   const { roomName, tags, duration, selectedHour,selectedMinute, roomRandomCode } = req.body;
   
   // The VALUES list should match the number of placeholders
-  const inputSql = 'INSERT INTO newAnongroup(roomName, tags,  roomRandomCode,selectedHour,selectedMinute,) VALUES(?, ?, ?, ?,?)';
-  
+  const inputSql = 'INSERT INTO newAnongroup(roomName, tags, roomRandomCode, hour, minute) VALUES(?, ?, ?, ?, ?)';
+
   // The array of values should match the placeholders
   db.query(inputSql, [roomName, tags, roomRandomCode,selectedHour,selectedMinute,], (error, value) => {
     if (error) {
@@ -1653,7 +1665,7 @@ io.on('connection', (socket) => {
     });
     console.log(`Socket disconnected: ${socket.id}`);
   });
-
+  
   socket.on('joinRoom', (roomCode) => {
     if (!activeAnonymousRooms.has(roomCode)) {
       activeAnonymousRooms.set(roomCode, {
@@ -1669,12 +1681,12 @@ io.on('connection', (socket) => {
     io.to(roomCode).emit('userJoined', `${socket.id} has joined the chat.`);
   });
 
-  socket.on('sendMessage', (data) => {
+  socket.on('sendMessages', (data) => {
     const { roomCode, text, senderId } = data;
-    console.log(`Message received for room ${roomCode}: ${text}`);
+    // console.log(`Message received for room ${roomCode}: ${text}`);
 
     if (activeAnonymousRooms.has(roomCode)) {
-      io.to(roomCode).emit('newMessage', {
+      io.to(roomCode).emit('newMessages', {
         id: Date.now().toString(),
         text: text,
         senderId: senderId,
@@ -1686,7 +1698,376 @@ io.on('connection', (socket) => {
   
 });
 
+io.on("connection", (socket) => {
+  // console.log(`User connected: ${socket.id}`);
 
+  // 🟢 Join a meetup room
+  socket.on("JoinMeet", (roomPass) => {
+    if (!MeetupRoomUsers.has(roomPass)) {
+      MeetupRoomUsers.set(roomPass, { members: new Set() });
+    }
+
+    socket.join(roomPass);
+    MeetupRoomUsers.get(roomPass).members.add(socket.id);
+
+    io.to(roomPass).emit("UserIn", `${socket.id} has joined the chat.`);
+    // console.log(`${socket.id} joined room ${roomPass}`);
+  });
+
+  // 💬 Receive and broadcast messages
+  socket.on("Getmessage", (data) => {
+    const { id, senderId, sendername,type, text, roomPass , timeStamp} = data;
+    
+    if (!roomPass || !MeetupRoomUsers.has(roomPass)) return;
+
+    const message = {
+      id,
+      senderId,
+      sendername,
+      type,
+      text,
+      roomPass,
+      timeStamp,
+    };
+    const sql='INSERT INTO meetupmessages(senderid,sendername,typeofmessage,textmessage,roompass,timevalue) VALUES(?,?,?,?,?,?)'
+    db.query(sql, [senderId, sendername, type, text, roomPass, timeStamp], (err, results) => {
+      if (err) {
+        console.error("❌ Database insert error:", err);
+      return;
+      } 
+      const idvalue=results.insertId;
+      const updatedmessage={
+        id:idvalue,...message
+      }
+      io.to(roomPass).emit("NewMessage", updatedmessage);
+    });
+   
+    // Broadcast to everyone in that room
+    
+    // console.log(`Message from ${senderId} in ${roomPass}: ${text}`);
+  });
+
+  // 🔴 Handle disconnect
+  socket.on("disconnect", () => {
+    for (const [roomPass, room] of MeetupRoomUsers.entries()) {
+      if (room.members.has(socket.id)) {
+        room.members.delete(socket.id);
+        io.to(roomPass).emit("userLeft", `${socket.id} has left the chat.`);
+
+        if (room.members.size === 0) {
+          MeetupRoomUsers.delete(roomPass);
+          // console.log(`Room ${roomPass} deleted (empty).`);
+        }
+      }
+    }
+    console.log(`Socket disconnected: ${socket.id}`);
+  });
+});
+
+app.post('/api/upload',
+upload.single('image'),(req,res)=>{
+  if(!req.file){
+    return res.status(400).json({message:'No file uploaded'})
+  }
+  const imageUrl = `/uploads/${req.file.filename}`;
+  // console.log(imageUrl);
+  res.json({ imageUrl })
+}
+)
+
+app.get('/groupmessages',(req,res)=>{
+  const {roomvaue}=req.query;
+  const sql=`SELECT * FROM meetupmessages WHERE roompass=? ORDER BY ID ASC`;
+  db.query(sql,[roomvaue],(err,result)=>{
+if(err){
+  return res.status(500).json({error:'A database error occured'})
+}
+return res.json(result)
+  })
+})
+app.get('/pulsedata', (req, res) => {
+  const sql = 'SELECT * FROM campulsepulse'; // change 'id' as needed
+  db.query(sql, (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: 'An error occurred' });
+    }
+    return res.json( result );
+  });
+});
+
+app.post('/poststories', (req, res) => {
+  const { title, myUserName, content, image, myUserId } = req.body;
+  const sql = 'INSERT INTO campulsepulse (title, author, post, image, user) VALUES (?, ?, ?, ?, ?)';
+  db.query(sql, [title, myUserName, content, image, myUserId], (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: `An error occurred: ${err.message}` });
+    }
+    return res.status(200).json({ message: 'Successful' });
+  });
+});
+
+app.get('/getstoryuser', (req, res) => {
+  const { StoryID} = req.query;
+  const mysql='SELECT * FROM campulsepulse WHERE ID=? ';
+
+  db.query(mysql, [StoryID], (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: 'An error occurred' });
+    }
+    return res.json(result);
+  });
+});
+
+io.on("connection", (socket) => {
+  // console.log("🟢 User connected:", socket.id);
+
+  // 🧠 Fetch all answers initially
+  db.query("SELECT * FROM questionanswers ORDER BY ID DESC", (err, results) => {
+    if (!err) {
+      socket.emit("Questionget", results); // send all existing answers to new client
+    }
+  });
+
+  // 📝 When a client posts a new answer
+  socket.on("SendAnswers", (data) => {
+    const { username, answer } = data;
+    if (!username || !answer) return;
+
+    // Insert into database
+    const sql = "INSERT INTO questionanswers (author, answer) VALUES (?, ?)";
+    db.query(sql, [username, answer], (err, result) => {
+      if (err) {
+        console.error("❌ Error inserting answer:", err);
+        return;
+      }
+
+      const newAnswer = {
+        ID: result.insertId,
+        author: username,
+        answer,
+      };
+
+      // console.log("✅ New answer saved:", newAnswer);
+
+      // 🟢 Emit to all connected clients
+      io.emit("Questionget", newAnswer);
+    });
+  });
+
+  // 🔴 When a client disconnects
+  socket.on("disconnect", () => {
+    // console.log("🔴 User disconnected:", socket.id);
+  });
+});
+
+app.post('/createinterestroom', (req, res) => {
+  const { roomname, description,  roompasskey ,selectmode, selecttype,myUserId} = req.body;
+  console.log("📥 Incoming data:", req.body); // <--- Add this line
+
+  const sql = 'INSERT INTO createinterestroom (roomname, roomdescription, roompasskey,selectmode, selecttype,creatorid) VALUES (?, ?, ?, ?,?,?)';
+  
+  db.query(sql, [roomname, description,  roompasskey,selectmode, selecttype,myUserId], (err, result) => {
+    if (err) {
+      console.error("❌ DB Error:", err.message);
+      return res.status(500).json({ error: 'An error occurred', details: err.message });
+    }
+    console.log("✅ Insert successful:", result);
+    res.status(200).json({ message: 'It was successful' });
+  });
+});
+
+app.get('/searchinterestroom',(req,res)=>{
+  const {search}=req.query;
+  const searchedit=`%${search}%`
+  const sql='SELECT cr.*, COUNT(m.userroomid) AS members_count FROM createinterestroom AS cr LEFT JOIN roommembers AS m ON m.userroomid = cr.id WHERE cr.roomname LIKE ? GROUP BY cr.id;';
+  db.query(sql,[searchedit],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:err.message})
+    }
+    res.json(result)
+  })
+})
+app.get('/getactiverooms',(req,res)=>{
+  const sql=`select * from createinterestroom left join (
+    select room_of_posts_id , count(*) as post_count from roomposts  group by room_of_posts_id
+    )as post_data on createinterestroom.id=post_data.room_of_posts_id
+    left join(select room_of_posts_id, count(*) as comment_count from commenting  group by room_of_posts_id)
+     as comment_data on createinterestroom.id=comment_data.room_of_posts_id
+     left join(select userroomid, count(*) as members_count from roommembers group by userroomid)
+     as members on createinterestroom.id=members.userroomid
+     order by coalesce(post_count,0) desc, coalesce(comment_count,0) desc, coalesce(members_count,0) desc
+    limit 6;`
+    db.query(sql,(err,result)=>{
+      if(err){
+        return res.status(500).json({error:'An error occured'})
+      }
+      res.json(result)
+    })
+})
+app.post('/postroommembers', (req, res) => {
+  const { valid, sender } = req.body;
+  const sql = 'INSERT IGNORE INTO roommembers(userId, userroomid) VALUES (?, ?)';
+  
+  db.query(sql, [sender, valid], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'An error occurred' });
+    }
+
+    // result.affectedRows === 1 → new insert
+    // result.affectedRows === 0 → duplicate (ignored)
+    if (result.affectedRows === 0) {
+      res.status(200).json({ success: true, message: 'Already joined' });
+    } else {
+      res.status(200).json({ success: true, message: 'Joined successfully' });
+    }
+  });
+});
+
+app.get('/getjoinroom',(req,res)=>{
+  const {yourid}=req.query;
+  const sql=' SELECT cr.*, m.userId, COUNT(rm.id) AS members_count FROM roommembers m JOIN createinterestroom cr  ON m.userroomid = cr.id LEFT JOIN roommembers rm ON rm.userroomid = cr.id WHERE m.userId = ? GROUP BY cr.id';
+  db.query(sql,[yourid],(err,result)=>{
+    if(err){
+      console.log(err.message);
+    }
+    res.json(result)
+  })
+})
+
+app.get('/getpitches',(req,res)=>{
+  const sql='SELECT * FROM pitches ORDER BY timeposted DESC';
+db.query(sql,(err,result)=>{
+  if(err){
+  return  res.status(500).json({error:err.message})
+  }
+  res.json(result)
+})
+})
+app.post('/postpitches',(req,res)=>{
+  const { writepitch,title,username}=req.body;
+  if (!title || !writepitch || !username) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+  
+  const sql='INSERT INTO pitches(pitch_title,pitch_description,pitch_creator) VALUES(?,?,?)' ;
+  db.query(sql,[title,writepitch,username],(err,result)=>{
+if(err){
+ return res.status(500).json({error:err.message})
+}
+ return res.status(200).json({success:true, message:'Posted succesfully'})
+  })
+
+})
+app.get('/searchpitchval',(req,res)=>{
+  const {search}=req.query;
+  const searched=`%${search}%`
+  const sql='SELECT * FROM pitches WHERE pitch_title LIKE? LIMIT 5 '
+  db.query(sql,[searched],(err,result)=>{
+    if(err){
+     return res.status(500).json({error:err.message})
+    }
+    res.json(result)
+  })
+})
+
+app.get('/fetchuserpitch',(req,res)=>{
+  const {pitch}=req.query;
+  const sql='SELECT * FROM pitches WHERE ID=?';
+  db.query(sql,[pitch],(err,result)=>{
+if(err){
+return  res.status(500).json({error:err.message})
+}
+res.json(result)
+  })
+})
+io.on('connection',(socket)=>{
+  const { userId } = socket.handshake.query;
+  socket.on('joinPitch', (pitchId) => {
+    socket.join(pitchId);
+  });
+
+  socket.on('SendComment', (data) => {
+    const { username, comment, pitchuser } = data;
+    if (!username || !comment || !pitchuser) return;
+    const sql = 'INSERT INTO pitchcomment (users_name,comment_text,pitchid) VALUES(?,?,?)';
+    db.query(sql, [username, comment, pitchuser], (err, result) => {
+      if (err) return console.log(err);
+      const commentformat = {
+        id: result.insertId,
+        user: username,
+        commenttext: comment,
+        pitchid: pitchuser,
+      };
+      io.to(pitchuser).emit('comment', commentformat);
+    });
+  });
+  
+
+  
+socket.on('disconnect',()=>{
+  // console.log('Disconnectd');
+})
+})
+
+app.get('/fetchpitchcomment',(req,res)=>{
+  const {pitch}=req.query;
+  const sql='select * from pitchcomment where pitchid=?';
+  db.query(sql,[pitch],(err,result)=>{
+    if(err){
+    return  res.status(500).json({error:err.message})
+    }
+    res.json(result)
+  })
+})
+
+io.on('connection',(socket)=>{
+  socket.on('Joinroom',(searchid)=>{
+    socket.join(searchid)
+  })
+  socket.on('SendImage',(data)=>{
+    const {image,userI}=data;
+    io.to(userI).emit('Resend',image)
+  })
+  socket.on('disconnect',()=>{
+    // console.log('User disconnected');
+  })
+})
+app.post('/postnewtextval',(req,res)=>{
+  const {searchid,posttext,roomid,image}=req.body;
+  const sql='insert into roomposts(sender_id,post,post_image,room_of_posts_id) values(?,?,?,?)';
+  db.query(sql,[searchid,posttext,image,roomid],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:err.message});
+    }
+    res.status(200).json({success:true})
+  })
+});
+
+app.post('/api/videoupload',
+upload.single('video',(req,res)=>{
+  if(!req.file){
+    return res.status(400).json({message:'No file uploaded'})
+  }
+  const VideoUrl = `/uploads/${req.file.filename}`;
+  // console.log(imageUrl);
+  res.json({ VideoUrl })
+}
+)
+)
+app.post('/postshowcases',(req,res)=>{
+  const {title,pickercategory,sendvideo,userId,describe}=req.body;
+  const sql='INSERT INTO showcases(sender_id,caption,video,showcase_category,title)VALUES(?,?,?,?,?)';
+  db.query(sql,[userId,describe,sendvideo,pickercategory,title],(err,result)=>{
+if(err){
+ return res.status(500).json({error:`An error occured-${err.message}`})
+}
+res.status(200).json({success:true, message:'Posted Succesfully'})
+  })
+})
+app.post('/gettingvideo',(req,res)=>{
+  const sql=''
+})
 server.listen(3000, () => {
   console.log('Server running on http://localhost:3000');
 });

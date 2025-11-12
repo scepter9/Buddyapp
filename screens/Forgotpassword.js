@@ -4,6 +4,7 @@ import {
   StyleSheet, Alert, ActivityIndicator
 } from 'react-native';
 import axios from 'axios';
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 const ForgotPassword = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -17,7 +18,7 @@ const ForgotPassword = ({ navigation }) => {
 
     setLoading(true);
     try {
-      const res = await axios.post('http://172.20.10.4:3000/forgot-password', { email });
+      const res = await axios.post(`${API_BASE_URL}/forgot-password`, { email });
 
       if (res.data.success) {
         Alert.alert('Success', 'A reset code has been sent to your email.');

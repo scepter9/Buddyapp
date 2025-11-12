@@ -18,7 +18,7 @@ import io from "socket.io-client";
 import { useFocusEffect } from "@react-navigation/native";
 import BottomNavigator from "./BottomNavigator";
 
-const API_BASE_URL = "http://172.20.10.4:3000";
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 export default function About({ navigation }) {
   const [user, setUser] = useState(null);
@@ -197,7 +197,7 @@ export default function About({ navigation }) {
                 : require("../assets/image1.jpeg"),
             label: "🎮 Battle Arena",
             subtitle: "Challenge your friends. Prove your skills.",
-            onPress: () => navigation.navigate("BattleArena"),
+            onPress: () => navigation.navigate("ShowcaseMain"),
           },
           {
             image:
@@ -215,7 +215,7 @@ export default function About({ navigation }) {
                 : require("../assets/image0.jpeg"),
             label: "🌐 Nexus",
             subtitle: "Meet new people. Build your tribe.",
-            onPress: () => navigation.navigate("Match"),
+            onPress: () =>navigation.navigate('DesignersHubScreen'),
           },
         ].map((item, index) => (
           <Card item={item} key={index} />

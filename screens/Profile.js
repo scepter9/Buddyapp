@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 
 import BottomNavigator from './BottomNavigator';
-const API_BASE_URL = 'http://172.20.10.4:3000';
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 function Profile({ navigation, route }) {
   const [userProfile, setUserProfile] = useState(null);
@@ -138,7 +138,7 @@ function Profile({ navigation, route }) {
   const imageSource = userProfile.image
     ? { uri: `${API_BASE_URL}/uploads/${userProfile.image}` }
     : null;
-
+ 
   return (
     <SafeAreaView style={styles.wrapper}>
     <View style={styles.fullScreenContainer}>

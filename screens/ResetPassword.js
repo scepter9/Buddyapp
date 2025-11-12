@@ -14,6 +14,7 @@ import {
   Alert,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 export default function ResetPassword({ navigation }) {
   const [email, setEmail] = useState('');
@@ -41,7 +42,7 @@ export default function ResetPassword({ navigation }) {
     }
 
     try {
-      const res = await fetch('http://172.20.10.4:3000/reset-password', {
+      const res = await fetch(`${API_BASE_URL}/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code, newPassword: password }),

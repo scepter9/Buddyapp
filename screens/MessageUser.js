@@ -20,10 +20,11 @@ import {
  
 import { io } from 'socket.io-client';
 import { AuthorContext } from './AuthorContext';
-import { UnreadMessagesContext } from './UnreadMessagesContext' // Import the context
+import { UnreadMessagesContext } from './UnreadMessagesContext'; // Import the context
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from "@expo/vector-icons";
-const API_BASE_URL = 'http://172.20.10.4:3000';
+import { Audio } from 'expo-av';
+const API_BASE_URL = "http://192.168.0.136:3000";
 const { height: screenHeight } = Dimensions.get('window');
 
 // Custom component for the message bubble to handle long press
@@ -56,7 +57,12 @@ function MessageUser({ navigation, route }) {
     const [activeMessageId, setActiveMessageId] = useState(null);
     const [replyingTo, setReplyingTo] = useState(null);
     const [dropdownPosition, setDropdownPosition] = useState({ x: 0, y: 0, align: 'left' });
-    const [image,setimage]=useState(null)
+    const [uploadedImageUrl, setUploadedImageUrl] = useState(null);
+    const [recording, setRecording] = useState(null);
+  const [sound, setSound] = useState(null);
+  const [recordingUri, setRecordingUri] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+
 
     // Animations for the dropdown menu
     const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -64,6 +70,7 @@ function MessageUser({ navigation, route }) {
 
     const scrollViewRef = useRef();
     const messageRefs = useRef({}); // To store refs for each message view
+    const uploadedImageRef = useRef(null);
 
     const { user } = useContext(AuthorContext);
     const myUserId = user?.id;
@@ -169,7 +176,7 @@ function MessageUser({ navigation, route }) {
 
     const handleReply = (msg) => {
         setReplyingTo(msg);
-        setCurrentMessage(`@${msg.isMine ? 'You' : recipientName} `);
+        // setCurrentMessage(`@${msg.isMine ? 'You' : recipientName} `);
         closeDropdown();
     };
 
@@ -353,53 +360,131 @@ function MessageUser({ navigation, route }) {
 
     const handleImagePicker = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-        if (status !== 'granted') {
-            alert('Permission required to access photos');
-            return;
+      
+        if (status !== "granted") {
+          alert("Permission required to access photos");
+          return;
         }
-
+      
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: false, // Changed to false for simplicity, as per original. Can be 'true' if needed.
-            quality: 1,
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: false,
+          quality: 1,
         });
-
+      
         if (result.canceled || !result.assets || result.assets.length === 0) return;
+      
+        const asset = result.assets[0];
+        const imageUri = asset.uri;
+      
+        // Try to extract the filename and MIME type
+        const filename = asset.fileName || imageUri.split("/").pop() || "photo.jpg";
+        const fileType = asset.type || "image/jpeg";
+      
+        try {
+          const formData = new FormData();
+          formData.append("image", {
+            uri: imageUri,
+            name: filename,   // ✅ dynamic name
+            type: fileType,   // ✅ dynamic MIME type
+          });
+      
+          const uploadResponse = await fetch(`${API_BASE_URL}/api/upload`, {
+            method: "POST",
+            body: formData,
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          });
+      
+          const uploadResult = await uploadResponse.json();
+          if (!uploadResult.imageUrl) throw new Error("Upload failed");
+      
+          const uploadedImageUrl = uploadResult.imageUrl;
+       
+          setUploadedImageUrl(uploadedImageUrl); 
+          uploadedImageRef.current = uploadResult.imageUrl;
+          console.log("Uploaded image URL:", `${API_BASE_URL}${uploadedImageUrl}`);
 
-        const imageUri = result.assets[0].uri;
-        setimage(imageUri)
-        const replyToMessageId = replyingTo?.id || null;
 
-        const imageMessage = {
+          const replyToMessageId = replyingTo?.id || null;
+      
+          const imageMessage = {
             senderId: myUserId,
             receiverId: recipientId,
-            imageUri,
-            type: 'image',
+            imageUri: uploadedImageUrl,
+            type: "image",
             text: null,
             replyToId: replyToMessageId,
-        };
-
-        if (socket) {
-            socket.emit('sendMessage', imageMessage);
-        }
-
-        // Optimistic update
-        setMessages(prev => [
+          };
+      console.log(uploadedImageUrl);
+          if (socket) socket.emit("sendMessage", imageMessage);
+      
+          // Optimistic update
+          setMessages((prev) => [
             ...prev,
             {
-                id: Date.now().toString(),
-                ...imageMessage,
-                isMine: true,
-                timestamp: new Date().toISOString(),
+              id: Date.now().toString(),
+              ...imageMessage,
+              isMine: true,
+              timestamp: new Date().toISOString(),
             },
-        ]);
-        setReplyingTo(null);
-    };
+          ]);
+          setReplyingTo(null);
+        } catch (error) {
+          console.error("Error uploading image:", error);
+          Alert.alert("Upload failed", "Please try again.");
+        }
+      };
+      
 
-    const handleViewimage=()=>{
-      navigation.navigate('ViewImage',{imagevalue:image})
-    }
+      const startRecording=async()=>{
+        setIsRecording(true);
+        try{
+            const permission=await Audio.requestPermissionsAsync()
+            if(permission.status!=='granted'){
+                alert('Permission to access microphone is required!');
+                return;
+            }
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+              });
+
+              const { recording } = await Audio.Recording.createAsync(
+                Audio.RecordingOptionsPresets.HIGH_QUALITY
+              );
+              setRecording(recording);
+        }catch (err) {
+            console.error('Failed to start recording', err);
+          }
+
+
+      }
+      
+      const stopRecording=async()=>{
+        setIsRecording(false);
+        try {
+            await recording.stopAndUnloadAsync();
+            const uri = recording.getURI();
+            setRecordingUri(uri);
+            setRecording(null);
+          } catch (err) {
+            console.error('Stop recording error:', err);
+          }
+      }
+
+
+      const playRecording=async()=>{
+        const { sound } = await Audio.Sound.createAsync({ uri: recordingUri });
+    setSound(sound);
+    await sound.playAsync();
+      }
+
+
+
+
+
 
 
 
@@ -436,22 +521,33 @@ function MessageUser({ navigation, route }) {
                       msg.type === 'image' && styles.imageMessageContainer,
                     ]}
                 >
-                    {msg.replyToId && (
-                        <View style={styles.inReplyToContainer}>
-                            <Text style={styles.inReplyToAuthor} numberOfLines={1}>
-                                {repliedToAuthor}
-                            </Text>
-                            <Text style={styles.inReplyToText} numberOfLines={1}>
-                                {repliedToText}
-                            </Text>
-                        </View>
-                    )}
+                   {msg.replyToId && (
+  <View style={styles.replyPreviewContainer}>
+    <View style={styles.replyBar} />
+    <View style={styles.replyContent}>
+      <Text style={styles.replyingToLabel}>
+        {repliedToAuthor === 'You' ? 'You' : repliedToAuthor}
+      </Text>
+      <Text style={styles.replySnippet} numberOfLines={1}>
+        {repliedToText}
+      </Text>
+    </View>
+  </View>
+)}
+
 
                     {msg.type === 'image' ? (
                       <TouchableOpacity   activeOpacity={0.8}
-                      onPress={()=>handleViewimage()}>
-                        <Image source={{ uri: msg.imageUri }} style={styles.chatImage} />
+                      onPress={() => navigation.navigate('ViewImage', { imagevalue: `${API_BASE_URL}${msg.imageUri}` })}
+                      onLongPress={openDropdown}
+                      >
+                     
+                    
+                     <Image source={{ uri: `${API_BASE_URL}${msg.imageUri}` }} style={styles.chatImage} />
+
+
                         </TouchableOpacity>
+                        //  console.log(`${API_BASE_URL}${msg.imageUri}`);
                     ) : (
                         <Text style={msg.isMine ? styles.sentMessageText : styles.receivedMessageText}>{msg.text}</Text>
                     )}
@@ -549,7 +645,7 @@ function MessageUser({ navigation, route }) {
 
             <KeyboardAvoidingView
                 style={styles.keyboardAvoidingView}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' :'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
             >
                 {isLoading ? (
@@ -598,9 +694,21 @@ function MessageUser({ navigation, route }) {
                                 multiline={true}
                                 editable={!isSending}
                             />
-                            <TouchableOpacity style={styles.iconButton}>
-                                <Feather name="mic" size={24} color="#007bff" />
-                            </TouchableOpacity>
+                            <TouchableOpacity
+    style={[
+        styles.iconButton,
+        isRecording && { backgroundColor: '#ff4d4d', borderRadius: 30 },
+    ]}
+    onPressIn={startRecording}   // 👈 Start when pressed down
+    onPressOut={stopRecording}   // 👈 Stop when released
+>
+    <Feather
+        name={isRecording ? "square" : "mic"}
+        size={24}
+        color={isRecording ? "#fff" : "#007bff"}
+    />
+</TouchableOpacity>
+
                             <TouchableOpacity
                                 style={[styles.sendButton, (currentMessage.trim() === '' || isSending) && styles.disabledSendButton]}
                                 onPress={handleSendMessage}
@@ -821,6 +929,42 @@ const styles = StyleSheet.create({
     closeReply: {
         padding: 5,
     },
+    replyPreviewContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        borderLeftWidth: 3,
+        borderLeftColor: '#4a90e2',
+        borderRadius: 8,
+        paddingVertical: 4,
+        paddingHorizontal: 6,
+        marginBottom: 6,
+        maxWidth: '90%',
+      },
+      
+      replyBar: {
+        width: 3,
+        height: '100%',
+        backgroundColor: '#4a90e2',
+        borderRadius: 2,
+        marginRight: 6,
+      },
+      
+      replyContent: {
+        flex: 1,
+      },
+      
+      replyingToLabel: {
+        fontSize: 12,
+        color: '#b0b0b0',
+        marginBottom: 2,
+      },
+      
+      replySnippet: {
+        fontSize: 14,
+        color: '#e0e0e0',
+      },
+      
 });
 
 export default MessageUser;

@@ -6,6 +6,9 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons'; // For modern icons
 import BottomNavigator from './BottomNavigator';
+const API_BASE_URL = "http://192.168.0.136:3000";
+
+
 function EditProfile({ route, navigation }) {
   const { userId, currentProfile } = route?.params || {};
   const [bio, setBio] = useState('');
@@ -68,7 +71,7 @@ function EditProfile({ route, navigation }) {
     }
 
     try {
-      const response = await fetch('http://172.20.10.4:3000/update-profile', {
+      const response = await fetch(`${API_BASE_URL}/update-profile`, {
         method: 'POST',
         credentials: 'include',
         body: formData,
@@ -102,7 +105,8 @@ function EditProfile({ route, navigation }) {
         {image ? (
           <Image source={{ uri: image.uri }} style={styles.avatar} />
         ) : currentProfile?.image ? (
-          <Image source={{ uri: `http://172.20.10.4:3000/uploads/${currentProfile.image}` }} style={styles.avatar} />
+          <Image source={{ uri: `
+          ${API_BASE_URL}/uploads/${currentProfile.image}` }} style={styles.avatar} />
         ) : (
           <Ionicons name="camera" size={32} color="#aaa" />
         )}

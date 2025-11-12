@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { AuthorContext } from './AuthorContext';
-
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 export default function Login({ navigation }) {
   const { setUser } = useContext(AuthorContext);
@@ -46,7 +46,7 @@ export default function Login({ navigation }) {
     }
 
     try {
-      const response = await fetch('http://172.20.10.4:3000/Login', {
+      const response = await fetch(`${API_BASE_URL}/Login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -72,7 +72,7 @@ export default function Login({ navigation }) {
   };
 
   useEffect(() => {
-    fetch('http://172.20.10.4:3000/check-session', {
+    fetch(`${API_BASE_URL}/check-session`, {
       method: 'GET',
       credentials: 'include',
     })

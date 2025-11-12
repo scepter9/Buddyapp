@@ -14,6 +14,7 @@ import axios from 'axios';
 import debounce from 'lodash.debounce';
 import { useNavigation } from '@react-navigation/native';
 import BottomNavigator from './BottomNavigator';
+const API_BASE_URL = "http://192.168.0.136:3000";
 const UserSearch = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [users, setUsers] = useState([]);
@@ -27,7 +28,7 @@ const UserSearch = () => {
     }
 
     try {
-      const response = await axios.post('http://172.20.10.4:3000/checkuser', {
+      const response = await axios.post(`${API_BASE_URL}/checkuser`, {
         SearchValue: term,
       });
       setUsers(response.data);
@@ -75,7 +76,7 @@ const UserSearch = () => {
             >
               <Image
                 source={{
-                  uri: `http://172.20.10.4:3000/uploads/${user.image}`,
+                  uri: `${API_BASE_URL}/uploads/${user.image}`,
                 }}
                 style={styles.avatar}
               />

@@ -18,8 +18,7 @@ import { Feather } from "@expo/vector-icons";
 import { io } from 'socket.io-client';
 import { AuthorContext } from "../AuthorContext";
 
-const API_BASE_URL = 'http://172.20.10.4:3000';
-
+const API_BASE_URL = "http://192.168.0.136:3000";
 // A fixed list of random emojis for anonymous users
 const randomEmojis = ["👻", "🦊", "🐼", "🐙", "🐸", "🦉", "🐺", "🐢"];
 
@@ -58,17 +57,18 @@ export default function Room({ navigation, route }) {
     });
 
     // Handle incoming messages.
-    anonSocket.on('newMessage', (message) => {
-      setMessages(prevMessages => {
-        // Assign a random emoji to the user if they don't have one yet.
-        // This ensures the same user always gets the same emoji for this session.
-        if (!emojiMap.has(message.senderId)) {
+    anonSocket.on('newMessages', (message) => {
+      setEmojiMap(prevMap => {
+        if (!prevMap.has(message.senderId)) {
           const randomEmoji = randomEmojis[Math.floor(Math.random() * randomEmojis.length)];
-          setEmojiMap(prevMap => new Map(prevMap).set(message.senderId, randomEmoji));
+          return new Map(prevMap).set(message.senderId, randomEmoji);
         }
-        return [...prevMessages, message];
+        return prevMap;
       });
+    
+      setMessages(prevMessages => [...prevMessages, message]);
     });
+    
 
     // Update the online user count.
     anonSocket.on('userJoined', (userId) => {
@@ -116,7 +116,7 @@ export default function Room({ navigation, route }) {
     if (input.trim() === "") return;
     if (socket) {
       // Emit the message to the backend. The backend will broadcast it.
-      socket.emit('sendMessage', {
+      socket.emit('sendMessages', {
         roomCode: roomCode,
         text: input,
         senderId: myUserId, // Pass a user ID for identification
@@ -168,7 +168,7 @@ export default function Room({ navigation, route }) {
               <View>
                 <Text style={styles.roomTitle}><Feather name="message-circle" size={20} color="#fff" /> Room: {roomName}</Text>
                 <View style={styles.subHeader}>
-                  <Text style={styles.subText}><Feather name="clock" size={20} color="#fff" /> {formatTime(timeLeft)}</Text>
+                  <Text style={styles.subText}><Feather name="clock" size={20} color="red" /> {formatTime(timeLeft)}</Text>
                   <Text style={styles.subText}> <Feather name="users" size={20} color="#fff" /> {onlineUsers.size} online</Text>
                 </View>
               </View>

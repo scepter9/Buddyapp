@@ -4,42 +4,16 @@ import { Feather } from "@expo/vector-icons";
 import { AuthorContext } from '../AuthorContext';
 
 // ===== Config =====
-const API_BASE_URL = 'http://172.20.10.4:3000'; // keep as-is
+const API_BASE_URL = "http://192.168.0.136:3000"; // keep as-is
 
 // ===== Reusable: Neon Search Bar (visual only, no filtering) =====
-const NeonSearch = ({ value, onChangeText }) => {
-  return (
-    <View style={styles.searchWrap}>
-      <View style={styles.searchGlow} />
-      <View style={styles.searchBar}>
-        <Feather name="search" size={20} color="#c3d4ff" style={{ marginRight: 10 }} />
-        <TextInput
-          value={value}
-          onChangeText={onChangeText}
-          placeholder="Search vibes, places or people…"
-          placeholderTextColor="#8da3d8"
-          style={styles.searchInput}
-          returnKeyType="search"
-        />
-        <TouchableOpacity activeOpacity={0.8} style={styles.searchChip}>
-          <Feather name="hash" size={16} color="#0b1020" />
-          <Text style={styles.searchChipText}>trending</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.searchUnderbar}>
-        <View style={styles.dot} />
-        <View style={[styles.dot, { width: 24 }]} />
-        <View style={[styles.dot, { width: 10 }]} />
-      </View>
-    </View>
-  );
-};
+
 
 // ===== Card =====
 const MeetupCard = ({ userval,item, sendJoinRequest, navigation ,acceptedrequest,participants}) => {
   const [status, setStatus] = useState('idle'); // idle | pending | accepted
   const isHost = item.host_id === userval;
-
+ 
   // check if current user is participant
   const isParticipant = participants?.some((p) => {
    
@@ -169,6 +143,9 @@ export default function JoinMeetup({ navigation }) {
   const [truevalue,settruevalue]=useState(false)
   const [participants,setparticipants]=useState([])
   const userIs=user?.id;
+  const [searchmeet,setSearchmeet]=useState('');
+  const [searchmeetdata,setSearchmeetdata]=useState([])
+  const [isloading,setisloading]=useState(false);
 
   useEffect(() => {
     const getMeetups = async () => {
@@ -234,6 +211,31 @@ useEffect(()=>{
       return null;
     }
   };
+  useEffect(() => {
+    if (searchmeet.trim().length === 0) {
+      setSearchmeetdata([]);
+      return;
+    }
+  
+    const timeoutId = setTimeout(async () => {
+      try {
+        setisloading(true);
+        const res = await fetch(`${API_BASE_URL}/searchmeetupusers?searchkey=${encodeURIComponent(searchmeet)}`);
+        if (!res.ok) {
+          console.log('Something went wrong');
+          return;
+        }
+        const data = await res.json();
+        setSearchmeetdata(data);
+      } catch (err) {
+        console.log('Search failed', err);
+      } finally {
+        setisloading(false);
+      }
+    }, 500); // debounce delay (500ms)
+  
+    return () => clearTimeout(timeoutId);
+  }, [searchmeet]);
   
   
   return (
@@ -255,7 +257,38 @@ useEffect(()=>{
         </View>
 
         {/* “Crazy & beautiful” Search */}
-        <NeonSearch value={query} onChangeText={setQuery} />
+        <View style={styles.searchWrap}>
+      <View style={styles.searchGlow} />
+      <View style={styles.searchBar}>
+        <Feather name="search" size={20} color="#c3d4ff" style={{ marginRight: 10 }} />
+        <TextInput
+          value={searchmeet}
+          onChangeText={setSearchmeet}
+          placeholder="Search by title"
+          placeholderTextColor="#8da3d8"
+          style={styles.searchInput}
+          returnKeyType="search"
+        />
+        <TouchableOpacity activeOpacity={0.8} style={styles.searchChip}>
+          <Feather name="hash" size={16} color="#0b1020" />
+          <Text style={styles.searchChipText}>trending</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.searchUnderbar}>
+        <View style={styles.dot} />
+        <View style={[styles.dot, { width: 24 }]} />
+        <View style={[styles.dot, { width: 10 }]} />
+      </View>
+      <FlatList
+      data={searchmeetdata}
+      keyExtractor={(item)=>`Active-${item?.id}`}
+      renderItem={({item})=>(<MeetupCard userval={userIs} item={item} sendJoinRequest={sendJoinRequest} navigation={navigation}  acceptedrequest={acceptedrequest} participants={participants}/>)}
+      ListFooterComponent={<Text style={styles.footer}>© NEXUS — Discover & meet great people near you.</Text>}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+      
+      />
+    </View>
 
         {/* Feed */}
         <FlatList

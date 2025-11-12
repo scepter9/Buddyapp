@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { Alert } from 'react-native';
 import { AuthorContext } from './AuthorContext'; // Assuming AuthorContext provides user.id
 
-const API_BASE_URL = 'http://172.20.10.4:3000'; // Ensure this matches your backend URL
+const API_BASE_URL = "http://192.168.0.136:3000"; // Ensure this matches your backend URL
 
 export const UnreadMessagesContext = createContext(); 
 

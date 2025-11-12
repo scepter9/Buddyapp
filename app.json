@@ -1,10 +1,13 @@
 {
   "expo": {
-    "splash": {
-      "image": "./assets/image4.jpeg",
     "name": "myproject",
     "slug": "myproject",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "splash": {
+      "image": "./assets/image4.jpeg",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "entryPoint": "./index.js"
   }
-}
 }

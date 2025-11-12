@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState ,useEffect,useContext} from "react";
 import {
   View,
   Text,
@@ -6,75 +6,74 @@ import {
   Dimensions,
   TouchableOpacity,
   FlatList,
-  ImageBackground
+  ImageBackground,
+  Alert,
 } from "react-native";
-import { Video } from "expo-av";
 import { Feather } from "@expo/vector-icons";
+const API_BASE_URL = "http://192.168.0.136:3000";
+import { AuthorContext } from '../AuthorContext'
 
 const { width, height } = Dimensions.get("window");
 
-// 🎭 Mock Data
-const demoBuddies = [
-  {
-    id: "1",
-    name: "Alex Johnson",
-    video: "https://www.w3schools.com/html/mov_bbb.mp4",
-    score: 92,
-    similarities: "You both love 🎧 music and iced coffee ☕",
-  },
-  {
-    id: "2",
-    name: "Sophia Williams",
-    video: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", // HD
-    
-    score: 88,
-    similarities: "You both enjoy 📸 photography & late-night studying 🌙",
-  },
-  {
-    id: "3",
-    name: "David Chen",
-    video: "https://www.w3schools.com/html/mov_bbb.mp4",
-    score: 95,
-    similarities: "You both vibe with 🎮 gaming & football ⚽",
-  },
-];
+// 🖼️ Mock Data (Images instead of Videos)
+
 
 export default function MatchDemo() {
-  const [buddies] = useState(demoBuddies);
 
+  const { user } = useContext(AuthorContext);
+    const myUserId = user?.id;
+  const [buddies,setbuddies ] = useState([]);
+
+  useEffect(() => {
+    if (!myUserId) return; // Wait until user exists
+  
+    const FetchBuddies = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/matches?userId=${myUserId}`);
+        if (!res.ok) {
+          Alert.alert('Something went wrong');
+          return;
+        }
+        const data = await res.json();
+        setbuddies(data);
+      } catch (err) {
+        console.log('An error occurred:', err);
+      }
+    };
+  
+    FetchBuddies();
+  }, [myUserId]); // depend on userId
+  
+  
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Find Your University Buddy 🎉</Text>
 
       <FlatList
         data={buddies}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item?.id.toString()}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         renderItem={({ item }) => (
           <View style={styles.card}>
-            {/* 🎥 Video */}
-            <Video
-              source={{ uri: item.video }}
-              style={styles.video}
-              resizeMode="cover"
-              shouldPlay
-              isLooping
-              isMuted
-            />
-
-            {/* ℹ️ Overlay Info */}
-            <View style={styles.infoPanel}>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.matchScore}>{item.score}% Match</Text>
-              <Text style={styles.similarities}>{item.similarities}</Text>
-            </View>
+            {/* 🖼️ Image */}
+            <ImageBackground
+               source={{ uri: `${API_BASE_URL}/uploads/${item.image}` }}
+              style={styles.image}
+              imageStyle={{ borderRadius: 20 }}
+            >
+              <View style={styles.infoPanel}>
+                <Text style={styles.name}>{item.FULLNAME}</Text>
+                <Text style={styles.matchScore}>{item.percent_match}% Match</Text>
+                {/* <Text style={styles.similarities}>{item.similarities}</Text> */}
+              </View>
+            </ImageBackground>
           </View>
         )}
       />
 
-      {/* Floating Buttons */}
+      {/* ❤️ Floating Buttons */}
       <View style={styles.actions}>
         <TouchableOpacity style={styles.passBtn}>
           <Feather name="x" size={28} color="#ff4c4c" />
@@ -100,21 +99,20 @@ const styles = StyleSheet.create({
   card: {
     width,
     height: height * 0.75,
-    justifyContent: "flex-end",
+    justifyContent: "center",
     alignItems: "center",
   },
-  video: {
-    position: "absolute",
-    top: 0,
+  image: {
     width,
     height: height * 0.75,
-    borderRadius: 20,
+    justifyContent: "flex-end",
+    alignItems: "center",
   },
   infoPanel: {
     backgroundColor: "rgba(0,0,0,0.55)",
     padding: 20,
     borderRadius: 20,
-    marginBottom: 100,
+    marginBottom: 80,
     width: width * 0.85,
     alignItems: "center",
     borderWidth: 1,

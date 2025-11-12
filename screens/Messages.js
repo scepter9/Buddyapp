@@ -20,7 +20,7 @@ import { AuthorContext } from './AuthorContext';
 import { io } from 'socket.io-client';
 import { useFocusEffect } from '@react-navigation/native';
 
-const API_BASE_URL = 'http://172.20.10.4:3000';
+const API_BASE_URL = "http://192.168.0.136:3000";
 
 const MessageScreen = ({ navigation }) => {
   const [visible, setVisible] = useState(false);
