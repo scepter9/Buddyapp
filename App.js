@@ -46,7 +46,10 @@ import { UnreadMessagesProvider } from './screens/UnreadMessagesContext';
 import { AuthorProvider } from './screens/AuthorContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ShowcaseMain from './screens/battlearena/ShowcaseMain';
-
+import CampusShowcase from './screens/battlearena/CampusShowcase';
+import QuickPlayScreen from './screens/battlearena/QuickPlayScreen';
+import CompetitionHome from './screens/battlearena/CompetitionHome';
+import DuelScreen from './screens/battlearena/DuelScreen';
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -105,7 +108,12 @@ export default function App() {
     <Stack.Screen name="PitchScreen" component={PitchScreen} options={{ headerShown: false }} />
     <Stack.Screen name="NewPostScreen" component={NewPostScreen} options={{ headerShown: false }} />
     <Stack.Screen name="ShowcaseMain" component={ShowcaseMain} options={{ headerShown: false }} />
-  </Stack.Navigator>
+    <Stack.Screen name="CampusShowcase" component={CampusShowcase} options={{ headerShown: false }} />
+    <Stack.Screen name="QuickPlayScreen" component={QuickPlayScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="CompetitionHome" component={CompetitionHome} options={{ headerShown: false }} />
+    <Stack.Screen name="DuelScreen" component={DuelScreen} options={{ headerShown: false }} />
+  
+  </Stack.Navigator> 
 </NavigationContainer>
 </GestureHandlerRootView >
 </UnreadMessagesProvider>

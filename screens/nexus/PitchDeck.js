@@ -249,167 +249,194 @@ setModalVisible(false)
 export default PitchDeck;
 
 const styles = StyleSheet.create({
-  mainscreen:{flex: 1, backgroundColor: "#0d0f14" },
-  container: { flex: 1, backgroundColor: "#0d0f14" },
-  header: {
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(13,15,20,0.8)",
+  mainscreen: {
+    flex: 1,
+    backgroundColor: "#0b0f19",
   },
-  searchpitch:{
-flex: 1,
-padding:20,
-  },
-  appBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    paddingHorizontal: 20,
-  },
-  logo: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#9a6bff",
-  },
-  logoText: { fontSize: 20 },
-  brand: { color: "#f3f4f6", fontWeight: "700", fontSize: 18, marginLeft: 10 },
-  headerRight: { flexDirection: "row", marginLeft: "auto", gap: 10 },
-  btn: {
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(30,32,40,0.7)",
-  },
-  btnText: { color: "#f3f4f6", fontWeight: "600" },
-  btnPrimary: {
-    backgroundColor: "#9a6bff",
-    borderWidth: 0,
-  },
- 
-  btnPrimaryText: { color: "#fff", fontWeight: "700" },
-  btnPrimaryTexte: { color: "green", fontWeight: "700" },
 
-  filterBar: {
+  container: {
+    flex: 1,
+    backgroundColor: "#0b0f19",
+  },
+
+  // HEADER
+  header: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: "rgba(20,25,40,0.85)",
+    borderBottomColor: "rgba(255,255,255,0.08)",
+    borderBottomWidth: 1,
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    paddingHorizontal: 20,
+    justifyContent: "space-between",
+    backdropFilter: "blur(10px)",
   },
-  selectBox: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    padding: 10,
-    borderRadius: 12,
+
+  logo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  selectText: { color: "#f3f4f6", fontWeight: "600" },
+
+  logoText: {
+    fontSize: 20,
+    color: "#fff",
+    fontWeight: "700",
+  },
+
+  brand: {
+    color: "#fff",
+    fontSize: 19,
+    fontWeight: "700",
+  },
+
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
-    marginLeft: "auto",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: 12,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
+    width: "60%",
   },
-  searchInput: { color: "#fff", marginLeft: 6, width: 150 },
 
-  main: { padding: 20, gap: 20 },
+  searchInput: {
+    color: "#fff",
+    marginLeft: 8,
+    flex: 1,
+    fontSize: 14,
+  },
+
+  // CARD
   card: {
-    backgroundColor: "rgba(20,22,30,0.7)",
-    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 18,
     padding: 20,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.07)",
+    marginBottom: 18,
+    shadowColor: "#8257e6",
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 6 },
+    transform: [{ scale: 1 }],
   },
-  title: { color: "#fff", fontWeight: "700", fontSize: 18 },
-  desc: { color: "#a1a6b3", fontSize: 14, marginTop: 4 },
-  tagsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginTop: 8,
-  },
-  tag: {
-    fontSize: 13,
+
+  title: {
     color: "#fff",
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: "#5ac8fa",
+    fontWeight: "700",
+    fontSize: 17,
+    marginBottom: 4,
   },
+
+  desc: {
+    color: "#c0c4d7",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
   meta: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 10,
-  },
-  metaText: { color: "#a1a6b3", fontSize: 13 },
-  metrics: { flexDirection: "row", gap: 8 },
-  metric: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    marginTop: 14,
   },
 
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
+  metaText: {
+    color: "#a1a6b3",
+    fontSize: 13,
+  },
+
+  metrics: {
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  metric: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+
+  // FLOATING ACTION BUTTON
+  fab: {
+    position: "absolute",
+    bottom: 80,
+    right: 24,
+    backgroundColor: "linear-gradient(135deg, #8257e6, #9a6bff)",
+    width: 58,
+    height: 58,
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#8257e6",
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
   },
+
+  fabText: {
+    color: "#fff",
+    fontSize: 26,
+    fontWeight: "700",
+  },
+
+  // MODAL
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   modal: {
-    backgroundColor: "rgba(20,22,30,0.9)",
-    padding: 20,
+    backgroundColor: "rgba(18,22,35,0.95)",
     borderRadius: 20,
+    padding: 24,
     width: "90%",
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 15,
   },
+
   modalTitle: {
     color: "#fff",
     fontWeight: "700",
-    fontSize: 18,
-    marginBottom: 12,
+    fontSize: 20,
+    marginBottom: 14,
   },
+
   input: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 10,
     color: "#fff",
-    padding: 10,
+    padding: 12,
+    fontSize: 15,
     marginBottom: 10,
   },
-  textarea: { height: 100 },
-  tagArea: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderStyle: "dashed",
-    borderRadius: 12,
-    padding: 8,
+
+  textarea: {
+    height: 100,
+    textAlignVertical: "top",
   },
-  tagPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#9a6bff",
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  tagInput: {
-    color: "#fff",
-    flex: 1,
-    minWidth: 80,
-  },
+
   modalFooter: {
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: 10,
-    marginTop: 10,
+    marginTop: 14,
+  },
+
+  btnPrimary: {
+    backgroundColor: "#8257e6",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+  },
+
+  btnPrimaryText: {
+    color: "#fff",
+    fontWeight: "700",
   },
 });
+
+

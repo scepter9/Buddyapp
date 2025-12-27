@@ -1,147 +1,173 @@
-import React,{useEffect,useState,useContext} from "react";
+import React, { useEffect, useState, useContext, useMemo } from "react";
 import {
   View,
   Text,
-  ScrollView,
   Image,
   TouchableOpacity,
   StyleSheet,
-  TextInput,
   SafeAreaView,
+  FlatList,
+  ImageBackground,
+  Modal,
+  TouchableWithoutFeedback
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { AuthorContext } from "../AuthorContext";
-import {SendUser} from "./CreateRoomScreen";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { random } from "lodash";
+import { Ionicons } from "@expo/vector-icons";
+const API_BASE_URL = "http://192.168.0.136:3000";
 
-const generateroomid=()=>{
-  const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+';
-  const value=''
-  for(let i=0; i<7, i++;){
-    value+=alphabet.charAt(Math.floor(Math.random()*alphabet.length));
-   
-  }
- return value;
-}
-const generatecommentid=()=>{
-  const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+';
-  const resut=''
-  for(let i=0; i<7, i++;){
-resut+=alphabet.charAt(Math.floor(Math.random()*alphabet.length))
-  }
-  return resut;
-}
-const randomcomment=generatecommentid();
-const randomroom=generateroomid()
+// Separate Component for Post Items
+const PostChild = ({ item }) => {
+  const getTimestamp = (time) => {
+    if (!time) return "Just now";
+    const olddate = new Date(time);
+    const now = new Date();
+    const seconds = Math.floor((now - olddate) / 1000);
 
-
-
-export default function DesignersHubScreen({navigation,route}) {
- const {roomname}=useContext(SendUser);
-  const userSet=new Set();
-  useEffect(()=>{
-  if(userSet.has(searchid)) return;
-  userSet.add(searchid);
-    
-    return()=>{
-userSet.delete(searchid)
-    }
-  },[searchid]);
-
-  const {roomid}=route.params;
-  const {user}=useContext(AuthorContext)
-  const searchid=user?.id;
-  const posts = [
-    {
-      id: 1,
-      user: "@janedoe",
-      time: "1h ago",
-      img: "https://i.pravatar.cc/100?img=12",
-      text: "“Just finished the prototype for our study app — can’t wait to share it here!”",
-      reactions: { heart: 23, comment: 5, share: 3 },
-    },
-    {
-      id: 2,
-      user: "@scepter9",
-      time: "3h ago",
-      img: "https://i.pravatar.cc/100?img=7",
-      text: "Anyone free to collab on a small AI-powered note-taking app? Need UI + branding ideas 🔥",
-      reactions: { heart: 45, comment: 9, share: 7 },
-    },
-  ];
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d ago`;
+    return `${Math.floor(days / 30)}mo ago`;
+  };
 
   return (
-    <LinearGradient
-      colors={["#0f1a2c", "#1a2c4c"]}
-      style={styles.container}
-    >
+    <BlurView intensity={50} tint="dark" style={styles.post}>
+      <View style={styles.userRow}>
+        <Image source={{ uri: item.img || 'https://via.placeholder.com/100' }} style={styles.avatar} />
+        <View style={styles.userInfo}>
+          <Text style={styles.username}>{item.user}</Text>
+          <Text style={styles.time}>{getTimestamp(item.time)}</Text>
+        </View>
+      </View>
+      <Text style={styles.postText}>{item.text}</Text>
+      <View style={styles.reactions}>
+        <TouchableOpacity><Text style={styles.reactText}>❤️ {item.reactions?.heart || 0}</Text></TouchableOpacity>
+        <TouchableOpacity><Text style={styles.reactText}>💬 {item.reactions?.comment || 0}</Text></TouchableOpacity>
+        <TouchableOpacity><Text style={styles.reactText}>🔁 {item.reactions?.share || 0}</Text></TouchableOpacity>
+      </View>
+    </BlurView>
+  );
+};
+
+export default function DesignersHubScreen({ navigation, route }) {
+  const [postsarray, setPostarray] = useState([]);
+  const [openModal,setOpenModal]=useState(false)
+  const { roomid } = route.params;
+  const { user } = useContext(AuthorContext);
+  const searchid = user?.id;
+
+  // Track online users (Note: This local set won't persist across users without a Socket/Backend)
+  const [onlineCount, setOnlineCount] = useState(0);
+
+  useEffect(() => {
+    if (!searchid) return;
+    setOnlineCount((prev) => prev + 1);
+    return () => setOnlineCount((prev) => Math.max(prev - 1, 0));
+  }, [searchid]);
+  
+
+  useEffect(() => {
+    const getRoomposts = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/getrooom?roomid=${roomid}`);
+        if (!res.ok) throw new Error("Network response was not ok");
+        const data = await res.json();
+        setPostarray(data);
+      } catch (err) {
+        console.error("Fetch error:", err);
+      }
+    };
+    getRoomposts();
+  }, [roomid]);
+
+  return (
+    <LinearGradient colors={["#0f1a2c", "#1a2c4c"]} style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
         {/* Header */}
-        <BlurView intensity={50} tint="dark" style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>#{roo}</Text>
-            <Text style={styles.members}>• {userSet.size} Online</Text>
-          </View>
-          <View style={styles.actions}>
-            <TouchableOpacity style={[styles.actionBtn, styles.liveBtn]}>
-              <Text style={styles.liveText}>🎙️ Go Live</Text>
-            </TouchableOpacity>
-          
-            <TouchableOpacity style={styles.actionBtn}>
-              <Text style={styles.actionText}>⚙️</Text>
-            </TouchableOpacity>
-          </View>
-        </BlurView>
+       
+        <ImageBackground
+  style={styles.header}
+  source={{ uri:`http://picsum.photos/400/400` }}
+  imageStyle={styles.headerImage}
+>
+  {/* 1. Dark Overlay layer */}
+  <View style={styles.overlay} />
 
-        {/* Body */}
-        <ScrollView
-          showsVerticalScrollIndicator={false}
+  {/* 2. Top Navigation Row (Icons) */}
+  <View style={styles.topIconsRow}>
+    <TouchableOpacity onPress={() => navigation.goBack()}>
+      <Ionicons name="arrow-back" size={28} color="#fff" />
+    </TouchableOpacity>
+    
+    <TouchableOpacity onPress={() => setOpenModal(true)}>
+      <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
+    </TouchableOpacity>
+  </View>
+
+  {/* 3. Bottom Info Box */}
+  <View style={styles.infoBox}>
+    <Text style={styles.title}>#{roomname}</Text>
+    <Text style={styles.onlineText}>• {onlineCount} Online</Text>
+  </View>
+</ImageBackground>
+       
+
+        {/* List of Posts */}
+        <FlatList
+          data={postsarray}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => <PostChild item={item} />}
           contentContainerStyle={styles.scrollContent}
-        >
-          {/* Live Space */}
-          {/* <LinearGradient
-            colors={["#00d9ff", "#8a2be2"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.liveSpace}
-          >
-            <Text style={styles.liveTitle}>🎧 Live Space: “UI Trends 2025”</Text>
-            <Text style={styles.liveSub}>
-              Hosted by <Text style={{ fontWeight: "700" }}>Hope Mark</Text> • 12 Listening
-            </Text>
-          </LinearGradient> */}
+          ListEmptyComponent={<Text style={{color: 'white', textAlign: 'center', marginTop: 20}}>No posts yet.</Text>}
+        />
 
-          {/* Posts */}
-          {posts.map((p) => (
-            <BlurView key={p.id} intensity={50} tint="dark" style={styles.post}>
-              <View style={styles.userRow}>
-                <Image source={{ uri: p.img }} style={styles.avatar} />
-                <View style={styles.userInfo}>
-                  <Text style={styles.username}>{p.user}</Text>
-                  <Text style={styles.time}>{p.time}</Text>
-                </View>
-              </View>
-              <Text style={styles.postText}>{p.text}</Text>
-              <View style={styles.reactions}>
-                <TouchableOpacity>
-                  <Text style={styles.reactText}>❤️ {p.reactions.heart}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity>
-                  <Text style={styles.reactText}>💬 {p.reactions.comment}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity>
-                  <Text style={styles.reactText}>🔁 {p.reactions.share}</Text>
-                </TouchableOpacity>
-              </View>
-            </BlurView>
-          ))} 
-        </ScrollView>
-        <TouchableOpacity style={styles.actionpostBtn} onPress={()=>navigation.navigate('CreateRoomScreen',{room:roomid})}>
-              <Text style={styles.actionText}>➕ New Post</Text>
-            </TouchableOpacity>
-        
+        {/* Floating Action Button */}
+        <TouchableOpacity 
+          style={styles.actionpostBtn} 
+          onPress={() => navigation.navigate('NewPostScreen', { room: roomid })}
+        >
+          <Text style={styles.actionText}>➕ New Post</Text>
+        </TouchableOpacity>
+
+        <Modal
+  animationType="fade" 
+  transparent={true}
+  visible={openModal}
+  onRequestClose={() => setOpenModal(false)}
+>
+  {/* The TouchableOpacity acts as the backdrop to close the modal */}
+  <TouchableOpacity 
+    style={styles.modalOverlay} 
+    activeOpacity={1} 
+    onPress={() => setOpenModal(false)}
+  ><TouchableWithoutFeedback>
+    <BlurView intensity={30} tint="dark" style={styles.moda}>
+      <TouchableOpacity style={styles.modalItem} onPress={handleLeaveRoom}>
+        <Text style={styles.modaltext}>🚪 Leave Room</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.modalItem} onPress={handleimage}>
+        <Text style={styles.modaltext}>🖼️ Change Wallpaper</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.modalItem}>
+        <Text style={styles.modaltext}>🔔 Mute Notifications</Text>
+      </TouchableOpacity>
+
+      {/* Example of a "Danger" action style */}
+      <TouchableOpacity style={[styles.modalItem, { borderBottomWidth: 0 }]}>
+        <Text style={[styles.modaltext, { color: '#ff4d4d' }]}>🚫 Block Room</Text>
+      </TouchableOpacity>
+    </BlurView>
+    </TouchableWithoutFeedback>
+
+  </TouchableOpacity>
+</Modal>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -149,18 +175,81 @@ userSet.delete(searchid)
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 40 },
+  scrollContent: { padding: 16, paddingBottom: 100 },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    width: '100%',
+    height: 220, // Give it a fixed height or it will collapse
+    paddingTop: 50,
+    paddingHorizontal: 16,
+    justifyContent: 'space-between', // Pushes icons to top and infoBox to bottom
+    overflow: 'hidden',
+  },
+  headerImage: { 
+    resizeMode: 'cover' 
+  },
+  overlay: { 
+    ...StyleSheet.absoluteFillObject, 
+    backgroundColor: 'rgba(0,0,0,0.4)' // Subtle tint so text is readable
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)', // Dim the background
+  },
+  topIconsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 10, // Ensures icons are clickable above the overlay
+  },
+  infoBox: {
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    backdropFilter: 'blur(10px)', // Note: backdropFilter is web-only, use BlurView for iOS/Android
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignSelf: 'flex-start',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  moda: {
+    position: 'absolute',
+    top: 60, // Adjust this so it appears right under your header icon
+    right: 16, // Changed to 'right' because settings icons are usually on the right
+    width: 180,
+    borderRadius: 15,
+    backgroundColor: 'rgba(30, 45, 75, 0.9)', // Match your theme
+    paddingVertical: 8,
+    overflow: 'hidden', // Ensures BlurView doesn't spill over corners
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    elevation: 5, // Shadow for Android
+    shadowColor: '#000', // Shadow for iOS
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+  modalItem: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderBottomColor: 'rgba(255,255,255,0.05)',
   },
-  headerLeft: { flexDirection: "column" },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#fff" },
+  modaltext: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+ 
+  title:{
+    fontSize:20,
+    fontWeight:'bold',
+    color:'#fff'
+  },
+  onlineText:{
+    fontSize:14,
+    color:'#aaffaa'
+  },
   members: { fontSize: 13, color: "rgba(255,255,255,0.6)" },
   actions: { flexDirection: "row", alignItems: "center", gap: 8 },
   actionBtn: {

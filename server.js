@@ -10,7 +10,7 @@ const multer = require('multer');
 const path = require('path');
 const http = require('http'); // Import http module
 const { Server } = require('socket.io'); // Import Server from socket.io
-const { log, timeStamp } = require('console');
+const { log, timeStamp, error } = require('console');
 const { result } = require('lodash');
 
 //"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" -u root -p buddy > backup.sql
@@ -155,7 +155,7 @@ app.post('/Login', (req, res) => {
             email: user.EMAIL,
             username: user.USERNAME,
             phone: user.PHONE,
-            image:user.IMAGE,
+            image:user.image,
         };
 
         return res.json({ message: 'Login successful', user: req.session.user });
@@ -1888,15 +1888,11 @@ app.get('/searchinterestroom',(req,res)=>{
   })
 })
 app.get('/getactiverooms',(req,res)=>{
-  const sql=`select * from createinterestroom left join (
-    select room_of_posts_id , count(*) as post_count from roomposts  group by room_of_posts_id
-    )as post_data on createinterestroom.id=post_data.room_of_posts_id
-    left join(select room_of_posts_id, count(*) as comment_count from commenting  group by room_of_posts_id)
-     as comment_data on createinterestroom.id=comment_data.room_of_posts_id
-     left join(select userroomid, count(*) as members_count from roommembers group by userroomid)
-     as members on createinterestroom.id=members.userroomid
-     order by coalesce(post_count,0) desc, coalesce(comment_count,0) desc, coalesce(members_count,0) desc
-    limit 6;`
+  const sql=`select cr.id,cr.roomname,cr.roomdescription,cr.roompasskey,cr.selectmode,
+   cr.selecttype,cr.creatorid, count(a.roomid) as members_count from createinterestroom cr 
+   left join roomparticipants a on cr.id=a.roomid   group by cr.id,cr.roomname,
+   cr.roomdescription,cr.roompasskey,
+  cr.selectmode, cr.selecttype,cr.creatorid order by  coalesce(members_count,0) desc limit 6 ; `
     db.query(sql,(err,result)=>{
       if(err){
         return res.status(500).json({error:'An error occured'})
@@ -1906,7 +1902,7 @@ app.get('/getactiverooms',(req,res)=>{
 })
 app.post('/postroommembers', (req, res) => {
   const { valid, sender } = req.body;
-  const sql = 'INSERT IGNORE INTO roommembers(userId, userroomid) VALUES (?, ?)';
+  const sql = 'INSERT IGNORE INTO roomparticipants(userid, roomid) VALUES (?, ?)';
   
   db.query(sql, [sender, valid], (err, result) => {
     if (err) {
@@ -1923,10 +1919,26 @@ app.post('/postroommembers', (req, res) => {
     }
   });
 });
+app.get('/checkroommembers',(req,res)=>{
+  const {userid,room_id}=req.query;
+
+  const sql=`select * from roomparticipants where userid=? and roomid=?`
+  db.query(sql,[userid,room_id],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:'An error occured'})
+    }
+    res.json(result.length ? result[0] : null);
+
+  })
+})
 
 app.get('/getjoinroom',(req,res)=>{
   const {yourid}=req.query;
-  const sql=' SELECT cr.*, m.userId, COUNT(rm.id) AS members_count FROM roommembers m JOIN createinterestroom cr  ON m.userroomid = cr.id LEFT JOIN roommembers rm ON rm.userroomid = cr.id WHERE m.userId = ? GROUP BY cr.id';
+  const sql=`select cr.id,cr.roomname,cr.roomdescription,cr.roompasskey,cr.selectmode,
+  cr.selecttype,cr.creatorid, count(a.roomid) as members_count from createinterestroom cr 
+  left join roomparticipants a on cr.id=a.roomid where a.userid=?  group by cr.id,cr.roomname,
+  cr.roomdescription,cr.roompasskey,
+ cr.selectmode, cr.selecttype,cr.creatorid  order by  coalesce(members_count,0) desc  limit 6   ;`;
   db.query(sql,[yourid],(err,result)=>{
     if(err){
       console.log(err.message);
@@ -2034,9 +2046,12 @@ io.on('connection',(socket)=>{
   })
 })
 app.post('/postnewtextval',(req,res)=>{
-  const {searchid,posttext,roomid,image}=req.body;
-  const sql='insert into roomposts(sender_id,post,post_image,room_of_posts_id) values(?,?,?,?)';
-  db.query(sql,[searchid,posttext,image,roomid],(err,result)=>{
+  const {searchid,
+    posttext,
+    uploadedImageUrl,
+    finalvideo,roomid}=req.body;
+  const sql='insert into roomposts(sender_id,post,post_image,posted_at,room_of_posts_id,postvideo) values(?,?,?,?,?,?)';
+  db.query(sql,[searchid,posttext,uploadedImageUrl,curdate(),roomid,finalvideo],(err,result)=>{
     if(err){
       return res.status(500).json({error:err.message});
     }
@@ -2044,30 +2059,638 @@ app.post('/postnewtextval',(req,res)=>{
   })
 });
 
-app.post('/api/videoupload',
-upload.single('video',(req,res)=>{
+app.post('/api/videoupload',upload.single('video'),(req,res)=>{
   if(!req.file){
-    return res.status(400).json({message:'No file uploaded'})
+return res.status(400).json({message:'No file uploaded'})
   }
-  const VideoUrl = `/uploads/${req.file.filename}`;
-  // console.log(imageUrl);
-  res.json({ VideoUrl })
-}
-)
-)
+  const VideoUrl=`/uploads/${req.file.filename}`;
+  res.json({VideoUrl})
+})
+
+
 app.post('/postshowcases',(req,res)=>{
   const {title,pickercategory,sendvideo,userId,describe}=req.body;
-  const sql='INSERT INTO showcases(sender_id,caption,video,showcase_category,title)VALUES(?,?,?,?,?)';
-  db.query(sql,[userId,describe,sendvideo,pickercategory,title],(err,result)=>{
+  const sql='INSERT INTO showcases(sender_id,caption,video,showcase_category)VALUES(?,?,?,?)';
+  db.query(sql,[userId,describe,sendvideo,pickercategory],(err,result)=>{
 if(err){
  return res.status(500).json({error:`An error occured-${err.message}`})
 }
 res.status(200).json({success:true, message:'Posted Succesfully'})
   })
 })
-app.post('/gettingvideo',(req,res)=>{
-  const sql=''
+app.get('/gettingvideo',(req,res)=>{
+  const {userId}=req.query;
+  const sql=`WITH base AS (
+    SELECT 
+        cr.id,
+        cr.sender_id,
+        cr.caption,
+        cr.video,
+        cr.time_joined,
+        cr.showcase_category,
+        cr.likes,
+        MAX(a.username) AS username,
+        MAX(a.image) AS userimage,
+        COUNT(v.actaul_comment) AS comment_count,
+        COALESCE(MAX(sa.score), 0) AS affinity_score,
+
+        CASE
+            WHEN MAX(sa.score) >= 20 THEN 'affinity'
+            WHEN MAX(sa.score) > 0 THEN 'recent'
+            ELSE 'random'
+        END AS bucket
+
+    FROM showcases cr
+    LEFT JOIN showcase_affinity sa
+        ON sa.creator_id = cr.sender_id
+       AND sa.viewerid = ?
+    LEFT JOIN battlearenacomment v
+        ON v.videoid = cr.id
+    LEFT JOIN projecttables a
+        ON a.ID = cr.sender_id
+    LEFT JOIN showcase_hide seen
+        ON seen.video_id = cr.id
+       AND seen.user_id = ?
+    WHERE seen.video_id IS NULL
+    GROUP BY cr.id, cr.sender_id, cr.caption, cr.video, cr.time_joined, cr.showcase_category, cr.likes
+),
+
+ranked AS (
+    SELECT *,
+        ROW_NUMBER() OVER (
+            PARTITION BY bucket
+            ORDER BY
+                CASE
+                    WHEN bucket = 'affinity' THEN affinity_score
+                    WHEN bucket = 'recent' THEN time_joined
+                    ELSE RAND()
+                END DESC
+        ) AS bucket_rank
+    FROM base
+),
+
+interleaved AS (
+    SELECT *,
+        ROW_NUMBER() OVER (
+            ORDER BY
+                CASE bucket
+                    WHEN 'affinity' THEN 1
+                    WHEN 'recent' THEN 2
+                    ELSE 3
+                END,
+                bucket_rank
+        ) AS global_rank
+    FROM ranked
+)
+
+SELECT
+    id,
+    sender_id,
+    caption,
+    video,
+    time_joined,
+    showcase_category,
+    likes,
+    username,
+    userimage,
+    comment_count,
+    affinity_score
+FROM interleaved
+ORDER BY
+    (global_rank % 3),   -- shuffle pattern
+    global_rank
+LIMIT 100;
+
+  `;
+  db.query(sql,[userId,userId],(err,result)=>{
+if(err){
+  return res.status(500).json({error:message})
+}
+res.json(result)
+  })
+});
+app.get('/trending',(req,res)=>{
+ 
+  const sql=`select cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image as userimage,
+  count(v.actaul_comment) as comment_count from showcases cr left join battlearenacomment v on cr.id=v.videoid left join projecttables a 
+  on a .ID=cr.sender_id where cr.time_joined>=now()-interval 1 week group by cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image
+  order by cr.likes desc limit 3;`;
+  db.query(sql,(err,resultvalue)=>{
+    if(err){
+return res.status(500).json({err:`this error occured ${err}`})
+    }
+    res.json(resultvalue)
+  })
 })
+
+app.post('/postlikesincrease', (req, res) => {
+  const { postId, userValue, posteruser } = req.body;
+
+  // 1. Check if already liked
+  const checkLikeSql =
+    'SELECT * FROM showcase_likes WHERE liker_id=? AND video_id=?';
+
+  db.query(checkLikeSql, [userValue, postId], (err, liked) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (liked.length > 0) {
+      return res.status(400).json({ error: 'Already liked' });
+    }
+
+    // 2. Increase likes
+    const updateLikeSql =
+      'UPDATE showcases SET likes=likes+1 WHERE id=?';
+
+    db.query(updateLikeSql, [postId], (err) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      // 3. Insert into likes table
+      const insertLikeSql =
+        'INSERT INTO showcase_likes(liker_id, video_id) VALUES(?,?)';
+
+      db.query(insertLikeSql, [userValue, postId], (err) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+
+        // 4. Affinity logic
+        const affinityCheckSql =
+          'SELECT * FROM showcase_affinity WHERE viewerid=? AND creator_id=?';
+
+        db.query(affinityCheckSql, [userValue, posteruser], (err, affinity) => {
+          if (err) {
+            return res.status(500).json({ error: err.message });
+          }
+
+          if (affinity.length > 0) {
+            db.query(
+              'UPDATE showcase_affinity SET score=score+5 WHERE viewerid=? AND creator_id=?',
+              [userValue, posteruser]
+            );
+          } else {
+            db.query(
+              'INSERT INTO showcase_affinity(viewerid, creator_id, score) VALUES(?,?,?)',
+              [userValue, posteruser, 5]
+            );
+          }
+
+          // 5. Optional hide
+          const hideSql =
+            'INSERT IGNORE INTO showcase_hide(user_id, video_id) VALUES(?,?)';
+
+          db.query(hideSql, [userValue, postId], (err) => {
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+
+            res.status(200).json({
+              success: true,
+              message: 'Post liked successfully'
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
+
+
+app.post('/postlikesdecrease', (req, res) => {
+  const { postId, userValue } = req.body;
+
+  // 1. Check if like exists
+  const checkLikeSql =
+    'SELECT * FROM showcase_likes WHERE liker_id=? AND video_id=?';
+
+  db.query(checkLikeSql, [userValue, postId], (err, existing) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (existing.length === 0) {
+      return res.status(400).json({ error: 'Like does not exist' });
+    }
+
+    // 2. Decrease likes (never below 0)
+    const decreaseLikeSql =
+      'UPDATE showcases SET likes = GREATEST(likes-1, 0) WHERE id=?';
+
+    db.query(decreaseLikeSql, [postId], (err) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      // 3. Remove from likes table
+      const deleteLikeSql =
+        'DELETE FROM showcase_likes WHERE liker_id=? AND video_id=?';
+
+      db.query(deleteLikeSql, [userValue, postId], (err) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+
+        // 4. Remove from hide table
+        const deleteHideSql =
+          'DELETE FROM showcase_hide WHERE user_id=? AND video_id=?';
+
+        db.query(deleteHideSql, [userValue, postId], (err) => {
+          if (err) {
+            return res.status(500).json({ error: err.message });
+          }
+
+          res.status(200).json({
+            success: true,
+            message: 'Like removed successfully'
+          });
+        });
+      });
+    });
+  });
+});
+
+
+app.get('/getshowcase', (req, res) => {
+  const { showcase, userId } = req.query;
+
+  const sql = `
+  WITH base AS (
+    SELECT 
+      cr.id,
+      cr.sender_id,
+      cr.caption,
+      cr.video,
+      cr.time_joined,
+      cr.showcase_category,
+      cr.likes,
+      MAX(a.username) AS username,
+      MAX(a.image) AS userimage,
+      COUNT(v.actaul_comment) AS comment_count,
+      COALESCE(MAX(sa.score), 0) AS affinity_score,
+
+      -- Bucket assignment
+      CASE
+        WHEN MAX(sa.score) >= 20 THEN 'affinity'
+        WHEN MAX(sa.score) > 0 THEN 'recent'
+        ELSE 'random'
+      END AS bucket
+    FROM showcases cr
+    LEFT JOIN showcase_affinity sa 
+      ON sa.creator_id = cr.sender_id AND sa.viewerid = ?
+    LEFT JOIN battlearenacomment v 
+      ON v.videoid = cr.id
+    LEFT JOIN projecttables a 
+      ON a.ID = cr.sender_id
+    LEFT JOIN showcase_hide seen 
+      ON seen.video_id = cr.id AND seen.user_id = ?
+    WHERE cr.showcase_category = ? 
+      AND seen.video_id IS NULL
+    GROUP BY 
+      cr.id, cr.sender_id, cr.caption, cr.video, cr.time_joined, cr.showcase_category, cr.likes
+  ),
+
+  ranked AS (
+    SELECT *,
+      ROW_NUMBER() OVER (
+        PARTITION BY bucket
+        ORDER BY
+          CASE
+            WHEN bucket = 'affinity' THEN affinity_score
+            WHEN bucket = 'recent' THEN time_joined
+            ELSE RAND()
+          END DESC
+      ) AS bucket_rank
+    FROM base
+  ),
+
+  interleaved AS (
+    SELECT *,
+      ROW_NUMBER() OVER (
+        ORDER BY
+          CASE bucket
+            WHEN 'affinity' THEN 1
+            WHEN 'recent' THEN 2
+            ELSE 3
+          END,
+          bucket_rank
+      ) AS global_rank
+    FROM ranked
+  )
+
+  SELECT 
+    id,
+    sender_id,
+    caption,
+    video,
+    time_joined,
+    showcase_category,
+    likes,
+    username,
+    userimage,
+    comment_count,
+    affinity_score
+  FROM interleaved
+  ORDER BY (global_rank % 3), global_rank
+  LIMIT 100;
+  `;
+
+  db.query(sql, [userId, userId, showcase], (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(result);
+  });
+});
+
+app.get('/fetchsearchvideo',(req,res)=>{
+  const {searchparams}=req.query;
+  const searchval=`%${searchparams}%`
+  const sql=`select cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image as userimage,
+  count(v.actaul_comment) as comment_count from showcases cr left join battlearenacomment v on cr.id=v.videoid left join projecttables a 
+  on a .ID=cr.sender_id  where cr.caption like ? or a.username like ? group by cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image
+   order by cr.likes desc;`
+   db.query(sql,[searchval,searchval],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:err.message})
+    }
+    res.json(result)
+   })
+});
+app.get('/fetchingcomment',(req,res)=>{
+  const {userId,videovalue}=req.query;
+  const sql=`SELECT 
+  cr.id,
+  cr.videoid,
+  cr.userid,
+  cr.actaul_comment,
+  a.USERNAME AS usersname,
+  a.image AS usersimage
+FROM battlearenacomment cr
+LEFT JOIN projecttables a 
+  ON cr.userid = a.id
+LEFT JOIN comment_likes cl
+  ON cr.id = cl.comment_id
+WHERE cr.videoid = ?
+GROUP BY cr.id;
+`;
+db.query(sql,[videovalue],(err,result)=>{
+  if(err){
+    return res.status(500).json({error:err.message});
+  }
+  res.json(result);
+})
+})
+io.on('connection', (socket) => {
+
+  socket.on('JoinComment', (videoId) => {
+    socket.join(videoId);
+  });
+
+  socket.on('SendVideoComment', (data) => {
+    const { videoo, user, comment, usersimage, usersname } = data;
+
+    const sql = `
+      INSERT INTO battlearenacomment(videoid, userid, actaul_comment)
+      VALUES (?, ?, ?)
+    `;
+
+    db.query(sql, [videoo, user, comment], (err, result) => {
+      if (err) console.log(err);
+        
+       
+     
+
+      db.query(sql, [videoo, user, comment], (err, result) => {
+        if (err) return console.log(err);
+      
+        const commentId = result.insertId;
+      
+        db.query(
+          `SELECT 
+            cr.id,
+            cr.videoid,
+            cr.userid,
+            cr.actaul_comment,
+            a.USERNAME AS usersname,
+            a.image AS usersimage
+           FROM battlearenacomment cr
+           LEFT JOIN projecttables a ON cr.userid = a.id
+           WHERE cr.id = ?`,
+          [commentId],
+          (err, rows) => {
+            if (err) return console.log(err);
+      
+            io.to(videoo).emit('NewComment', rows[0]);
+          }
+        );
+      });
+      
+      
+
+     
+    });
+  });
+
+  socket.on('updateaffinity', (data) => {
+    const { user, posterid } = data;
+
+    const check = `
+      SELECT * FROM showcase_affinity
+      WHERE viewerid=? AND creator_id=?
+    `;
+
+    db.query(check, [user, posterid], (err, result) => {
+      if (err) return console.log(err);
+
+      if (result.length > 0) {
+        db.query(
+          `UPDATE showcase_affinity SET score=score+5 WHERE viewerid=? AND creator_id=?`,
+          [user, posterid]
+        );
+      } else {
+        db.query(
+          `INSERT INTO showcase_affinity(viewerid, creator_id, score) VALUES(?,?,?)`,
+          [user, posterid, 5]
+        );
+      }
+    });
+  });
+
+});
+
+app.get('/getshowcaserank', (req, res) => {
+  const user = req.query.user;
+
+  const sql = `
+    SELECT sender_id,
+      SUM(likes) AS totallikes,
+      ROUND(SUM(likes)/100) AS totalvalue,
+      CASE 
+        WHEN ROUND(SUM(likes)/100) BETWEEN 0 AND 499 THEN 'Rising'
+        WHEN ROUND(SUM(likes)/100) BETWEEN 500 AND 999 THEN 'Challenger'
+        WHEN ROUND(SUM(likes)/100) > 999 THEN 'Specialist'
+      END AS category
+    FROM showcases 
+    WHERE sender_id = ? 
+    GROUP BY sender_id;
+  `;
+
+  db.query(sql, [user], (err, result) => {
+    if (err) return res.status(500).json({ error: err });
+    res.json(result[0] || null);  // return null cleanly
+  });
+});
+app.get('/showcasetopusers',(req,res)=>{
+  const sql=`select cr.sender_id,a.FULLNAME as username,a.image as usersimage,sum(cr.likes) as totallikes ,round(sum(cr.likes)/100) as totalvalue , 
+  case when round(sum(likes)/100) between 0 and 499 then 'Rising' when round(sum(likes)/100) between 500 and 999
+   then 'Challenger' when round(sum(likes)/100) >999 then
+   'Specialist' end as Category from showcases cr left join projecttables a on cr.sender_id=a.ID where cr.time_joined<=now()-interval 1 week group  by sender_id;`;
+   db.query(sql,(err,result)=>{
+    if(err){
+      return res.status(500).json({error:err.message});
+
+    }
+    res.json(result);
+   })
+})
+app.get('/Firstlikesearch',(req,res)=>{
+  const {user,video}=req.query;
+  const sql=`select * from showcase_likes cr where cr.liker_id=? and cr.video_id=?`;
+  db.query(sql,[user,video],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:err.message});
+    }
+    res.json(result)
+  })
+})
+app.get('/gettrendingbyuser',(req,res)=>{
+ 
+  const sql=`select cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image as userimage,
+  count(v.actaul_comment) as comment_count from showcases cr left join battlearenacomment v on cr.id=v.videoid left join projecttables a 
+  on a .ID=cr.sender_id where cr.time_joined>=now()-interval 1 week group by cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image
+  order by cr.likes desc;;
+   `
+   db.query(sql,(err,result)=>{
+    if(err){
+   return res.status(500).json({error:err.message})
+    }
+    res.json(result)
+   })
+})
+app.post('/increasescore', (req, res) => {
+  const { user, posterid } = req.body;
+
+  const sql = `
+    INSERT INTO showcase_affinity (creator_id, viewerid, score)
+    VALUES (?, ?, 5)
+    ON DUPLICATE KEY UPDATE score = score + 5
+  `;
+
+  db.query(sql, [posterid, user], (err, result) => {
+    if (err) return res.status(500).json({ error: err });
+    res.status(200).json({ success: true, message: 'Score increased' });
+  });
+});
+
+app.post('/reducescore', (req, res) => {
+  const { user, posterid } = req.body;
+
+  const sql = `
+    INSERT INTO showcase_affinity (creator_id, viewerid, score)
+    VALUES (?, ?, 0)
+    ON DUPLICATE KEY UPDATE score = GREATEST(score - 5, 0)
+  `;
+
+  db.query(sql, [posterid, user], (err, result) => {
+    if (err) return res.status(500).json({ error: err });
+    res.status(200).json({ success: true, message: 'Score reduced' });
+  });
+});
+app.post('/postcompetitionscore',(req,res)=>{
+  const{usersid,score}=req.body;
+  const sql=`insert into showcaseleaderboard(user_id,score)values(?,?) on duplicate key update score=score+?
+  `
+  db.query(sql,[usersid,score,score],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:`An error occured`})
+    }
+    res.status(200).json({success:true,message:'Posted succesfully'})
+  })
+})
+// io.on(connection,(socket)=>{
+
+//   socket.on('Up')
+// socket.on('disconnect',()=>{
+//   console.log('User cleared');
+// })
+// })
+app.get('/fetchleader',(req,res)=>{
+  const sql=`select cr.id,cr.user_id,cr.score,a.FULLNAME as usersname,a.image from showcaseleaderboard 
+  cr join projecttables a on cr.user_id=a.ID order by score desc limit 20;`
+  db.query(sql,(err,result)=>{
+    if(err){
+      return res.status(500).json({error:'An error occured'})
+    }
+    res.json(result)
+  })
+})
+app.post(
+  "/api/uploads/images",
+  upload.array("images", 10), // up to 10 images
+  (req, res) => {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: "No files uploaded" });
+    }
+
+    const imageUrls = req.files.map(
+      file => `/uploads/${file.filename}`
+    );
+
+    res.json({ imageUrls });
+  }
+);
+app.post(
+  "/api/uploads/videos",
+  upload.array("videos", 10), // up to 10 images
+  (req, res) => {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: "No files uploaded" });
+    }
+
+    const videoUrls = req.files.map(
+      file => `/uploads/${file.filename}`
+    );
+
+    res.json({ videoUrls });
+  }
+);
+app.post('/join-private-room', (req, res) => {
+  const { roomId, userId, passcode } = req.body;
+
+  db.query(
+    'SELECT roompasskey FROM createinterestroom WHERE id = ?',
+    [roomId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: 'DB error' });
+      if (!rows.length) return res.status(404).json({ error: 'Room not found' });
+
+      if (rows[0].roompasskey !== passcode) {
+        return res.status(401).json({ error: 'Wrong passcode' });
+      }
+
+      db.query(
+        'INSERT IGNORE INTO roomparticipants(userid, roomid) VALUES (?, ?)',
+        [userId, roomId],
+        () => res.json({ success: true })
+      );
+    }
+  );
+});
+
 server.listen(3000, () => {
   console.log('Server running on http://localhost:3000');
 });

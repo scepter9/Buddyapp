@@ -20,12 +20,13 @@ import { Feather } from '@expo/vector-icons';
 import { FontAwesome } from "@expo/vector-icons";
 
 
-function ActiveRooms({ item, navigation,variant }) {
+function ActiveRooms({ item, navigation,variant ,isjoined}) {
   const { user } = useContext(AuthorContext);
   const sender = user?.id;
 
-  const [joined, setjoined] = useState(false);
+ 
   const [openmodal, setopenmodal] = useState(false);
+  const [joined,setjoined]=useState(false)
   const [title, setTitle] = useState('');
   const [checkvalue, setcheckvalue] = useState(false);
   const storagekey = `${item?.id}_key`;
@@ -35,79 +36,84 @@ function ActiveRooms({ item, navigation,variant }) {
       return;
     }
   
-    if (title === item.roompasskey) {
-      try {
-        const valid = item.id;
-        const res = await fetch(`${API_BASE_URL}/postroommembers`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ valid, sender }),
-        });
+    try {
+      const res = await fetch(`${API_BASE_URL}/join-private-room`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          roomId: item.id,
+          userId: sender,
+          passcode: title,
+        }),
+      });
   
-        if (!res.ok) {
-          console.log('An error occurred');
-        } else {
-          // ✅ Success: Save joined state for private room too
-          // await AsyncStorage.setItem(storagekey, JSON.stringify(true));
-          // setjoined(true);
+      const data = await res.json();
   
-          // ✅ Close modal & navigate
-          setopenmodal(false);
-          navigation.navigate('DesignersHubScreen',{roomid:valid});
-        }
-      } catch (err) {
-        console.log(err);
+      if (!res.ok) {
+        // wrong passcode or server error
+        setcheckvalue(true);
+        setTitle('');
+        return;
       }
-    } else {
-      setcheckvalue(true);
-      setTitle('');
+  
+      // ✅ success
+      setcheckvalue(false);
+      setopenmodal(false);
+      setjoined(true);
+      navigation.navigate('DesignersHubScreen', { roomid: item.id });
+  
+    } catch (err) {
+      console.log('Failed to join private room', err);
     }
   };
+  
   
   
 
   const handlemodes = async () => {
     const valid = item.id;
-    if (joined) {
-      navigation.navigate('DesignersHubScreen',{roomid:valid});
-      return;
-    }
-  
-    else if (!joined && item.selectmode === 'public') {
-      setjoined(true);
-      await AsyncStorage.setItem(storagekey, JSON.stringify(true));
-      try {
-        const valid = item.id;
-        const res = await fetch(`${API_BASE_URL}/postroommembers`, {
+    try{
+      const paramsva=new URLSearchParams({
+userid:sender,
+        room_id:valid
+
+      })
+      const res=await fetch(`${API_BASE_URL}/checkroommembers?${paramsva}`);
+      if(!res.ok){
+        console.log('Something is wrong');
+        return;
+      }
+      const data=await res.json()
+      if(data!==null) {  
+       
+        navigation.navigate('DesignersHubScreen', { roomid: valid });
+        
+    }else if(data==null && item.selectmode === 'public'){
+
+      
+        const res2 = await fetch(`${API_BASE_URL}/postroommembers`, {
           method: 'POST',
-          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ valid, sender }),
         });
-        if (!res.ok) console.log('Something went wrong');
-      } catch (err) {
-        console.log(err);
-      }
-    } else if (item.selectmode === 'private') {
-      setopenmodal(true);
-    }
-  };
   
-  useEffect(() => {
-    const getJoinstate = async () => {
-      try {
-        const value = await AsyncStorage.getItem(storagekey);
-        if (value !== null) {
-          setjoined(JSON.parse(value));
+        if (!res2.ok) {
+          console.log('An error occurred');
         }
-      } catch (err) {
-        console.log('Error reading storage', err);
-      }
-    };
-    getJoinstate();
-  }, []);
+        navigation.navigate('DesignersHubScreen',{roomid:valid})
+      
+    }else if (item.selectmode === 'private') {
+      setopenmodal(true);
+    
+    
+  }
   
+}catch(err){
+  console.log('Something went wrong');
+}
+}
   return (
     <View
     style={[
@@ -177,10 +183,10 @@ function ActiveRooms({ item, navigation,variant }) {
 
       <TouchableOpacity
         onPress={handlemodes}
-        style={[styles.joinBtn, joined && styles.joinedBtn]}
+        style={[styles.joinBtn, isjoined && styles.joinedBtn]}
       >
-        <Text style={[styles.joinText, joined && styles.joinedText]}>
-          {joined ? 'View' : 'Join'}
+        <Text style={[styles.joinText, isjoined && styles.joinedText]}>
+          {isjoined ? 'View' : 'Join'}
         </Text>
       </TouchableOpacity>
     </View>
@@ -387,7 +393,7 @@ Setactiveroom(data)
 data={yourroom}
 keyExtractor={(item)=>`joined-${item.id}`}
 renderItem={({item})=>(
-  <ActiveRooms item={item} navigation={navigation} variant="joined"/>
+  <ActiveRooms item={item} navigation={navigation} variant="joined" isjoined={true}/>
 )}
 ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
 />
@@ -408,7 +414,7 @@ ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
 data={activeroom}
 keyExtractor={(item)=>`active-${item.id}`}
 renderItem={({item})=>(
-  <ActiveRooms item={item} navigation={navigation}  variant="active"/>
+  <ActiveRooms item={item} navigation={navigation}  variant="active" isjoined={yourroom.some((r)=>r.id===item.id)}/>
 )}
 ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
 />

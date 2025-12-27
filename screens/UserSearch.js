@@ -71,7 +71,7 @@ const UserSearch = () => {
               style={styles.userCard}
               activeOpacity={0.85}
               onPress={() => {
-                navigation.navigate('Profile', { userId: user.id });
+                navigation.navigate('Profile', { userId: user.id }); 
               }}
             >
               <Image

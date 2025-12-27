@@ -12,41 +12,40 @@ import {
   Animated,
   Dimensions,
   ImageBackground,
-  Alert
+  TouchableWithoutFeedback,
+  Alert,
+  Keyboard,
+  ScrollView
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { AuthorContext } from "../AuthorContext"
 import * as ImagePicker from 'expo-image-picker';
 import { io } from "socket.io-client";
+import { Video } from "expo-av";
 const API_BASE_URL = "http://192.168.0.136:3000";
 const { width } = Dimensions.get("window");
+import { Feather } from "@expo/vector-icons";
+
+
+
 
 export default function NewPostScreen({navigation,route}) {
-  const {room}=route.params;
+  const {room}=route?.params
   const {user}=useContext(AuthorContext)
   const searchid=user?.id;
-useEffect(()=>{
-  const postsocket=io(API_BASE_URL,{
-    query:{userId:searchid},
-transports:['websocket']
-  });
-  setSocket(postsocket);
-  postsocket.on('connect',()=>{
-    console.log('User Connected');
-  })
-  postsocket.emit('Joinroom',searchid)
-  return()=>postsocket.disconnect();
-},[])
+
   
     const [userProfile,setUserProfile]=useState(null)
    
     const [posttext,Setposttext]=useState('');
-    const [socket,setSocket]=useState(null)
-    const [display,setdisplay]=useState(false)
-    const [image,setimage]=useState(null)
 
-const {roomid}=route.params;
+ const maxMedia=5;
+ const maxVideo=2;
+const [images,Setimages]=useState([])
+const [videos,SetVideos]=useState([])
+const [displayimage,setdisplayimage]=useState(false)
+const [displayvideo,setdisplayvid]=useState(false)
 
     useEffect(()=>{
         const fetchsendPost=async()=>{
@@ -65,95 +64,182 @@ const {roomid}=route.params;
         }
         fetchsendPost();
         },[])
-        useEffect(()=>{
-          if(!socket) return;
-          const handleResend = (url)=> setimage(url);
-          socket.on('Resend', handleResend);
+   
         
-          return ()=>socket.off('Resend', handleResend);
-        },[socket])
+        const postNewtext = async () => {
+          try {
+            // block empty post
+            if (!posttext && images.length === 0 && videos.length === 0) return;
         
-        const postNewtext=async()=>{
-            try{
-const response=await fetch(`${API_BASE_URL}/postnewtextval`,{
-    method:'POST',
-    credentials:'include',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({searchid,posttext,roomid,image})
-
-})
-if(!response.ok){
-    console.log('Something went wrong ');
-    return;
-}
-            }catch(err){
-                console.log('Something went wrong ');
+            let sentimage = [];
+            let sentvideo = [];
+        
+            /* ---------- UPLOAD IMAGES ---------- */
+            if (images.length > 0) {
+              const formData1 = new FormData();
+        
+              images.forEach((image, index) => {
+                formData1.append("images", {
+                  uri: image.uri,
+                  name: image.name || `image_${index}.jpg`,
+                  type: image.type || "image/jpeg",
+                });
+              });
+        
+              const Postimage = await fetch(`${API_BASE_URL}/api/uploads/images`, {
+                method: "POST",
+                body: formData1,
+              });
+        
+              if (!Postimage.ok) throw new Error("Image upload failed");
+        
+              const Postimagedata = await Postimage.json();
+              sentimage = Postimagedata.imageUrls || [];
             }
-        };
-
-        const handleimage=async()=>{
-          const {status}=await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if(status !=='granted'){
-            Alert.alert('Access Required to access photo');
-            return;
+        
+            /* ---------- UPLOAD VIDEOS ---------- */
+            if (videos.length > 0) {
+              const formData2 = new FormData();
+        
+              videos.forEach((video, index) => {
+                formData2.append("videos", {
+                  uri: video.uri,
+                  name: video.name || `video_${index}.mp4`,
+                  type: video.type || "video/mp4",
+                });
+              });
+        
+              const Postvideo = await fetch(`${API_BASE_URL}/api/uploads/videos`, {
+                method: "POST",
+                body: formData2,
+              });
+        
+              if (!Postvideo.ok) throw new Error("Video upload failed");
+        
+              const Postvideodata = await Postvideo.json();
+              sentvideo = Postvideodata.videoUrls || [];
+            }
+        
+            /* ---------- CREATE POST ---------- */
+            const res = await fetch(`${API_BASE_URL}/postscreen`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                searchid,
+                room,
+                posttext,
+                sentimage,
+                sentvideo,
+              }),
+            });
+        
+            if (!res.ok) throw new Error("Post creation failed");
+        
+          } catch (err) {
+            console.log("Posting failed:", err.message);
+          }finally{
+            navigation.navigate('DesignersHubScreen')
           }
-          let result=await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing:false,
-            quality:1
-          });
-          if(result.canceled || !result.assets || result.assets.length===0) return;
-          const asset=result.assets[0];
-          const imageUri=asset.uri;
-          const filename = asset.fileName || imageUri.split("/").pop() || "photo.jpg";
-        const fileType = asset.type || "image/jpeg";
+        };
+        
+   
+    
 
-        try {
-          const formData = new FormData();
-          formData.append("image", {
-            uri: imageUri,
-            name: filename,   // ✅ dynamic name
-            type: fileType,   // ✅ dynamic MIME type
-          });
-      
-          const uploadResponse = await fetch(`${API_BASE_URL}/api/upload`, {
-            method: "POST",
-            body: formData,
-            // headers: {
-            //   "Content-Type": "multipart/form-data",
-            // },
-          });
-      
-          const uploadResult = await uploadResponse.json();
-          if (!uploadResult.imageUrl) throw new Error("Upload failed");
-      
-          const uploadedImageUrl = uploadResult.imageUrl;
-          if(!socket) return;
-          socket.emit('SendImage',{
-          image:uploadedImageUrl,
-          userI:searchid
-          })
-       
-        } catch (error) {
-          console.error("Error uploading image:", error);
-          Alert.alert("Upload failed", "Please try again.");
-        }finally{
-          setdisplay(true)
-        }
-        }
-
-
+        const handleimage = async () => {
+          try {
+            if (images.length >= maxMedia) {
+              Alert.alert("You have reached your max media limit");
+              return;
+            }
+        
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== "granted") {
+              Alert.alert("Access required to access photos");
+              return;
+            }
+        
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: false,
+              allowsMultipleSelection: true,
+              quality: 1,
+            });
+        
+            if (result.canceled || !result.assets?.length) return;
+        
+            const remainingSlots = maxMedia - images.length;
+        
+            const pickedImages = result.assets
+              .slice(0, remainingSlots)
+              .map((asset) => ({
+                uri: asset.uri,
+                name: asset.fileName || asset.uri.split("/").pop(),
+                type: asset.type || "image/jpeg",
+              }));
+        
+            Setimages((prev) => [...prev, ...pickedImages]);
+            setdisplayimage(true);
+        
+          } catch (err) {
+            console.log("Image picker error:", err);
+          }
+        };
+        
+        const openFile = async () => {
+          try {
+            if (videos.length >= maxVideo) {
+              Alert.alert("You have reached your video limit");
+              return;
+            }
+        
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== "granted") {
+              Alert.alert("Permission required to access videos");
+              return;
+            }
+        
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+              allowsEditing: false,
+              allowsMultipleSelection: true,
+            });
+        
+            if (result.canceled || !result.assets?.length) return;
+        
+            const remainingSlots = maxVideo - videos.length;
+        
+            const pickedVideos = result.assets
+              .slice(0, remainingSlots)
+              .map((asset) => ({
+                uri: asset.uri,
+                name: asset.fileName || "video.mp4",
+                type: asset.type || "video/mp4",
+              }));
+        
+            SetVideos((prev) => [...prev, ...pickedVideos]);
+            setdisplayvid(true);
+        
+          } catch (err) {
+            console.log("Video picker error:", err);
+          }
+        };
+        
+         
+          
 
   const pulse = useRef(new Animated.Value(0)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
 
   // subtle pulsing background animation
-  Animated.loop(
-    Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 2200, useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 2200, useNativeDriver: true }),
-    ]),
-  ).start();
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 2200, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 2200, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+  
 
   const onPressIn = () => {
     Animated.spring(btnScale, { toValue: 0.96, useNativeDriver: true }).start();
@@ -177,6 +263,8 @@ if(!response.ok){
       style={styles.safe}
       behavior={Platform.select({ ios: "padding", android: undefined })}
     >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+
       <LinearGradient
         colors={["#0f1a2c", "#0a1320", "#050912"]}
         style={styles.bg}
@@ -213,12 +301,48 @@ if(!response.ok){
       source={{ uri: `${API_BASE_URL}/uploads/${userProfile.image}` }}
       style={styles.avatar}
     />
+    
+   
     <View style={styles.user}>
       <Text style={styles.username}>{userProfile.name}</Text>
       <Text style={styles.handle}>{userProfile.email}</Text>
     </View>
   </View>
 )}
+
+<ScrollView horizontal showsHorizontalScrollIndicator={false}>
+  {displayimage &&
+  images.map((img, index) => (
+    <View key={index} style={styles.previewCard}>
+      <Image source={{ uri: `${API_BASE_URL}/${img.uri}` }} style={styles.previewImage} />
+
+      <TouchableOpacity
+        style={styles.closeBtn}
+        onPress={() =>
+          Setimages(prev => prev.filter((_, i) => i !== index))
+        }
+      >
+        <Text>✕</Text>
+      </TouchableOpacity>
+    </View>
+  ))}
+  {displayvideo && 
+  videos.map((img, index) => (
+    <View key={index} style={styles.previewCard}>
+      <Video source={{ uri: `${API_BASE_URL}/${img.uri}` }} style={styles.previewVideo} isLooping={true} useNativeControls={true}/>
+
+      <TouchableOpacity
+        style={styles.closeBtn}
+        onPress={() =>
+          SetVideos(prev => prev.filter((_, i) => i !== index))
+        }
+      >
+        <Text>✕</Text>
+      </TouchableOpacity>
+    </View>
+  ))
+  }
+</ScrollView>
 
 
           <TextInput
@@ -231,31 +355,20 @@ if(!response.ok){
             textAlignVertical="top"
             numberOfLines={6}
           />
-          {display && (
-<ImageBackground
-source={{uri:image ? image: null}}
-style={styles.storyImage}
-imageStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20 }}
->
-  <TouchableOpacity onPress={()=>setdisplay(false)}>
-  <Text style={styles.cancelstyle}>Cancel</Text>
-  </TouchableOpacity>
-</ImageBackground>
-          )}
+          
+          
           <View style={styles.toolbar}>
             <View style={styles.iconRow}>
-              <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={handleimage}>
-                <Text style={styles.iconEmoji}>🖼️</Text>
+              <TouchableOpacity style={[styles.iconBtn,images.length>=maxMedia && {opacity:0.5}]} activeOpacity={0.8} onPress={handleimage} disabled={images.length>=maxMedia}>
+                <Text style={styles.iconEmoji}>  <Feather name="image" size={22} color="#fff" /></Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-                <Text style={styles.iconEmoji}>📎</Text>
+              <TouchableOpacity style={[styles.iconBtn,videos.length>=maxVideo &&{opacity:0.5}]} activeOpacity={0.8} onPress={openFile} disabled={videos.length>=maxVideo}>
+                <Text style={styles.iconEmoji}><Feather name="video" size={22} color="#fff" /></Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-                <Text style={styles.iconEmoji}>📍</Text>
+               <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
+                <Text style={styles.iconEmoji}>🎙️ Go Live</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-                <Text style={styles.iconEmoji}>🎨</Text>
-              </TouchableOpacity>
+           
             </View>
 
             <Animated.View style={{ transform: [{ scale: btnScale }] }}>
@@ -274,11 +387,29 @@ imageStyle={{ borderTopLeftRadius: 20, borderTopRightRadius: 20 }}
                 >
                   <Text style={styles.postBtnText}>Post</Text>
                 </LinearGradient>
+                </TouchableOpacity>
+                <TouchableOpacity
+                activeOpacity={0.9}
+                onPressIn={onPressIn}
+                onPressOut={onPressOut}
+                style={styles.postBtnWrapper}
+                onPress={()=>navigation.goBack()}
+              >
+                <LinearGradient
+                  colors={["#1f1f2e", "#2a2a3c"]}
+                  start={[0, 0]}
+                  end={[1, 0]}
+                  style={styles.postBtn}
+                >
+                  <Text style={styles.postBtnTexta}>Cancel</Text>
+
+                </LinearGradient>
               </TouchableOpacity>
             </Animated.View>
           </View>
         </BlurView>
       </LinearGradient>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
@@ -410,4 +541,63 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: "center",
   },
+  postBtnTexta: {
+    color: "white",
+    fontWeight: "800",
+    fontSize: 15,
+    textAlign: "center",
+  },
+  previewContainer: {
+    width: "100%",
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  
+  previewCard: {
+    width: "100%",
+    height: 240,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "rgba(10,18,32,0.9)",
+    position: "relative",
+  
+    // matches composer shadow style
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+  },
+  
+  previewImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  
+  previewVideo: {
+    width: "100%",
+    height: "100%",
+  },
+  
+  closeBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  
+  closeText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  
 });
