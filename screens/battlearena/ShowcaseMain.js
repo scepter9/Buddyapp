@@ -34,41 +34,9 @@ const CATEGORIES = [
   { id: "open", emoji: "🧩", title: "Open Talent", subtitle: "Anything goes — surprise us!" },
 ];
 
-const FEED = [
-  {
-    id: "1",
-    image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=60",
-    title: "Hope — UI Redesign Reel",
-    desc: "30s breakdown of a campus app concept — motion + color study.",
-    author: "Hope Mark",
-    meta: "Computer Eng • 2h ago",
-    reactions: "❤️ 1.2k • 💬 120",
-  },
-  {
-    id: "2",
-    image: "https://images.unsplash.com/photo-1516574187841-cb9cc2ca948b?auto=format&fit=crop&w=1200&q=60",
-    title: "Ada — Mini API Demo",
-    desc: "60s demo: from Postman to preview — serverless backend in 90s.",
-    author: "Ada C.",
-    meta: "Software • 4h ago",
-    reactions: "🔥 980 • 💬 86",
-  },
-  {
-    id: "3",
-    image: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=60",
-    title: "Chika — Campus Freestyle",
-    desc: "Short rap about exams — raw and unfiltered.",
-    author: "Chika O.",
-    meta: "Arts • 1d ago",
-    reactions: "✨ 710 • 💬 45",
-  },
-];
 
-const LEADERS = [
-  { id: "l1", name: "Hope Mark", rank: 1, xp: "1.2k" },
-  { id: "l2", name: "Ada C.", rank: 2, xp: "980" },
-  { id: "l3", name: "Chika O.", rank: 3, xp: "820" },
-];
+
+
 
 export default function ShowcaseMain({navigation}) {
 

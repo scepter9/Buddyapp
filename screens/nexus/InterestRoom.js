@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext} from 'react';
+import React, { useEffect, useState, useContext,createContext} from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,8 @@ import {
   SafeAreaView,
   FlatList,
   Alert,
-  Modal
+  Modal,
+  Image
 } from 'react-native';
 import BottomNavigator from '../BottomNavigator';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,14 +23,32 @@ import { FontAwesome } from "@expo/vector-icons";
 
 function ActiveRooms({ item, navigation,variant ,isjoined}) {
   const { user } = useContext(AuthorContext);
+
   const sender = user?.id;
 
+  
  
   const [openmodal, setopenmodal] = useState(false);
   const [joined,setjoined]=useState(false)
   const [title, setTitle] = useState('');
   const [checkvalue, setcheckvalue] = useState(false);
-  const storagekey = `${item?.id}_key`;
+const [roomusers,setRoomusers]=useState([])
+  
+  useEffect(()=>{
+    const thefetched=async()=>{
+        try{
+      const res=await fetch(`${API_BASE_URL}/imagefromusers?roomidforimage=${item.id}`)
+      if(!res.ok){
+        console.log('something is wrong');
+      }
+      const data=await res.json()
+      setRoomusers(data)
+    }catch(err){
+      throw new Error(err)
+    }
+  }
+  thefetched()
+  },[])
   const checkPassword = async () => {
     if (title.trim().length === 0) {
       Alert.alert('Please input a value');
@@ -61,7 +80,7 @@ function ActiveRooms({ item, navigation,variant ,isjoined}) {
       setcheckvalue(false);
       setopenmodal(false);
       setjoined(true);
-      navigation.navigate('DesignersHubScreen', { roomid: item.id });
+      navigation.navigate('DesignersHubScreen',{ roomid:item.id ,roomname:item.roomname,roomcreator:item.creatorid});
   
     } catch (err) {
       console.log('Failed to join private room', err);
@@ -87,7 +106,7 @@ userid:sender,
       const data=await res.json()
       if(data!==null) {  
        
-        navigation.navigate('DesignersHubScreen', { roomid: valid });
+        navigation.navigate('DesignersHubScreen',{ roomid:item.id ,roomname:item.roomname,roomcreator:item.creatorid});
         
     }else if(data==null && item.selectmode === 'public'){
 
@@ -96,13 +115,17 @@ userid:sender,
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ valid, sender }),
+          body: JSON.stringify({
+            roomid: valid,
+            userid: sender,
+          }),
+          
         });
   
         if (!res2.ok) {
           console.log('An error occurred');
         }
-        navigation.navigate('DesignersHubScreen',{roomid:valid})
+        navigation.navigate('DesignersHubScreen', { roomid: valid ,roomname:item.roomname});
       
     }else if (item.selectmode === 'private') {
       setopenmodal(true);
@@ -166,13 +189,31 @@ userid:sender,
       {/* Room Card */}
       <View style={styles.spaceTop}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <View style={styles.roomIcon}>
-            <Text style={{ fontSize: 20 }}>{item.icon ||<FontAwesome name="comments" size={20} color="#fff" />
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+  {item.icon ? (
+    <Text style={{ fontSize: 20 }}>{item.icon}</Text>
+  ) : (
+    <FontAwesome name="comments" size={20} color="#fff" />
+  )}
+</View>
 
-}</Text>
-          </View>
           <View>
             <Text style={styles.roomName}># {item.roomname}</Text>
+            {roomusers.map((uri, index) => (
+  <View
+    key={index}
+    style={[
+      styles.image,
+      { marginLeft: index === 0 ? 0 : -20, zIndex: roomusers.length - index },
+    ]}
+  >
+    <Image
+      source={{ uri: `${API_BASE_URL}/uploads/${uri}` }}
+      style={StyleSheet.absoluteFillObject}
+    />
+  </View>
+))}
+
             <Text style={styles.roomMeta}>{item.members_count || 'No'} members</Text>
           </View>
         </View>
@@ -189,6 +230,7 @@ userid:sender,
           {isjoined ? 'View' : 'Join'}
         </Text>
       </TouchableOpacity>
+   
     </View>
   );
 }
@@ -724,4 +766,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 15,
   },
+  image:{
+    width:30,
+    height:30,
+    borderRadius:15,
+    borderWidth:3,
+    borderColor:'#fff',
+    overflow:'hidden',
+    alignItems:'center',
+    justifyContent:'center',
+    position:'relative'
+
+  }
 });

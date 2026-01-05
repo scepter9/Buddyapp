@@ -187,6 +187,7 @@ const VideoItem = ({ item, navigation, onLikeUpdate, isActive, socket, userValue
     });
   
     return () => {
+      socket.emit('LeaveComment',item.id);
       socket.off("connect");
       socket.off("NewComment");
     };

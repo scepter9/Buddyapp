@@ -1501,46 +1501,76 @@ app.get('/searchmeetupusers', (req, res) => {
 app.get('/api/matches',(req,res)=>{
   const {userId}=req.query;
   const sql = `
+  WITH shared_all AS (
     SELECT
-    m.other_user_id AS id,
-    p.FULLNAME,
-    p.image,
-    m.match_count,
-    tq.total_questions,
-    ROUND( (m.match_count / tq.total_questions) * 100, 2 ) AS percent_match
-  FROM (
+      a1.user_id AS base_user,
+      a2.user_id AS other_user,
+      a1.question_id
+      from user_answers a1
+    JOIN user_answers a2
+      ON a1.question_id = a2.question_id
+     AND a1.answer = a2.answer
+     AND a1.user_id <> a2.user_id
+    WHERE a1.user_id = ?
+  ),
+  
+  similarity AS (
     SELECT
-      ua2.user_id AS other_user_id,
-      COUNT(*) AS match_count
-    FROM user_answers ua1
-    JOIN user_answers ua2
-      ON ua1.question_id = ua2.question_id
-     AND ua1.answer = ua2.answer
-    WHERE ua1.user_id = ?
-      AND ua2.user_id != ?
-    GROUP BY ua2.user_id
-  ) AS m
-  JOIN (
-    SELECT COUNT(DISTINCT question_id) AS total_questions
-    FROM user_answers
-    WHERE user_id = ?
-  ) AS tq
-    ON 1=1
-  JOIN projecttables p ON p.ID = m.other_user_id
-  WHERE (m.match_count / tq.total_questions) >= 0.5
-  ORDER BY (m.match_count / tq.total_questions) DESC, m.match_count DESC
+      other_user,
+      COUNT(*) / 20 * 100 AS similarity_percent
+    FROM shared_all 
+    GROUP BY other_user
+  ),
+  
+  shared_first_10 AS (
+    SELECT
+      a2.user_id AS other_user,
+      a1.answer,
+      ROW_NUMBER() OVER (
+        PARTITION BY a2.user_id
+        ORDER BY rand()
+      ) AS rn
+    FROM user_answers a1
+    JOIN user_answers a2
+      ON a1.question_id = a2.question_id
+     AND a1.answer = a2.answer
+     AND a1.user_id <> a2.user_id
+    WHERE a1.user_id = ?
+      AND a1.question_id <= 10
+  ),
+  
+  picked_two AS (
+    SELECT *
+    FROM shared_first_10
+    WHERE rn <= 2
+  )
+  
+  SELECT
+    s.other_user,
+    s.similarity_percent,
+    c.FULLNAME as thename,
+      c.image as theimage,
+    MAX(CASE WHEN p.rn = 1 THEN p.answer END) AS shared_answer_1,
+    MAX(CASE WHEN p.rn = 2 THEN p.answer END) AS shared_answer_2
+  FROM similarity s 
+  LEFT JOIN projecttables c ON s.other_user=c.ID
+  LEFT JOIN picked_two p
+    ON s.other_user = p.other_user
+  GROUP BY
+    s.other_user,
+    s.similarity_percent
+  ORDER BY s.similarity_percent DESC
   LIMIT 100;
+  
     `;
-    db.query(sql,[userId,userId,userId],(err,result)=>{
+    db.query(sql,[userId,userId],(err,result)=>{
       if(err){
         res.status(500).json({error:'An error occured'})
       }
       res.json(result)
     })
 })
-// Assuming you already created io with socket.io
-// const server = http.createServer(app);
-// const io = new Server(server, { cors: { origin: "*" } });
+
 
 app.post('/postscorevalue', (req, res) => {
   const { username, score } = req.body;
@@ -2519,7 +2549,9 @@ io.on('connection', (socket) => {
       }
     });
   });
-
+  socket.on('LeaveComment',(videoId)=>{
+    socket.leave(videoId)
+  })
 });
 
 app.get('/getshowcaserank', (req, res) => {
@@ -2690,6 +2722,128 @@ app.post('/join-private-room', (req, res) => {
     }
   );
 });
+app.post('/postscreen', (req, res) => {
+  const { searchid, roomid, posttext, sentimage, sentvideo } = req.body;
+
+  db.query(
+    `INSERT INTO roomposts(sender_id, post, room_of_posts_id, postvideo, postimage) 
+     VALUES (?, ?, ?, ?, ?)`,
+    [searchid, posttext, roomid, JSON.stringify(sentvideo), JSON.stringify(sentimage)],
+    (err, result) => {
+      if (err) {
+        console.log(err); // log the actual error
+        return res.status(500).json({ error: 'An error occurred' });
+      }
+      res.status(200).json({ success: true });
+    }
+  );
+});
+
+app.get('/getroom',(req,res)=>{
+  const {roomid}=req.query;
+  db.query(`select cr.id,cr.sender_id,cr.post,cr.posted_at,cr.room_of_posts_id,
+  cr.postvideo,cr.postimage,a.USERNAME as usersname,a.image 
+   from roomposts cr  inner join projecttables a on cr.sender_id=a.ID where cr.room_of_posts_id=? order by  cr.posted_at desc`,[roomid],(err,result)=>{
+if(err){
+  res.status(500).json({error:'An error occured'})
+}
+res.json(result)
+   })
+})
+
+const roomOnlineUsers = new Map();
+io.on('connection',(socket)=>{
+  let roomid=null
+  const userId = socket.handshake.query.userId;
+  socket.on('joingrouproom',(receiveroomid)=>{
+roomid=receiveroomid
+socket.join(receiveroomid)
+  })
+  if (!roomOnlineUsers.has(roomid)) {
+    roomOnlineUsers.set(roomid, new Set());
+  }
+
+  roomOnlineUsers.get(roomid).add(userId);
+
+  io.to(roomid).emit(
+    "online-count",
+    roomOnlineUsers.get(roomid).size
+  );
+  socket.on('sendimage',(image)=>{
+    if(!roomid) console.log('no roomid');
+ 
+db.query(`update createinterestroom set  room_image=? where id=?`,[image,roomid],(err,result)=>{
+  if(err){
+    console.log(err);
+    return;
+  }
+  db.query(`select room_image from createinterestroom where id=? `,[roomid],(err,result)=>{
+    if(err){
+      console.log(err);
+      return;
+    }
+    io.to(roomid).emit('getimage',result[0].room_image)
+
+  })
+})
+    })
+    socket.on('updatebio',(data)=>{
+      db.query(`update createinterestroom set roombio=? where id=?`,[data,roomid],(err,result)=>{
+        if(err){
+          console.log(err);
+          return;
+        }
+        db.query(`select roombio from createinterestroom where id=?`,[roomid],(err,result)=>{
+          if(err){
+            console.log(err);
+            return;
+          }
+          const roombioformat=result[0].roombio
+          io.to(roomid).emit('gottenbio',roombioformat)
+        })
+      })
+    })
+
+    socket.on("disconnect", () => {
+      for (const [roomid, users] of roomOnlineUsers.entries()) {
+        if (users.has(userId)) {
+          users.delete(userId);
+  
+          io.to(roomid).emit(
+            "online-count",
+            users.size
+          );
+  
+          if (users.size === 0) {
+            roomOnlineUsers.delete(roomId);
+          }
+        }
+      }
+    });
+  })
+
+
+app.get('/roomimage',(req,res)=>{
+  const {roompassid}=req.query
+  db.query(`select room_image,roombio from createinterestroom where id=?`,[roompassid],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:'An database error occured'})
+    }
+    res.json(result[0])
+  })
+})
+
+app.get('/imagefromusers',(req,res)=>{
+  const {roomidforimage}=req.query
+  db.query(`select cr.id,cr.roomid,a.image from roomparticipants cr 
+  inner join projecttables a on cr.userid=a.ID where cr.userid=? order by cr.joined desc limit 5`,[roomidforimage],(err,result)=>{
+    if(err){
+    return res.status(500).json({error:'An error occured'})
+    }
+    res.json(result)
+  })
+})
+
 
 server.listen(3000, () => {
   console.log('Server running on http://localhost:3000');

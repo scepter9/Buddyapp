@@ -31,11 +31,11 @@ import { Feather } from "@expo/vector-icons";
 
 
 export default function NewPostScreen({navigation,route}) {
-  const {room}=route?.params
+
   const {user}=useContext(AuthorContext)
   const searchid=user?.id;
 
-  
+  const socketref=useRef(null)
     const [userProfile,setUserProfile]=useState(null)
    
     const [posttext,Setposttext]=useState('');
@@ -46,6 +46,14 @@ const [images,Setimages]=useState([])
 const [videos,SetVideos]=useState([])
 const [displayimage,setdisplayimage]=useState(false)
 const [displayvideo,setdisplayvid]=useState(false)
+useEffect(()=>{
+  const postroominsocket=io(API_BASE_URL,{
+    query:{userId:searchid},
+    transports:['websocket']
+  })
+  socketref.current=postroominsocket
+  postroominsocket.off()
+},[searchid])
 
     useEffect(()=>{
         const fetchsendPost=async()=>{
@@ -67,6 +75,12 @@ const [displayvideo,setdisplayvid]=useState(false)
    
         
         const postNewtext = async () => {
+          const roomid = route?.params?.roomid ;
+          if (!roomid) {
+            console.log('Room ID is missing, cannot post');
+            return;
+          }
+          
           try {
             // block empty post
             if (!posttext && images.length === 0 && videos.length === 0) return;
@@ -119,6 +133,7 @@ const [displayvideo,setdisplayvid]=useState(false)
               const Postvideodata = await Postvideo.json();
               sentvideo = Postvideodata.videoUrls || [];
             }
+           
         
             /* ---------- CREATE POST ---------- */
             const res = await fetch(`${API_BASE_URL}/postscreen`, {
@@ -126,7 +141,7 @@ const [displayvideo,setdisplayvid]=useState(false)
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 searchid,
-                room,
+                roomid,
                 posttext,
                 sentimage,
                 sentvideo,
@@ -138,7 +153,7 @@ const [displayvideo,setdisplayvid]=useState(false)
           } catch (err) {
             console.log("Posting failed:", err.message);
           }finally{
-            navigation.navigate('DesignersHubScreen')
+          navigation.goBack()
           }
         };
         
@@ -178,6 +193,8 @@ const [displayvideo,setdisplayvid]=useState(false)
               }));
         
             Setimages((prev) => [...prev, ...pickedImages]);
+            
+
             setdisplayimage(true);
         
           } catch (err) {
@@ -310,11 +327,16 @@ const [displayvideo,setdisplayvid]=useState(false)
   </View>
 )}
 
-<ScrollView horizontal showsHorizontalScrollIndicator={false}>
+<ScrollView
+  horizontal
+  showsHorizontalScrollIndicator={false}
+  contentContainerStyle={{ paddingHorizontal: 10 }}
+>
+
   {displayimage &&
   images.map((img, index) => (
     <View key={index} style={styles.previewCard}>
-      <Image source={{ uri: `${API_BASE_URL}/${img.uri}` }} style={styles.previewImage} />
+      <Image source={{ uri: img.uri }} style={styles.previewImage} />
 
       <TouchableOpacity
         style={styles.closeBtn}
@@ -329,7 +351,7 @@ const [displayvideo,setdisplayvid]=useState(false)
   {displayvideo && 
   videos.map((img, index) => (
     <View key={index} style={styles.previewCard}>
-      <Video source={{ uri: `${API_BASE_URL}/${img.uri}` }} style={styles.previewVideo} isLooping={true} useNativeControls={true}/>
+      <Video source={{ uri:img.uri }} style={styles.previewVideo} isLooping={true} useNativeControls={true}/>
 
       <TouchableOpacity
         style={styles.closeBtn}
@@ -348,7 +370,7 @@ const [displayvideo,setdisplayvid]=useState(false)
           <TextInput
           value={posttext}
           onChangeText={Setposttext}
-            placeholder="What's inspiring you today? ✨ #DesignersHub"
+            placeholder="What's inspiring you today? ✨ "
             placeholderTextColor="rgba(255,255,255,0.45)"
             style={styles.textarea}
             multiline
@@ -365,9 +387,7 @@ const [displayvideo,setdisplayvid]=useState(false)
               <TouchableOpacity style={[styles.iconBtn,videos.length>=maxVideo &&{opacity:0.5}]} activeOpacity={0.8} onPress={openFile} disabled={videos.length>=maxVideo}>
                 <Text style={styles.iconEmoji}><Feather name="video" size={22} color="#fff" /></Text>
               </TouchableOpacity>
-               <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-                <Text style={styles.iconEmoji}>🎙️ Go Live</Text>
-              </TouchableOpacity>
+              
            
             </View>
 
@@ -554,20 +574,21 @@ const styles = StyleSheet.create({
   },
   
   previewCard: {
-    width: "100%",
+    width: 220, // 🔥 REQUIRED for horizontal scrolling
     height: 240,
     borderRadius: 18,
     overflow: "hidden",
     backgroundColor: "rgba(10,18,32,0.9)",
+    marginRight: 14,
     position: "relative",
-  
-    // matches composer shadow style
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
   },
+  
+  previewImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  
   
   previewImage: {
     width: "100%",
@@ -587,7 +608,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor:"#fff",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
