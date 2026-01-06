@@ -2758,17 +2758,18 @@ io.on('connection',(socket)=>{
   socket.on('joingrouproom',(receiveroomid)=>{
 roomid=receiveroomid
 socket.join(receiveroomid)
+if (!roomOnlineUsers.has(roomid)) {
+  roomOnlineUsers.set(roomid, new Set());
+}
+
+roomOnlineUsers.get(roomid).add(userId);
+
+io.to(roomid).emit(
+  "online-count",
+  roomOnlineUsers.get(roomid).size
+);
   })
-  if (!roomOnlineUsers.has(roomid)) {
-    roomOnlineUsers.set(roomid, new Set());
-  }
-
-  roomOnlineUsers.get(roomid).add(userId);
-
-  io.to(roomid).emit(
-    "online-count",
-    roomOnlineUsers.get(roomid).size
-  );
+ 
   socket.on('sendimage',(image)=>{
     if(!roomid) console.log('no roomid');
  
@@ -2815,7 +2816,7 @@ db.query(`update createinterestroom set  room_image=? where id=?`,[image,roomid]
           );
   
           if (users.size === 0) {
-            roomOnlineUsers.delete(roomId);
+            roomOnlineUsers.delete(roomid);
           }
         }
       }

@@ -12,9 +12,12 @@ import {
   TouchableWithoutFeedback,
   Alert,
   TextInput,
-  Keyboard 
+  Keyboard ,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 
+import { useFocusEffect } from "@react-navigation/native";
 
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from 'expo-image-picker';
@@ -26,6 +29,7 @@ const API_BASE_URL = "http://192.168.0.136:3000";
 import { io } from "socket.io-client";
 
 import { Video } from "expo-av";
+import { values } from "lodash";
 // Separate Component for Post Items
 const PostChild = ({ item ,user}) => {
   const searchid = user?.id;
@@ -60,50 +64,63 @@ if(err){
     if (days < 30) return `${days}d ago`;
     return `${Math.floor(days / 30)}mo ago`;
   };
-
-  const count=item.postimage?.length || 0;
-  const countvi=item.postvideo?.length || 0;
+  const safeParse = (data) => {
+    if (!data) return [];
+    if (typeof data === "string") {
+      try {
+        return JSON.parse(data);
+      } catch (e) {
+        console.warn("Failed to parse JSON:", data);
+        return [];
+      }
+    }
+    // Already an array
+    if (Array.isArray(data)) return data;
+  
+    // Fallback for anything else
+    return [];
+  };
+  
+  const postImages = safeParse(item.postimage);
+  const postVideos = safeParse(item.postvideo);
+  
+  
+  const count = postImages.length;
+  const countvi = postVideos.length;
+  
   let Itemwidth;
   let Itemwidtha;
-  if
-  (count===1){
-Itemwidth='80%'
-  }else if(count===2){
-    Itemwidth='48%'
-  }else if(count===3){
-    Itemwidth='48%'
-  }else{
-    Itemwidth='31%'
-  };
-   if
-  (countvi===1){
-Itemwidtha='80%'
-  }else if(countvi===2){
-    Itemwidtha='48%'
-  }else if(countvi===3){
-    Itemwidtha='48%'
-  }else{
-    Itemwidtha='31%'
-  }
+  
+  if (count === 1) Itemwidth = '80%';
+  else if (count === 2) Itemwidth = '48%';
+  else if (count === 3) Itemwidth = '48%';
+  else Itemwidth = '31%';
+  
+  if (countvi === 1) Itemwidtha = '80%';
+  else if (countvi === 2) Itemwidtha = '48%';
+  else if (countvi === 3) Itemwidtha = '48%';
+  else Itemwidtha = '31%';
+  
+  
     
   
   return (
     <BlurView intensity={50} tint="dark" style={styles.post}>
       <View style={styles.userRow}>
-        <Image source={{ uri: `${API_BASE_URL}/${item.image}` || 'https://via.placeholder.com/100' }} style={styles.avatar} />
+        <Image source={{ uri: `${API_BASE_URL}/uploads/${item.image}` || 'https://via.placeholder.com/100' }} style={styles.avatar} />
         <View style={styles.userInfo}>
           <Text style={styles.username}>{item.usersname}</Text>
           <Text style={styles.time}>{getTimestamp(item.posted_at)}</Text>
         </View>
       </View>
       <Text style={styles.postText}>{item.post ?item.post :''}</Text>
-      {item.postimage.length>0 && 
+      {postImages.length>0 && 
 <View style={styles.mediacontainer} >
- {item.postimage.map((uri,index)=>(
+ {postImages.map((uri,index)=>(
   <View key={index} style={[styles.postitem, {width:Itemwidth},count===3 && index===2 && styles.center]}
   onPress={()=>navigation.navigate('ViewImage',{imagevalue:`${API_BASE_URL}/${uri}`})}
   >
-    <Image source={{uri:`${API_BASE_URL}/${uri}`}} resizeMode="cover" style={styles.postitemimage}/>
+    <Image source={{uri:`${API_BASE_URL}${uri}`}} resizeMode="cover" style={styles.postitemimage}/>
   </View>
  ))}
  
@@ -111,13 +128,13 @@ Itemwidtha='80%'
 </View>
 }
 
-{item.postvideo.length>0 && 
+{postVideos.length>0 && 
 <View style={styles.mediacontainer} >
- {item.postvideo.map((uri,index)=>(
+ {postVideos.map((uri,index)=>(
   <View key={index} style={[styles.postitem, {width:Itemwidtha},count===3 && index===2 && styles.center]}
   onPress={()=>navigation.navigate('ViewImage',{imagevalue:`${API_BASE_URL}/${uri}`})}
   >
-    <Video source={{uri:`${API_BASE_URL}/${uri}`}} isLooping={true} useNativeControls={true} style={styles.postitemimage}/>
+    <Video source={{uri:`${API_BASE_URL}${uri}`}} isLooping={true} useNativeControls={true} style={styles.postitemimage}/>
   </View>
  ))}
  
@@ -160,17 +177,17 @@ const isAdmin=searchid===roomcreator
     socketref.current=postsocket
     postsocket.emit("joingrouproom", roomid);
   
-    postsocket.on("getimage", (data) => {
-      Setroomimage(data);
-    });
-  
+   
+
     postsocket.on("online-count", (Count)=>{
       setOnlineCount(Count)
+console.log(Count);
     });
 
   
     return () => {
       postsocket.disconnect();
+      postsocket.off("online-count")
     };
   }, [searchid, roomid]);
   
@@ -192,7 +209,7 @@ const isAdmin=searchid===roomcreator
   useCallback(() => {
     const getRoomposts = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/getrooom?roomid=${roomid}`);
+        const res = await fetch(`${API_BASE_URL}/getroom?roomid=${roomid}`);
         if (!res.ok) throw new Error("Network response was not ok");
         const data = await res.json();
         setPostarray(data);
@@ -221,7 +238,13 @@ useEffect(()=>{
 }
 fetchroompicture()
 },[roomid])
-  
+  useEffect(()=>{
+    if(!socketref.current && roomimage==!null) return;
+    socketref.current.on('getimage',(value)=>{
+Setroomimage(value)
+    })
+    return()=>socketref.current.off('getimage')
+  })
   const handleimage = async () => {
     
      
@@ -275,12 +298,12 @@ throw new Error("something is wrong")
   
    
   };
-  const handlebio=()=>{
-    if(biotext.trim()==="" && !socketref) return
-setbiostore("")
-socketref.current?.emit('updatebio',biotext)
-
+  const handlebio = () => {
+    if (!biotext.trim()) return;
+    socketref.current?.emit('updatebio', biotext);
+    Setbiomodal(false); // close modal after sending
   }
+  
   return (
     <LinearGradient colors={["#0b0f14", "#111827"]} style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
@@ -290,7 +313,7 @@ socketref.current?.emit('updatebio',biotext)
   style={styles.header}
   source={
     roomimage
-      ? { uri: `${API_BASE_URL}/${roomimage}` }
+      ? { uri: `${API_BASE_URL}${roomimage}` }
       : null
   }
   
@@ -686,7 +709,7 @@ const styles = StyleSheet.create({
   },
   mediacontainer:{
     flexDirection:'row',
-    flexWrap:wrap,
+    flexWrap:'wrap',
     justifyContent:'flex-start',
     paddingHorizontal:5
   },

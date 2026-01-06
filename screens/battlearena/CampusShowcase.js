@@ -64,12 +64,12 @@ const VideoItem = ({ item, navigation, onLikeUpdate, isActive, socket, userValue
   
     const fetchlike = async () => {
       try {
-        const params = new URLSearchParams({
-          user: userId,
-          video: item.id,
-        });
+     
   
-        const res = await fetch(`${API_BASE_URL}/Firstlikesearch?${params}`);
+        const res = await fetch(
+          `${API_BASE_URL}/Firstlikesearch?user=${userId}&video=${item.id}`
+        );
+        
         const data = await res.json();
   
         setLiked(data.length > 0);
@@ -132,12 +132,9 @@ const VideoItem = ({ item, navigation, onLikeUpdate, isActive, socket, userValue
   useEffect(() => {
     const loadComments = async () => {
       try {
-        const params = new URLSearchParams({
-          userId: userId,
-          videovalue: item.id, 
-        });
+       
 
-        const res = await fetch(`${API_BASE_URL}/fetchingcomment?${params.toString()}`);
+        const res = await fetch(`${API_BASE_URL}/fetchingcomment?userId=${userId}&videovalue=${item.id}` );
 
         if (!res.ok) {
           console.log("Error fetching comments");
@@ -154,6 +151,12 @@ const VideoItem = ({ item, navigation, onLikeUpdate, isActive, socket, userValue
     loadComments();
   }, [ item.id]);
 
+
+  useEffect(() => {
+    return () => animatedSize.stopAnimation();
+  }, []);
+  
+
   /*
   |--------------------------------------------------------------------------
   | 4. Join Comment Socket Room
@@ -162,36 +165,35 @@ const VideoItem = ({ item, navigation, onLikeUpdate, isActive, socket, userValue
   useEffect(() => {
     if (!socket || !item.id) return;
   
-    // Always join room (even if already connected)
-    if (socket.connected) {
-      socket.emit("JoinComment", item.id);
-    }
+    const joinRoom = () => socket.emit("JoinComment", item.id);
   
-    // If connection happens later
-    socket.on("connect", () => {
-      socket.emit("JoinComment", item.id);
-    });
+    if (socket.connected) joinRoom();
+    socket.on("connect", joinRoom);
   
     socket.on("NewComment", (value) => {
-      const newMsg = {
-        id: value.id,
-        videoid: value.videoid,
-        userid: value.userid,
-        actaul_comment: value.actaul_comment,
-        usersname: value.usersname,
-        usersimage: value.usersimage,
-      };
-  
-      setComments((prev) => [ ...prev,newMsg]);
-      // onLikeUpdate?.(value.videoid, null, "comment");
+      if(value.videoid!==item.id) return
+      setComments(prev => 
+        {
+          if(prev.some(c=>c.id===value.id)) return
+          return [...prev, {
+            id: value.id,
+            videoid: value.videoid,
+            userid: value.userid,
+            actaul_comment: value.actaul_comment,
+            usersname: value.usersname,
+            usersimage: value.usersimage,
+          }]
+        }
+        );
     });
   
     return () => {
-      socket.emit('LeaveComment',item.id);
-      socket.off("connect");
+      socket.emit("LeaveComment", item.id);
+      socket.off("connect", joinRoom);
       socket.off("NewComment");
     };
   }, [socket, item.id]);
+  
   
 
   /*
@@ -586,11 +588,9 @@ useEffect(() => {
 
       // 🔵 PRIORITY 2: Showcase filter
       else if (show !== undefined && show !== null) {
-        const details = new URLSearchParams({
-          showcase: show,
-          userId: myuserid,
-        });
-        response = await fetch(`${API_BASE_URL}/getshowcase?${details}`);
+       
+        response =  await fetch(
+          `${API_BASE_URL}/getshowcase?showcase=${show}&userId=${myuserid}`);
       }
 //priority 3 :Trending
 else if(trending!==undefined && trending!=null){
@@ -710,7 +710,7 @@ useEffect(()=>{
       renderItem={({ item ,index}) => <VideoItem item={item} userValue={myuserid} navigation={navigation} onLikeUpdate={videoLiking} isActive={index===activeIndex} socket={socket}/>}
       pagingEnabled
       showsVerticalScrollIndicator={false}
-      keyExtractor={(item) => `active-${item?.id}`}
+      keyExtractor={(item) =>item?.id ?`active-${item?.id}`:`active-fall-${index}`}
       onViewableItemsChanged={onViewableItemsChange}
       viewabilityConfig={viewConfigRef.current}
     

@@ -48,7 +48,7 @@ const [roomusers,setRoomusers]=useState([])
     }
   }
   thefetched()
-  },[])
+  },[item.id])
   const checkPassword = async () => {
     if (title.trim().length === 0) {
       Alert.alert('Please input a value');
@@ -93,12 +93,11 @@ const [roomusers,setRoomusers]=useState([])
   const handlemodes = async () => {
     const valid = item.id;
     try{
-      const paramsva=new URLSearchParams({
-userid:sender,
-        room_id:valid
-
-      })
-      const res=await fetch(`${API_BASE_URL}/checkroommembers?${paramsva}`);
+    
+      const res = await fetch(
+        `${API_BASE_URL}/checkroommembers?userid=${sender}&room_id=${valid}`
+      );
+      
       if(!res.ok){
         console.log('Something is wrong');
         return;
@@ -199,20 +198,23 @@ userid:sender,
 
           <View>
             <Text style={styles.roomName}># {item.roomname}</Text>
-            {roomusers.map((uri, index) => (
-  <View
-    key={index}
-    style={[
-      styles.image,
-      { marginLeft: index === 0 ? 0 : -20, zIndex: roomusers.length - index },
-    ]}
-  >
-    <Image
-      source={{ uri: `${API_BASE_URL}/uploads/${uri}` }}
-      style={StyleSheet.absoluteFillObject}
-    />
-  </View>
-))}
+            <View style={{ flexDirection: 'row', marginTop: 6 }}>
+  {roomusers.map((uri, index) => (
+    <View
+      key={index}
+      style={[
+        styles.image,
+        { marginLeft: index === 0 ? 0 : -12 }
+      ]}
+    >
+      <Image
+        source={{ uri: `${API_BASE_URL}/uploads/${uri.image}` }}
+        style={StyleSheet.absoluteFillObject}
+      />
+    </View>
+  ))}
+</View>
+
 
             <Text style={styles.roomMeta}>{item.members_count || 'No'} members</Text>
           </View>
@@ -767,11 +769,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   image:{
-    width:30,
-    height:30,
-    borderRadius:15,
-    borderWidth:3,
-    borderColor:'#fff',
+    width:40,
+    height:40,
+    borderRadius:20,
+    borderColor:'transparent',
     overflow:'hidden',
     alignItems:'center',
     justifyContent:'center',
