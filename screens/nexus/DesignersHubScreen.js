@@ -31,7 +31,7 @@ import { io } from "socket.io-client";
 import { Video } from "expo-av";
 import { values } from "lodash";
 // Separate Component for Post Items
-const PostChild = ({ item ,user}) => {
+const PostChild = ({ item ,user,navigation}) => {
   const searchid = user?.id;
   const roomdetais=item.id
 
@@ -85,62 +85,58 @@ if(err){
   const postVideos = safeParse(item.postvideo);
   
   
-  const count = postImages.length;
-  const countvi = postVideos.length;
-  
-  let Itemwidth;
-  let Itemwidtha;
-  
-  if (count === 1) Itemwidth = '80%';
-  else if (count === 2) Itemwidth = '48%';
-  else if (count === 3) Itemwidth = '48%';
-  else Itemwidth = '31%';
-  
-  if (countvi === 1) Itemwidtha = '80%';
-  else if (countvi === 2) Itemwidtha = '48%';
-  else if (countvi === 3) Itemwidtha = '48%';
-  else Itemwidtha = '31%';
   
   
-    
+  
+  
+  
+  
   
   return (
     <BlurView intensity={50} tint="dark" style={styles.post}>
       <View style={styles.userRow}>
         <Image source={{ uri: `${API_BASE_URL}/uploads/${item.image}` || 'https://via.placeholder.com/100' }} style={styles.avatar} />
         <View style={styles.userInfo}>
-          <Text style={styles.username}>{item.usersname}</Text>
+          <Text style={styles.username}>{item.fullname}</Text>
+          <Text style={styles.full}>@{item.usersname}</Text>
           <Text style={styles.time}>{getTimestamp(item.posted_at)}</Text>
         </View>
       </View>
       <Text style={styles.postText}>{item.post ?item.post :''}</Text>
-      {postImages.length>0 && 
-<View style={styles.mediacontainer} >
- {postImages.map((uri,index)=>(
-  <View key={index} style={[styles.postitem, {width:Itemwidth},count===3 && index===2 && styles.center]}
-  onPress={()=>navigation.navigate('ViewImage',{imagevalue:`${API_BASE_URL}/${uri}`})}
-  >
-    <Image source={{uri:`${API_BASE_URL}${uri}`}} resizeMode="cover" style={styles.postitemimage}/>
-  </View>
- ))}
- 
- 
-</View>
-}
+      {(postImages.length>0 || postVideos.length>0) &&(<View style={styles.mediacontainer}>
+        {[...postImages,...postVideos].map((uri,index)=>{
+const TotalItems=postImages.length + postVideos.length;
+    const fullUri=`${API_BASE_URL}${uri}`;
+    const isVideo=postVideos.some(vid=>vid===uri)
+    let itemWidth='100%'
+    if(TotalItems===2) itemWidth='49.5%'
+    if(TotalItems>=3) itemWidth='33%';
+    return(
+      <TouchableOpacity
+      key={index}
+      activeOpacity={0.8}
+      style={[styles.mediaitem,{width:itemWidth},TotalItems===3&&index===2&&styles.center]}
+      onPress={()=>navigation.navigate('ViewImage',{imagevalue:fullUri})}
+      >
+        {isVideo ?
+        <Video
+        isLooping={true}
+        useNativeControls
+        source={{uri:fullUri}}
+        resizeMode="cover"
+        style={styles.mediacontent}
+        />:(
+          <Image
+          source={{uri:fullUri}}
+          resizeMode="cover"
+          style={styles.mediacontent}
+          />
+        )}
+      </TouchableOpacity>
+    )    
+ })}
+      </View>)}
 
-{postVideos.length>0 && 
-<View style={styles.mediacontainer} >
- {postVideos.map((uri,index)=>(
-  <View key={index} style={[styles.postitem, {width:Itemwidtha},count===3 && index===2 && styles.center]}
-  onPress={()=>navigation.navigate('ViewImage',{imagevalue:`${API_BASE_URL}/${uri}`})}
-  >
-    <Video source={{uri:`${API_BASE_URL}${uri}`}} isLooping={true} useNativeControls={true} style={styles.postitemimage}/>
-  </View>
- ))}
- 
- 
-</View>
-}
      
       <View style={styles.reactions}>
         <TouchableOpacity ><Text style={styles.reactText}>❤️ {item.reactions?.heart || 0}</Text></TouchableOpacity>
@@ -161,8 +157,7 @@ export default function DesignersHubScreen({ navigation, route }) {
   const [roomimage,Setroomimage]=useState(null) 
   const [biomodal,Setbiomodal]=useState(false)
   const [biotext,Setbiotext]=useState("")
-  const [biostore,setbiostore]=useState(null)
-
+const [biostore,setbiostore]=useState(null)
 const isAdmin=searchid===roomcreator
   // Track online users (Note: This local set won't persist across users without a Socket/Backend)
   const [onlineCount, setOnlineCount] = useState(0);
@@ -201,11 +196,10 @@ console.log(Count);
     return () => {
       socketref.current.off("gottenbio");
     };
-  }, []);
+  }, [roomid]);
   
  
   useFocusEffect(
-
   useCallback(() => {
     const getRoomposts = async () => {
       try {
@@ -228,7 +222,7 @@ useEffect(()=>{
       if(!res.ok) throw new Error("An error occured")
     
   const data=await res.json()
-  Setroomimage(data.roomimage)
+  Setroomimage(data.room_image)
   setbiostore(data.roombio)
   
   }catch(err){
@@ -298,6 +292,10 @@ throw new Error("something is wrong")
   
    
   };
+  const openclosemodal=()=>{
+    setOpenModal(false)
+    Setbiomodal(true)
+  }
   const handlebio = () => {
     if (!biotext.trim()) return;
     socketref.current?.emit('updatebio', biotext);
@@ -314,7 +312,8 @@ throw new Error("something is wrong")
   source={
     roomimage
       ? { uri: `${API_BASE_URL}${roomimage}` }
-      : null
+      : {uri:`https://previews.123rf.com/images/krulua
+      /krulua1705/krulua170500084/78397913-social-media-vector-background-network-concept.jpg`}
   }
   
   imageStyle={styles.headerImage}
@@ -346,7 +345,7 @@ throw new Error("something is wrong")
     {biostore}
   </Text>
   
-    }
+    } 
   </View>
 </ImageBackground>
        
@@ -355,7 +354,7 @@ throw new Error("something is wrong")
         <FlatList
           data={postsarray}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => <PostChild item={item} navigation={navigation} user={user}/>}
+          renderItem={({ item }) => <PostChild item={item} navigation={navigation} user={user} />}
           contentContainerStyle={styles.scrollContent}
           ListEmptyComponent={<Text style={{color: 'white', textAlign: 'center', marginTop: 20}}>No posts yet.</Text>}
         />
@@ -389,7 +388,7 @@ throw new Error("something is wrong")
         <Text style={styles.modaltext}>🖼️ Change Wallpaper</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.modalItem,!isAdmin &&{opacity:0.5}]} onPress={()=>Setbiomodal(true)} disabled={!isAdmin}>
+      <TouchableOpacity style={[styles.modalItem,!isAdmin &&{opacity:0.5}]} onPress={openclosemodal} disabled={!isAdmin}>
         <Text style={styles.modaltext}>Add room Bio</Text>
       </TouchableOpacity>
 
@@ -610,7 +609,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderRadius: 18,
     padding: 18,
-    marginBottom: 14,
+    borderBottomColor:'#fff',
+    borderBottomWidth:2
   },
 
   userRow: {
@@ -620,21 +620,26 @@ const styles = StyleSheet.create({
   },
 
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
 
   userInfo: {
+  flexDirection:'row',
     marginLeft: 10,
   },
 
   username: {
     color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 14,
+    fontWeight: '800',
+    fontSize: 12,
   },
-
+full:{
+  color: 'rgba(255,255,255,0.45)',
+  fontSize: 12,
+  fontWeight:'400'
+},
   time: {
     color: 'rgba(255,255,255,0.45)',
     fontSize: 12,
@@ -643,7 +648,7 @@ const styles = StyleSheet.create({
 
   postText: {
     color: '#e5e7eb',
-    fontSize: 14,
+    fontSize: 16,
     lineHeight: 21,
     marginTop: 6,
   },
@@ -710,22 +715,26 @@ const styles = StyleSheet.create({
   mediacontainer:{
     flexDirection:'row',
     flexWrap:'wrap',
-    justifyContent:'flex-start',
-    paddingHorizontal:5
+    justifyContent:'space-between',
+    paddingHorizontal:5,
+    marginTop:8
   },
-  postitem:{
+  mediaitem:{
     aspectRatio:1,
     marginBottom:4,
-    borderRadius:8,
-    overflow:'hidden'
+    borderRadius:12,
+    overflow:'hidden',
+    backgroundColor:'#333'
   },
-  postitemimage:{
-   width:'100%',
-   height:'100%'
+  mediacontent:{
+width:'100%',
+height:'100%',
+borderRadius:12
   },
   center:{
-    marginLeft:'26%'
+    marginLeft:'33.5%'
   },
+  
   roomBio: {
     marginTop: 6,
     fontSize: 14,

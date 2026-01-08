@@ -51,7 +51,7 @@ export default function MatchDemo() {
 
       <FlatList
         data={buddies}
-        keyExtractor={(item) => item?.id.toString()}
+        keyExtractor={(item) => `active-${item?.other_user}`}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
@@ -59,14 +59,14 @@ export default function MatchDemo() {
           <View style={styles.card}>
             {/* 🖼️ Image */}
             <ImageBackground
-               source={{ uri: `${API_BASE_URL}/uploads/${item.image}` }}
+               source={{ uri: `${API_BASE_URL}/uploads/${item.theimage}` }}
               style={styles.image}
               imageStyle={{ borderRadius: 20 }}
             >
               <View style={styles.infoPanel}>
-                <Text style={styles.name}>{item.FULLNAME}</Text>
-                <Text style={styles.matchScore}>{item.percent_match}% Match</Text>
-                {/* <Text style={styles.similarities}>{item.similarities}</Text> */}
+                <Text style={styles.name}>{item.thename}</Text>
+                <Text style={styles.matchScore}>{item.similarity_percent}% Match</Text>
+                 <Text style={styles.similarities}>{item.shared_answer_1}</Text> 
               </View>
             </ImageBackground>
           </View>

@@ -2742,7 +2742,7 @@ app.post('/postscreen', (req, res) => {
 app.get('/getroom',(req,res)=>{
   const {roomid}=req.query;
   db.query(`select cr.id,cr.sender_id,cr.post,cr.posted_at,cr.room_of_posts_id,
-  cr.postvideo,cr.postimage,a.USERNAME as usersname,a.image 
+  cr.postvideo,cr.postimage,a.USERNAME as usersname,a.FULLNAME as fullname,a.image 
    from roomposts cr  inner join projecttables a on cr.sender_id=a.ID where cr.room_of_posts_id=? order by  cr.posted_at desc`,[roomid],(err,result)=>{
 if(err){
   res.status(500).json({error:'An error occured'})

@@ -25,6 +25,7 @@
     "expo-av": "~16.0.7",
     "expo-blur": "~14.1.5",
     "expo-file-system": "~19.0.16",
+    "expo-haptics": "~15.0.8",
     "expo-image-picker": "~16.1.4",
     "expo-linear-gradient": "~14.1.5",
     "expo-local-authentication": "~16.0.5",
