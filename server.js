@@ -1511,7 +1511,10 @@ app.get('/api/matches',(req,res)=>{
       ON a1.question_id = a2.question_id
      AND a1.answer = a2.answer
      AND a1.user_id <> a2.user_id
-    WHERE a1.user_id = ?
+     LEFT JOIN skipped_users su ON
+     su.skipper_id=a1.user_id AND
+     su.skipped_id=a2.user_id
+    WHERE a1.user_id = ? and su.id is null
   ),
   
   similarity AS (
@@ -1542,7 +1545,7 @@ app.get('/api/matches',(req,res)=>{
   picked_two AS (
     SELECT *
     FROM shared_first_10
-    WHERE rn <= 2
+    WHERE rn <= 4
   )
   
   SELECT
@@ -1551,7 +1554,9 @@ app.get('/api/matches',(req,res)=>{
     c.FULLNAME as thename,
       c.image as theimage,
     MAX(CASE WHEN p.rn = 1 THEN p.answer END) AS shared_answer_1,
-    MAX(CASE WHEN p.rn = 2 THEN p.answer END) AS shared_answer_2
+    MAX(CASE WHEN p.rn = 2 THEN p.answer END) AS shared_answer_2,
+    MAX(CASE WHEN p.rn = 3 THEN p.answer END) AS shared_answer_3,
+    MAX(CASE WHEN p.rn = 4 THEN p.answer END) AS shared_answer_4
   FROM similarity s 
   LEFT JOIN projecttables c ON s.other_user=c.ID
   LEFT JOIN picked_two p
@@ -1931,24 +1936,28 @@ app.get('/getactiverooms',(req,res)=>{
     })
 })
 app.post('/postroommembers', (req, res) => {
-  const { valid, sender } = req.body;
-  const sql = 'INSERT IGNORE INTO roomparticipants(userid, roomid) VALUES (?, ?)';
-  
-  db.query(sql, [sender, valid], (err, result) => {
+  const { roomid, userid } = req.body;
+
+  if (!roomid || !userid) {
+    return res.status(400).json({ error: 'Missing roomid or userid' });
+  }
+
+  const sql =
+    'INSERT IGNORE INTO roomparticipants(userid, roomid, isAdmin) VALUES (?, ?, ?)';
+
+  db.query(sql, [userid, roomid, 0], (err, result) => {
     if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'An error occurred' });
+      console.error('DB error:', err);
+      return res.status(500).json({ error: 'DB error' });
     }
 
-    // result.affectedRows === 1 → new insert
-    // result.affectedRows === 0 → duplicate (ignored)
-    if (result.affectedRows === 0) {
-      res.status(200).json({ success: true, message: 'Already joined' });
-    } else {
-      res.status(200).json({ success: true, message: 'Joined successfully' });
-    }
+    res.status(200).json({
+      success: true,
+      joined: result.affectedRows === 1,
+    });
   });
 });
+
 app.get('/checkroommembers',(req,res)=>{
   const {userid,room_id}=req.query;
 
@@ -2703,25 +2712,34 @@ app.post(
 app.post('/join-private-room', (req, res) => {
   const { roomId, userId, passcode } = req.body;
 
+  if (!roomId || !userId || !passcode) {
+    return res.status(400).json({ error: 'Missing fields' });
+  }
+
   db.query(
     'SELECT roompasskey FROM createinterestroom WHERE id = ?',
     [roomId],
     (err, rows) => {
       if (err) return res.status(500).json({ error: 'DB error' });
-      if (!rows.length) return res.status(404).json({ error: 'Room not found' });
+      if (!rows.length)
+        return res.status(404).json({ error: 'Room not found' });
 
       if (rows[0].roompasskey !== passcode) {
         return res.status(401).json({ error: 'Wrong passcode' });
       }
 
       db.query(
-        'INSERT IGNORE INTO roomparticipants(userid, roomid) VALUES (?, ?)',
-        [userId, roomId],
-        () => res.json({ success: true })
+        'INSERT IGNORE INTO roomparticipants(userid, roomid, isAdmin) VALUES (?, ?, ?)',
+        [userId, roomId, 0],
+        (err2) => {
+          if (err2) return res.status(500).json({ error: 'DB error' });
+          res.json({ success: true });
+        }
       );
     }
   );
 });
+
 app.post('/postscreen', (req, res) => {
   const { searchid, roomid, posttext, sentimage, sentvideo } = req.body;
 
@@ -2752,76 +2770,89 @@ res.json(result)
 })
 
 const roomOnlineUsers = new Map();
-io.on('connection',(socket)=>{
-  let roomid=null
+io.on('connection', (socket) => {
+  let roomid = null;
   const userId = socket.handshake.query.userId;
-  socket.on('joingrouproom',(receiveroomid)=>{
-roomid=receiveroomid
-socket.join(receiveroomid)
-if (!roomOnlineUsers.has(roomid)) {
-  roomOnlineUsers.set(roomid, new Set());
-}
 
-roomOnlineUsers.get(roomid).add(userId);
+  console.log('user connected:', userId);
 
-io.to(roomid).emit(
-  "online-count",
-  roomOnlineUsers.get(roomid).size
-);
-  })
- 
-  socket.on('sendimage',(image)=>{
-    if(!roomid) console.log('no roomid');
- 
-db.query(`update createinterestroom set  room_image=? where id=?`,[image,roomid],(err,result)=>{
-  if(err){
-    console.log(err);
-    return;
-  }
-  db.query(`select room_image from createinterestroom where id=? `,[roomid],(err,result)=>{
-    if(err){
-      console.log(err);
-      return;
+  socket.on('joingrouproom', (receiveroomid) => {
+    roomid = receiveroomid;
+    socket.join(roomid);
+
+    if (!roomOnlineUsers.has(roomid)) {
+      roomOnlineUsers.set(roomid, new Set());
     }
-    io.to(roomid).emit('getimage',result[0].room_image)
 
-  })
-})
-    })
-    socket.on('updatebio',(data)=>{
-      db.query(`update createinterestroom set roombio=? where id=?`,[data,roomid],(err,result)=>{
-        if(err){
-          console.log(err);
-          return;
-        }
-        db.query(`select roombio from createinterestroom where id=?`,[roomid],(err,result)=>{
-          if(err){
-            console.log(err);
-            return;
-          }
-          const roombioformat=result[0].roombio
-          io.to(roomid).emit('gottenbio',roombioformat)
-        })
-      })
-    })
+    roomOnlineUsers.get(roomid).add(userId);
 
-    socket.on("disconnect", () => {
-      for (const [roomid, users] of roomOnlineUsers.entries()) {
-        if (users.has(userId)) {
-          users.delete(userId);
-  
-          io.to(roomid).emit(
-            "online-count",
-            users.size
-          );
-  
-          if (users.size === 0) {
-            roomOnlineUsers.delete(roomid);
+    io.to(roomid).emit(
+      'online-count',
+      roomOnlineUsers.get(roomid).size
+    );
+  });
+
+  socket.on('sendimage', (image) => {
+    if (!roomid) return console.log('sendimage: no roomid');
+
+    db.query(
+      `UPDATE createinterestroom SET room_image=? WHERE id=?`,
+      [image, roomid],
+      (err) => {
+        if (err) return console.log(err);
+
+        db.query(
+          `SELECT room_image FROM createinterestroom WHERE id=?`,
+          [roomid],
+          (err, result) => {
+            if (err) return console.log(err);
+
+            io.to(roomid).emit('getimage', result[0].room_image);
           }
+        );
+      }
+    );
+  });
+
+  socket.on('updatebio', (data) => {
+    if (!roomid) return console.log('updatebio: no roomid');
+
+    db.query(
+      `UPDATE createinterestroom SET roombio=? WHERE id=?`,
+      [data, roomid],
+      (err) => {
+        if (err) return console.log(err);
+
+        db.query(
+          `SELECT roombio FROM createinterestroom WHERE id=?`,
+          [roomid],
+          (err, result) => {
+            if (err) return console.log(err);
+
+            io.to(roomid).emit('gottenbio', result[0].roombio);
+          }
+        );
+      }
+    );
+  });
+
+  socket.on('disconnect', () => {
+    console.log('user disconnected:', userId);
+
+    for (const [rid, users] of roomOnlineUsers.entries()) {
+      if (users.has(userId)) {
+        users.delete(userId);
+
+        io.to(rid).emit('online-count', users.size);
+
+        if (users.size === 0) {
+          roomOnlineUsers.delete(rid);
         }
       }
-    });
-  })
+    }
+  });
+});
+
 
 
 app.get('/roomimage',(req,res)=>{
@@ -2844,7 +2875,244 @@ app.get('/imagefromusers',(req,res)=>{
     res.json(result)
   })
 })
+io.on('connection',(socket)=>{
+  socket.on('Removeuser',(data)=>{
+    const {skipper,skipped}=data
+    db.query(`insert ignore into skipped_users(skipper_id,skipped_id)values(?,?)`,[skipper,skipped],(err,result)=>{
+      if (err) {
+        socket.emit('Removeuser:error', 'db_failed');
+        return;
+      }
+    })
+  })
+  socket.on('Updatenotifi',(data)=>{
+    const {sender,receiver,type,message}=data;
+    db.query(`insert into notifications(sender_id,receiver_id,message,type)values(?,?,?,?)`,[sender,receiver,message,type],(err,result)=>{
+      if(err){
+        console.log('Error in pushing buddy matching DB');
+      }
+    })
+  })
+  socket.on('Removethisnotification',(notificationId)=>{
+    const {yourid,notid}=notificationId
+  
+    if(!yourid || !notid){
+      socket.emit('error','unreached values')
+      return 
+    }
+    db.query(`delete from notifications where id=? and receiver_id=?`,[notid,yourid],(err,result)=>{
+      if(err){
+        console.log(`${err} in notifactions remmoval line 2890`);
+        return;
+      }
+      db.query(
+         `
+          SELECT n.*, u.FULLNAME as sender_name, u.image AS sender_image
+          FROM notifications n
+          JOIN projecttables u ON u.id = n.sender_id
+          WHERE n.receiver_id = ?
+          ORDER BY n.created_at DESC
+        `,[yourid],(err,result)=>{
+          if(err){
+            console.log(`${err} in notifications remmoval line 2902`);
+            return;
+          }
+          socket.emit('UpdateAfterdeletenotication',(result))
+        })
+    })
+  })
 
+  socket.on('disconnect', () => {
+    console.log('bye');
+  });
+})
+
+app.get('/fetchlikestate',(req,res)=>{
+  const {user,room}=req.query;
+  db.query(`select * from roomlikes where userid=? and roomid=?`,[user,room],(err,result)=>{
+    if(err){
+     return res.status(500).json({error:err.message})
+    }
+  res.json(result[0])
+  })
+})
+app.get('/fetchlikes',(req,res)=>{
+  const {room}=req.query;
+  db.query(`select roomid,count(roomid) as roomlikenum from roomlikes where roomid=? group by roomid ;`,[room],(err,result)=>{
+    if(err){
+    return  res.status(500).json({error:err.message})
+    }
+  res.json(result[0])
+  })
+})
+app.post('/addroomlikes',(req,res)=>{
+  const {searchid,roomdetais}=req.body;
+  db.query(`insert into roomlikes(userid,roomid)values(?,?)`,[searchid,roomdetais],(err,result)=>{
+    if(err){
+      return  res.status(500).json({error:err.message})
+      }    
+      res.status(200).json({success:true})
+  })
+
+})
+app.post('/removeroomlikes',(req,res)=>{
+  const {searchid,roomdetais}=req.body;
+  db.query(`delete from roomlikes where userid=? and roomid=?`,[searchid,roomdetais],(err,result)=>{
+    if(err){
+      return  res.status(500).json({error:err.message})
+      }    
+      res.status(200).json({success:true})
+  })
+
+})
+app.get('/fetchroommen', (req, res) => {
+  const { roomid } = req.query;
+
+  if (!roomid) {
+    return res.status(400).json({ error: 'roomid is required' });
+  }
+
+  const sql = `
+    SELECT 
+      cr.id,
+      cr.userid,
+      cr.isAdmin,
+      a.USERNAME AS usersname,
+      a.FULLNAME AS fullname,
+      a.image
+    FROM roomparticipants cr
+    LEFT JOIN projecttables a ON a.ID = cr.userid
+    WHERE cr.roomid = ?
+    ORDER BY cr.joined
+  `;
+
+  db.query(sql, [roomid], (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(result);
+  });
+});
+
+app.get('/searchmember',(req,res)=>{
+  const { roomid ,search} = req.query;
+
+  if (!roomid || search) {
+    return res.status(400).json({ error: 'roomid is required' });
+  }
+
+  const sql = `
+    SELECT 
+      cr.id,
+      cr.userid,
+      cr.isAdmin,
+      a.USERNAME AS usersname,
+      a.FULLNAME AS fullname,
+      a.image
+    FROM roomparticipants cr
+    LEFT JOIN projecttables a ON a.ID = cr.userid
+    WHERE cr.roomid = ? and a.USERNAME like ?
+    ORDER BY cr.joined
+  `;
+
+  db.query(sql, [roomid,`%${search}%`], (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(result);
+  });
+})
+
+
+app.get('/memberscount',(req,res)=>{
+  const {roomid}=req.query
+  db.query(`select count(userid) as members from roomparticipants where roomid=? group by userid;`,[roomid],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:err.message})
+    }
+    res.json(result[0])
+  })
+})
+
+io.on('connection', (socket) => {
+  let roomValueId = null;
+
+  socket.on('JoinViewMembers', (roomValue) => {
+    if (!roomValue) return;
+    roomValueId = roomValue;
+    socket.join(`room_${roomValue}`);
+  });
+
+  socket.on('MakeAdmin', (userid) => {
+    if (!userid || !roomValueId) return;
+
+    db.query(
+      `SELECT isAdmin FROM roomparticipants WHERE userid=? AND roomid=?`,
+      [userid, roomValueId],
+      (err, result) => {
+        if (err || !result.length || result[0].isAdmin === 1) return;
+
+        db.query(
+          `UPDATE roomparticipants SET isAdmin=1 WHERE userid=? AND roomid=?`,
+          [userid, roomValueId],
+          () => emitMembers(roomValueId)
+        );
+      }
+    );
+  });
+
+  socket.on('RemoveAdmin', (userid) => {
+    if (!userid || !roomValueId) return;
+
+    db.query(
+      `SELECT isAdmin FROM roomparticipants WHERE userid=? AND roomid=?`,
+      [userid, roomValueId],
+      (err, result) => {
+        if (err || !result.length || result[0].isAdmin === 0) return;
+
+        db.query(
+          `UPDATE roomparticipants SET isAdmin=0 WHERE userid=? AND roomid=?`,
+          [userid, roomValueId],
+          () => emitMembers(roomValueId)
+        );
+      }
+    );
+  });
+
+  socket.on('RemoveMember', (userid) => {
+    if (!userid || !roomValueId) return;
+
+    db.query(
+      `DELETE FROM roomparticipants WHERE userid=? AND roomid=?`,
+      [userid, roomValueId],
+      () => emitMembers(roomValueId, true)
+    );
+  });
+
+  function emitMembers(roomid, isDelete = false) {
+    db.query(
+      `
+      SELECT cr.id, cr.userid, cr.isAdmin,
+      a.USERNAME AS usersname,
+      a.FULLNAME AS fullname,
+      a.image
+      FROM roomparticipants cr
+      LEFT JOIN projecttables a ON a.ID = cr.userid
+      WHERE cr.roomid = ?
+      ORDER BY cr.joined
+      `,
+      [roomid],
+      (err, result) => {
+        if (err) return;
+        const room = `room_${roomid}`;
+        io.to(room).emit(
+          isDelete ? 'UpdateAfterDelete' : 'UpdateAfterAdmin',
+          result
+        );
+      }
+    );
+  }
+});
 
 server.listen(3000, () => {
   console.log('Server running on http://localhost:3000');

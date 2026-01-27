@@ -60,13 +60,13 @@ const [topusers,setTopusers]=useState([])
       try{
         const res=await fetch(`${API_BASE_URL}/trending`);
         if(!res.ok){
-          console.log(`Somethign went wrong in Showcasemain useffect `);
+          console.log(`Something went wrong in Showcasemain useffect `);
           return;
         }
 const data=await res.json();
 Setfeed(data)
       }catch(err){
-        console.log(`${err} Somethign went wrong in Showcasemain useffect `);
+        console.log(`${err} Something went wrong in Showcasemain useffect `);
       }
     }
     getTrendingShow()
@@ -319,7 +319,7 @@ const finalvideo=data.VideoUrl;
 
           <FlatList
             data={CATEGORIES}
-            keyExtractor={(i) => i.id}
+            keyExtractor={(i) => i.id.toString()}
             renderItem={renderCategory}
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -337,7 +337,7 @@ const finalvideo=data.VideoUrl;
 
             <FlatList
               data={feed}
-              keyExtractor={(item)=>item?.id}
+              keyExtractor={(item)=>`active-${item?.id}`}
               renderItem={renderCard}
               scrollEnabled={false}
               initialNumToRender={3}

@@ -1,9 +1,22 @@
-import React from "react";
+import React,{useEffect} from "react";
 import { View, Image, TouchableOpacity, StyleSheet } from "react-native";
-import { Feather } from "@expo/vector-icons"; // you can install via expo install @expo/vector-icons
+import { Feather } from "@expo/vector-icons"; 
+import { Video } from "expo-av";
+import { Audio } from 'expo-av';
+
 
 export default function ViewImage({ route, navigation }) {
-  const { imagevalue } = route.params; // full image URL passed from previous screen
+  const { imagevalue ,mediatype} = route.params; 
+  useEffect(() => {
+    Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true, // 🔑 THIS is the magic
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    });
+  }, []);
+  
 
   return (
     <View style={styles.container}>
@@ -18,11 +31,27 @@ export default function ViewImage({ route, navigation }) {
       </TouchableOpacity>
 
       {/* Fullscreen Image */}
-      <Image
+      {mediatype==='image'?(
+        <Image
         source={{ uri: imagevalue }}
         style={styles.image}
         resizeMode="contain"
       />
+      ):(
+        <Video
+        source={{ uri: imagevalue }}
+        style={styles.image}
+        resizeMode="contain"
+        useNativeControls
+        shouldPlay={false}   // 👈 key fix
+        isLooping={false}    // 👈 no repeat
+        isMuted={false}
+        volume={1.0}
+      />
+      
+      
+      )}
+     
     </View>
   );
 }

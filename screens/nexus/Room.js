@@ -18,6 +18,7 @@ import { Feather } from "@expo/vector-icons";
 import { io } from 'socket.io-client';
 import { AuthorContext } from "../AuthorContext";
 
+
 const API_BASE_URL = "http://192.168.0.136:3000";
 // A fixed list of random emojis for anonymous users
 const randomEmojis = ["👻", "🦊", "🐼", "🐙", "🐸", "🦉", "🐺", "🐢"];

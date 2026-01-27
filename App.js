@@ -39,8 +39,6 @@ import RequestToWrite from './screens/nexus/RequestToWrite';
 import QuestionDetails from './screens/nexus/QuestionDetails';
 import CreateRoomScreen from './screens/nexus/CreateRoomScreen'
 import DesignersHubScreen   from './screens/nexus/DesignersHubScreen'  
-import PitchDeck from   './screens/nexus/PitchDeck'                                                                                                                                                                                                                                                                                                                                                      
-import PitchScreen from  './screens/nexus/PitchScreen' 
 import NewPostScreen from './screens/nexus/NewPostScreen'
 import { UnreadMessagesProvider } from './screens/UnreadMessagesContext';
 import { AuthorProvider } from './screens/AuthorContext';
@@ -50,6 +48,7 @@ import CampusShowcase from './screens/battlearena/CampusShowcase';
 import QuickPlayScreen from './screens/battlearena/QuickPlayScreen';
 import CompetitionHome from './screens/battlearena/CompetitionHome';
 import DuelScreen from './screens/battlearena/DuelScreen';
+import MembersScreen from './screens/nexus/MembersScreen' 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -98,20 +97,19 @@ export default function App() {
     <Stack.Screen name="ChatScreen" component={ChatScreen} options={{ headerShown: true }} />
     <Stack.Screen name="AttendeesScreen" component={AttendeesScreen} options={{ headerShown: false }} />
     <Stack.Screen name="ViewImage" component={ViewImage} options={{ headerShown: false }} />
-    <Stack.Screen name="PitchDeck" component={PitchDeck} options={{ headerShown: false }} />
     <Stack.Screen name="GoalCard" component={GoalCard} options={{ headerShown: false }} />
     <Stack.Screen name="FullStory" component={FullStory} options={{ headerShown: false }} />
     <Stack.Screen name="RequestToWrite" component={RequestToWrite} options={{ headerShown: false }} />
     <Stack.Screen name="QuestionDetails" component={QuestionDetails} options={{ headerShown: false }} />
     <Stack.Screen name="CreateRoomScreen" component={CreateRoomScreen} options={{ headerShown: false }} />
     <Stack.Screen name="DesignersHubScreen" component={DesignersHubScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="PitchScreen" component={PitchScreen} options={{ headerShown: false }} />
     <Stack.Screen name="NewPostScreen" component={NewPostScreen} options={{ headerShown: false }} />
     <Stack.Screen name="ShowcaseMain" component={ShowcaseMain} options={{ headerShown: false }} />
     <Stack.Screen name="CampusShowcase" component={CampusShowcase} options={{ headerShown: false }} />
     <Stack.Screen name="QuickPlayScreen" component={QuickPlayScreen} options={{ headerShown: false }} />
     <Stack.Screen name="CompetitionHome" component={CompetitionHome} options={{ headerShown: false }} />
     <Stack.Screen name="DuelScreen" component={DuelScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="MembersScreen" component={MembersScreen} options={{ headerShown: false }} />
   
   </Stack.Navigator> 
 </NavigationContainer>

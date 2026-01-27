@@ -91,51 +91,60 @@ const [roomusers,setRoomusers]=useState([])
   
 
   const handlemodes = async () => {
-    const valid = item.id;
-    try{
-    
+    const roomid = item.id;
+  
+    try {
       const res = await fetch(
-        `${API_BASE_URL}/checkroommembers?userid=${sender}&room_id=${valid}`
+        `${API_BASE_URL}/checkroommembers?userid=${sender}&room_id=${roomid}`
       );
-      
-      if(!res.ok){
-        console.log('Something is wrong');
+  
+      if (!res.ok) return console.log('Check failed');
+  
+      const data = await res.json();
+  
+      // Already joined
+      if (data) {
+        navigation.navigate('DesignersHubScreen', {
+          roomid,
+          roomname: item.roomname,
+          roomcreator: item.creatorid,
+        });
         return;
       }
-      const data=await res.json()
-      if(data!==null) {  
-       
-        navigation.navigate('DesignersHubScreen',{ roomid:item.id ,roomname:item.roomname,roomcreator:item.creatorid});
-        
-    }else if(data==null && item.selectmode === 'public'){
-
-      
+  
+      // Public room → join directly
+      if (item.selectmode === 'public') {
         const res2 = await fetch(`${API_BASE_URL}/postroommembers`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
           body: JSON.stringify({
-            roomid: valid,
+            roomid,
             userid: sender,
           }),
-          
         });
   
         if (!res2.ok) {
-          console.log('An error occurred');
+          console.log('Failed to join room');
+          return;
         }
-        navigation.navigate('DesignersHubScreen', { roomid: valid ,roomname:item.roomname});
-      
-    }else if (item.selectmode === 'private') {
-      setopenmodal(true);
-    
-    
-  }
   
-}catch(err){
-  console.log('Something went wrong');
-}
-}
+        navigation.navigate('DesignersHubScreen', {
+          roomid,
+          roomname: item.roomname,
+          roomcreator: item.creatorid,
+        });
+        return;
+      }
+  
+      // Private room → show modal
+      if (item.selectmode === 'private') {
+        setopenmodal(true);
+      }
+    } catch (err) {
+      console.log('Something went wrong:', err);
+    }
+  };
+  
   return (
     <View
     style={[
@@ -770,7 +779,8 @@ const styles = StyleSheet.create({
   },
   image:{
     width:40,
-    height:40,
+    height:
+    40,
     borderRadius:20,
     borderColor:'transparent',
     overflow:'hidden',

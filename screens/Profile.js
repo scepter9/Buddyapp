@@ -228,7 +228,7 @@ function Profile({ navigation, route }) {
               >
                 <Text style={styles.buttonText}>
                   {isFollowActionLoading ? 'Processing...' : isFollowing ? 'Unfollow' : 'Follow'}
-                </Text>
+                </Text>b
               </TouchableOpacity>
               
               <TouchableOpacity

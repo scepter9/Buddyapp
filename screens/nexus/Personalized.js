@@ -11,8 +11,7 @@ import {
 import { AuthorContext } from '../AuthorContext'
 import { Feather } from "@expo/vector-icons";
 
-// All questions as an array of objects (questions array is the same as before)
-// ... (questions array) ...
+
 const questions = [
   {
     id: 1,

@@ -8,13 +8,16 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Modal,
+  SafeAreaView
 } from 'react-native';
-import io from 'socket.io-client';
+
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons'; // Import Ionicons for the clear button
-
+import { io } from 'socket.io-client';
 import BottomNavigator from './BottomNavigator';
+
 
 const API_BASE_URL = "http://192.168.0.136:3000";
 
@@ -24,17 +27,19 @@ const NOTIFICATION_TYPES = {
   COMMENT: 'comment',
   MESSAGE: 'message',
   JOINMEET: 'JoinRoom',
+  SHOULDACCEPT:'sentbuddy'
 };
 
-const NotificationItem = React.memo(({ notification, onFollowPress, onAcceptJoinPress, navigation, disvalue }) => {
-  const { sender_name, sender_image, message, created_at, type, sender_id } = notification;
+const NotificationItem = React.memo(({ notification, onFollowPress, onAcceptJoinPress, navigation, disvalue ,socket,user}) => {
+  const {id, sender_name, sender_image, message, created_at, type, sender_id } = notification;
+  const [openmodal,setopenmodal]=useState(false)
 
   const formatTimeAgo = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
     const seconds = Math.floor((now - date) / 1000);
 
-    if (seconds < 60) return `${seconds}s ago`;
+    if (seconds < 60) return `Just now`;
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
@@ -46,11 +51,20 @@ const NotificationItem = React.memo(({ notification, onFollowPress, onAcceptJoin
     const years = Math.floor(months / 12);
     return `${years}y ago`;
   };
-
+const openconnect=()=>{
+  setopenmodal(true)
+}
   const handleProfileView = () => {
     navigation.navigate('Profile', { userId: sender_id });
   };
-
+  const onahandlekipjoin=()=>{
+if(!socket || !user) return;
+const sendingvalues={
+  yourid:user,
+  notid:id
+}
+socket.emit('Removethisnotification',sendingvalues)
+  }
   const renderContent = () => {
     switch (type) {
       case NOTIFICATION_TYPES.FOLLOW:
@@ -73,6 +87,28 @@ const NotificationItem = React.memo(({ notification, onFollowPress, onAcceptJoin
             <Text style={notificationItemStyles.senderName} onPress={handleProfileView}>{sender_name}</Text> liked your post.
           </Text>
         );
+        case NOTIFICATION_TYPES.SHOULDACCEPT:
+          return (
+            <View style={notificationItemStyles.followContent}>
+            <Text style={notificationItemStyles.messageText}>
+              <Text style={notificationItemStyles.senderName} onPress={handleProfileView}>{sender_name}</Text> Sent you a buddy request based on your shared interest✨.
+            </Text>
+             <TouchableOpacity
+             style={notificationItemStyles.followButton}
+             onPress={openconnect}
+             disabled={disvalue}
+           >
+             <Text style={notificationItemStyles.followButtonText}>Connect🤝</Text>
+           </TouchableOpacity>
+           <TouchableOpacity
+             style={notificationItemStyles.followButtone}
+             onPress={onahandlekipjoin}
+             disabled={disvalue}
+           >
+             <Text style={notificationItemStyles.followButtonText}>Skip</Text>
+           </TouchableOpacity>
+           </View>
+          );
       case NOTIFICATION_TYPES.COMMENT:
         return (
           <Text style={notificationItemStyles.messageText}>
@@ -116,6 +152,7 @@ const NotificationItem = React.memo(({ notification, onFollowPress, onAcceptJoin
     : null;
 
   return (
+    <View style={{flex:1,backgroundColor: 'rgba(255,255,255,0.7)'}}>
     <TouchableOpacity onPress={handleProfileView} style={notificationItemStyles.notificationCard} activeOpacity={0.8}>
       <View style={notificationItemStyles.profileSection}>
         {imageSource ? (
@@ -132,6 +169,38 @@ const NotificationItem = React.memo(({ notification, onFollowPress, onAcceptJoin
         <Text style={notificationItemStyles.timestamp}>{formatTimeAgo(created_at)}</Text>
       </View>
     </TouchableOpacity>
+    <Modal visible={openmodal} animationType='fade' onRequestClose={()=>setopenmodal(false)}>
+    <View style={styles.modalOverlay}>
+  <View style={styles.modalCard}>
+    <Text style={styles.titleText}>Epic Match Unlocked! 🔥 </Text>
+<Text style={styles.subtitleText}>You just matched with a buddy🤝,same weird energy ,similar interests,zero chills.Ready to see what chaos unfolds? </Text>
+
+    <View style={styles.avatarWrapper}>
+      <Image source={ imageSource } style={styles.avatarImage} />
+    </View>
+
+    <Text style={styles.usernameText}>{sender_name}</Text>
+
+    <View style={styles.actionsRow}>
+      <TouchableOpacity style={styles.primaryButton}  onPress={() => {
+                  navigation.navigate('MessageUser', { 
+                    recipientId: id, 
+                    recipientName: sender_name, 
+                    recipientImage: imageSource 
+                  });
+                }}>
+        <Text style={styles.primaryButtonText}>Dive in already!</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.secondaryButton} onPress={() =>setopenmodal(false)}>
+        <Text style={styles.secondaryButtonText}>Nah,Later</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</View>
+
+    </Modal>
+    </View>
   );
 });
 
@@ -142,6 +211,31 @@ const NotificationScreen = () => {
   const [error, setError] = useState(null);
   const [loggedInUserId, setLoggedInUserId] = useState(null);
   const [disabledRequests, setDisabledRequests] = useState({});
+  const [socket,Setsocket]=useState(null)
+  
+
+useEffect(()=>{
+  if(!loggedInUserId) return;
+  const notifisocket=io(API_BASE_URL,{
+    query:{userId:loggedInUserId},
+    transports:['websocket']
+  })
+  Setsocket(notifisocket)
+  return()=>notifisocket.disconnect()
+},[loggedInUserId])
+useEffect(() => {
+  if (!socket) return;
+
+  const fetchafterremove = (data) => {
+    setNotifications(data);
+  };
+
+  socket.on('UpdateAfterdeletenotication', fetchafterremove);
+
+  return () => {
+    socket.off('UpdateAfterdeletenotication', fetchafterremove);
+  };
+}, [socket]);
 
 
   const fetchLoggedInUserId = useCallback(async () => {
@@ -323,7 +417,9 @@ const NotificationScreen = () => {
   onFollowPress={handleFollowBack}
   onAcceptJoinPress={handleAcceptJoinRequest}
   navigation={navigation}
-  disvalue={!!disabledRequests[item.sender_id]} // only disable that one
+  disvalue={!!disabledRequests[item.id]} // only disable that one
+  socket={socket}
+  user={loggedInUserId}
 />
 
   );
@@ -368,7 +464,7 @@ const NotificationScreen = () => {
         <FlatList
           data={notifications}
           renderItem={renderNotification}
-          keyExtractor={(item) => item.id ? item.id.toString() : Math.random().toString()}
+          keyExtractor={(item) =>  item.id.toString() }
           contentContainerStyle={styles.flatListContent}
           showsVerticalScrollIndicator={false}
         />
@@ -446,6 +542,15 @@ const notificationItemStyles = StyleSheet.create({
     minWidth: 90,
     alignItems: 'center',
   },
+  followButtone: {
+    backgroundColor: '#FF5252',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 30,
+    marginLeft: 10,
+    minWidth: 90,
+    alignItems: 'center',
+  },
   followButtonText: {
     color: 'white',
     fontSize: 14,
@@ -512,6 +617,112 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+ 
+  modalOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+
+  modalCard: {
+    backgroundColor: "#fff",
+    width: "70%",
+    paddingTop: 40,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    borderRadius: 20,
+    elevation: 8, // Android shadow
+    shadowColor: "#000", // iOS shadow
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
+
+  /* ===== Text ===== */
+  titleText: {
+    marginBottom: 10,
+    fontSize: 20,
+    fontWeight: "900",
+    textAlign: "center",
+    letterSpacing: 0.5,
+    color: "#111",
+    textShadowColor: "rgba(0,0,0,0.25)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+
+  subtitleText: {
+    marginBottom: 20,
+    fontSize: 16,
+    textAlign: "center",
+    color: "#666",
+  },
+
+  usernameText: {
+    marginTop: 12,
+    marginBottom: 20,
+    fontSize: 17,
+    fontWeight: "600",
+    textAlign: "center",
+    color: "#222",
+  },
+
+  /* ===== Avatar ===== */
+  avatarWrapper: {
+    alignSelf: "center",
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 4,
+    borderColor: "rgba(128,0,128,0.6)",
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+
+  /* ===== Actions ===== */
+  actionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+    gap: 12,
+  },
+
+  primaryButton: {
+    flex: 1,
+    backgroundColor: "#6C4EFF",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+
+  primaryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  secondaryButton: {
+    flex: 1,
+    backgroundColor: "#F2F2F2",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+
+  secondaryButtonText: {
+    color: "#444",
+    fontSize: 15,
+    fontWeight: "500",
+  },
+
+
 });
 
 export default NotificationScreen;

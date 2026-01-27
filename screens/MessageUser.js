@@ -538,7 +538,7 @@ function MessageUser({ navigation, route }) {
 
                     {msg.type === 'image' ? (
                       <TouchableOpacity   activeOpacity={0.8}
-                      onPress={() => navigation.navigate('ViewImage', { imagevalue: `${API_BASE_URL}${msg.imageUri}` })}
+                      onPress={() => navigation.navigate('ViewImage', { imagevalue: `${API_BASE_URL}${msg.imageUri}` ,mediatype:'imagee'})}
                       onLongPress={openDropdown}
                       >
                      

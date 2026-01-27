@@ -16,7 +16,7 @@ function BottomNavigator({ navigation }) {
 
   // Animated pulse for badge
   const pulseAnim = useRef(new Animated.Value(1)).current;
-
+ 
   useEffect(() => {
     if (unreadCount > 0) {
       Animated.loop(
@@ -36,6 +36,12 @@ function BottomNavigator({ navigation }) {
     }
   }, [unreadCount]);
 
+  const formatNumber = (val) => {
+    if (!val) return "0";
+    if (val < 1000) return val.toString();
+    if (val < 1000000) return (val / 1000).toFixed(1) + "k";
+    return (val / 1000000).toFixed(1) + "m";
+  };
   return (
   //   <LinearGradient
   //   colors={["#2E1065", "#4338CA", "#1E293B"]}
@@ -93,7 +99,7 @@ function BottomNavigator({ navigation }) {
                 { transform: [{ scale: pulseAnim }] },
               ]}
             >
-              <Text style={styles.badgeText}>{unreadCount}</Text>
+              <Text style={styles.badgeText}>{formatNumber(unreadCount)}</Text>
             </Animated.View>
           )}
         </View>

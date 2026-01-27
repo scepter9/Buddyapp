@@ -14,39 +14,112 @@ import {
   TextInput,
   Keyboard ,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Animated,
+  Pressable
 } from "react-native";
 
 import { useFocusEffect } from "@react-navigation/native";
-
+import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from 'expo-image-picker';
 import { BlurView } from "expo-blur";
 import { AuthorContext } from "../AuthorContext";
 import { Ionicons } from "@expo/vector-icons";
+import socket from '../Socket'
 
 const API_BASE_URL = "http://192.168.0.136:3000";
 import { io } from "socket.io-client";
 
 import { Video } from "expo-av";
-import { values } from "lodash";
+
 // Separate Component for Post Items
 const PostChild = ({ item ,user,navigation}) => {
   const searchid = user?.id;
   const roomdetais=item.id
+  const videoref=useRef(null)
+const [likebyme,Setlikebyme]=useState(false)
+const [likeCount,SetlikeCount]=useState(0)
+const [isMutating,SetisMutating]=useState(false)
+const [postcomment,SetPostcomment]=useState([])
+const [commentmodal,Setcommentmodal]=useState(false)
+const scaleAnim=useRef(new Animated.Value(1)).current;
 
+useEffect(()=>{
+  if(!searchid && !roomdetais) return
+  const fetchlikestate=async()=>{
+   
+    try{
+      const res=await fetch(`${API_BASE_URL}/fetchlikestate?user=${searchid}&room=${roomdetais}`)
+      if(!res.ok){
+        console.log('something went wrong');
+        return;
+      }
+      const data=await res.json()
+    Setlikebyme(data.length>0)
+    }catch(err){
+      console.log(err);
+    }
+      }
+      fetchlikestate()
+},[searchid,roomdetais])
+ useEffect(()=>{
+  const fetchlikes=async()=>{
+    if(!searchid && !roomdetais) return
+    try{
+      const res=await fetch(`${API_BASE_URL}/fetchlikes?room=${roomdetais}`)
+      if(!res.ok){
+        console.log('something went wrong');
+        return;
+      }
+      const data=await res.json()
+    SetlikeCount(data.roomlikenum)
+    }catch(err){
+      console.log(err);
+    }
+  }
+  fetchlikes()
+ },[searchid,roomdetais])
+  
     const postroomlikes=async()=>{
+      if(isMutating) return;
+      Animated.sequence([
+        Animated.timing(scaleAnim,{
+          toValue:1.3,
+          duration:150,
+          useNativeDriver:true
+        }),
+Animated.timing(scaleAnim,{
+  toValue:1,
+  duration:150,
+  useNativeDriver:true
+})
+      ]).start()
+      const wasliked=likebyme;
+      const willbeliked=!wasliked
+      Setlikebyme(willbeliked)
+      SetlikeCount(prev=>willbeliked?prev+1:Math.max(0,prev-1))
+      SetisMutating(true)
       try{
-        const res=await fetch(`${API_BASE_URL}/postroomlikes`,{
+        const sendstate=willbeliked?`addroomlikes`:`removeroomlikes`
+        const res=await fetch(`${API_BASE_URL}/${sendstate}`,{
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({searchid,roomdetais})
         })
+        if(!res.ok){
+          console.log('Something is wrongb');
+          return;
+        }
       }catch(err){
-if(err){
-  console.log('Something is wrong');
-}
+console.log(err);
+Setlikebyme(wasliked)
+SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
+      }finally{
+        SetisMutating(false)
       }
+        
+      
     }
   
   const getTimestamp = (time) => {
@@ -97,8 +170,12 @@ if(err){
       <View style={styles.userRow}>
         <Image source={{ uri: `${API_BASE_URL}/uploads/${item.image}` || 'https://via.placeholder.com/100' }} style={styles.avatar} />
         <View style={styles.userInfo}>
-          <Text style={styles.username}>{item.fullname}</Text>
-          <Text style={styles.full}>@{item.usersname}</Text>
+          <View style={styles.nameRow}>
+          <Text style={styles.username} numberOfLines={1}>{item.fullname}</Text>
+          <Text style={styles.full} numberOfLines={1}>@{item.usersname}</Text>
+            
+          </View>
+         
           <Text style={styles.time}>{getTimestamp(item.posted_at)}</Text>
         </View>
       </View>
@@ -108,29 +185,62 @@ if(err){
 const TotalItems=postImages.length + postVideos.length;
     const fullUri=`${API_BASE_URL}${uri}`;
     const isVideo=postVideos.some(vid=>vid===uri)
-    let itemWidth='100%'
-    if(TotalItems===2) itemWidth='49.5%'
-    if(TotalItems>=3) itemWidth='33%';
+    let itemWidth = '100%'
+    let itemHeight = 600
+    
+    if (TotalItems === 2) {
+      itemWidth = '49.5%'
+      itemHeight = 400
+    }
+    
+    if (TotalItems === 3) {
+      if (index === 2) {
+        itemWidth = '100%'
+        itemHeight = 320
+      } else {
+        itemWidth = '49.5%'
+        itemHeight = 260
+      }
+    }
+    
+    if (TotalItems >= 4) {
+      itemWidth = '49.5%'
+      itemHeight = 260
+    }
+    
     return(
       <TouchableOpacity
       key={index}
       activeOpacity={0.8}
-      style={[styles.mediaitem,{width:itemWidth},TotalItems===3&&index===2&&styles.center]}
-      onPress={()=>navigation.navigate('ViewImage',{imagevalue:fullUri})}
+      style={[styles.mediaitem,{width:itemWidth,height:itemHeight}]}
+      onPress={()=>{videoref.current?.pauseAsync()
+        navigation.navigate('ViewImage',{imagevalue:fullUri,mediatype:isVideo?'video ':'image'})}
+        }
       >
         {isVideo ?
         <Video
-        isLooping={true}
-        useNativeControls
-        source={{uri:fullUri}}
-        resizeMode="cover"
+        source={{ uri: fullUri }}
+        ref={videoref}
         style={styles.mediacontent}
-        />:(
+        resizeMode="cover"
+        useNativeControls
+        shouldPlay={false}   // 🚫 no autoplay
+        isLooping={false}    // 🚫 no loop
+        isMuted={true}       // optional: keeps feed quiet
+      />
+      
+       :(
           <Image
           source={{uri:fullUri}}
           resizeMode="cover"
           style={styles.mediacontent}
           />
+        )}
+        {TotalItems>4 && index===3 && (
+          <View style={{...StyleSheet.absoluteFillObject,
+          backgroundColor:'rgba(0,0,0,0.55)',justifyContent:'center',alignItems:'center'}}>
+            <Text style={{color:'#fff',fontSize:28,fontWeight:'800'}}>{TotalItems-4}</Text>
+          </View>
         )}
       </TouchableOpacity>
     )    
@@ -139,9 +249,25 @@ const TotalItems=postImages.length + postVideos.length;
 
      
       <View style={styles.reactions}>
-        <TouchableOpacity ><Text style={styles.reactText}>❤️ {item.reactions?.heart || 0}</Text></TouchableOpacity>
-        <TouchableOpacity><Text style={styles.reactText}>💬 {item.reactions?.comment || 0}</Text></TouchableOpacity>
+      
+        <TouchableOpacity onPress={postroomlikes}>
+            <Animated.View style={{transform:[{scale:scaleAnim}]}}>
+            <FontAwesome
+        name={likebyme ? "heart" : "heart-o"}
+        size={30}
+        color={likebyme ? "#ff2ed8" : "#fff"}
+      />
+        </Animated.View> 
+          <Text style={styles.reactText}> {likeCount}</Text>
+        
+          </TouchableOpacity>
+        <TouchableOpacity><Text style={styles.reactText}>
+    <FontAwesome name="comment-o" size={30} color="#fff" /> {item.reactions?.comment || 0}</Text></TouchableOpacity>
         <TouchableOpacity><Text style={styles.reactText}>🔁 {item.reactions?.share || 0}</Text></TouchableOpacity>
+
+
+
+
       </View>
     </BlurView>
   );
@@ -153,51 +279,61 @@ export default function DesignersHubScreen({ navigation, route }) {
   const { roomid ,roomname,roomcreator} = route.params;
   const { user } = useContext(AuthorContext);
   const searchid = user?.id;
-  const socketref=useRef(null)
   const [roomimage,Setroomimage]=useState(null) 
   const [biomodal,Setbiomodal]=useState(false)
   const [biotext,Setbiotext]=useState("")
 const [biostore,setbiostore]=useState(null)
 const isAdmin=searchid===roomcreator
-  // Track online users (Note: This local set won't persist across users without a Socket/Backend)
+ 
   const [onlineCount, setOnlineCount] = useState(0);
   useEffect(() => {
     if (!searchid || !roomid) return;
   
-    const postsocket = io(API_BASE_URL, {
-      query: { userId: searchid },
-      transports: ["websocket"],
-    });
+    // join room
+    socket.emit("joingrouproom", roomid);
   
-    socketref.current=postsocket
-    postsocket.emit("joingrouproom", roomid);
+    const onlineHandler = (count) => {
+      setOnlineCount(count);
+    };
   
-   
-
-    postsocket.on("online-count", (Count)=>{
-      setOnlineCount(Count)
-console.log(Count);
-    });
-
+    socket.on("online-count", onlineHandler);
   
     return () => {
-      postsocket.disconnect();
-      postsocket.off("online-count")
+      socket.emit("leavegrouproom", roomid); // important
+      socket.off("online-count", onlineHandler);
     };
   }, [searchid, roomid]);
   
-  useEffect(() => {
-    if (!socketref.current) return;
   
-    socketref.current.on("gottenbio", (data) => {
+  useEffect(() => {
+    if (!socket.current) return;
+  
+    socket.current.on("gottenbio", (data) => {
       setbiostore(data);
     });
   
-    return () => {
-      socketref.current.off("gottenbio");
+    return () => { 
+      socket.current.off("gottenbio");
     };
   }, [roomid]);
-  
+  // useEffect(()=>{
+  //   if(!roomcreator || !isAdmin) return ;
+  //   const fetchAdmin=async()=>{
+  //     try{
+  //       const res=await fetch(`${API_BASE_URL}/updateadminlogic`,{
+  //         method:'POST',
+  //         headers:{'Content-Type':'application/json'},
+  //         body:JSON.stringify({searchid,roomid})
+  //       })
+  //       if(!res.ok){
+  //         console.log('something went wrong trying to update ');
+  //       }
+  //     }catch(err){
+  //       throw new Error(err)
+  //     }
+  //   }
+  //  fetchAdmin()
+  // },[searchid,roomid])
  
   useFocusEffect(
   useCallback(() => {
@@ -233,11 +369,11 @@ useEffect(()=>{
 fetchroompicture()
 },[roomid])
   useEffect(()=>{
-    if(!socketref.current && roomimage==!null) return;
-    socketref.current.on('getimage',(value)=>{
+    if(!socket && roomimage==!null) return;
+    socket.on('getimage',(value)=>{
 Setroomimage(value)
     })
-    return()=>socketref.current.off('getimage')
+    return()=>socket.off('getimage')
   })
   const handleimage = async () => {
     
@@ -298,10 +434,12 @@ throw new Error("something is wrong")
   }
   const handlebio = () => {
     if (!biotext.trim()) return;
-    socketref.current?.emit('updatebio', biotext);
+    socket.emit('updatebio', biotext);
     Setbiomodal(false); // close modal after sending
   }
-  
+  const Leaveroom=async()=>{
+
+  }
   return (
     <LinearGradient colors={["#0b0f14", "#111827"]} style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
@@ -312,8 +450,7 @@ throw new Error("something is wrong")
   source={
     roomimage
       ? { uri: `${API_BASE_URL}${roomimage}` }
-      : {uri:`https://previews.123rf.com/images/krulua
-      /krulua1705/krulua170500084/78397913-social-media-vector-background-network-concept.jpg`}
+      : {uri:`https://previews.123rf.com/images/krulua/krulua1705/krulua170500084/78397913-social-media-vector-background-network-concept.jpg`}
   }
   
   imageStyle={styles.headerImage}
@@ -333,7 +470,10 @@ throw new Error("something is wrong")
   </View>
 
   {/* 3. Bottom Info Box */}
-  <View style={styles.infoBox}>
+ 
+</ImageBackground>
+       
+<View style={styles.infoBox}>
     <Text style={styles.title}>#{roomname}</Text>
     <View style={styles.onlineTContainer}>
       <View style={styles.onlineDot}></View>
@@ -347,14 +487,11 @@ throw new Error("something is wrong")
   
     } 
   </View>
-</ImageBackground>
-       
-
         {/* List of Posts */}
         <FlatList
           data={postsarray}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => <PostChild item={item} navigation={navigation} user={user} />}
+          renderItem={({ item }) => <PostChild item={item} navigation={navigation} user={user} socket={socket}/>}
           contentContainerStyle={styles.scrollContent}
           ListEmptyComponent={<Text style={{color: 'white', textAlign: 'center', marginTop: 20}}>No posts yet.</Text>}
         />
@@ -380,12 +517,16 @@ throw new Error("something is wrong")
     onPress={() => setOpenModal(false)}
   ><TouchableWithoutFeedback>
     <BlurView intensity={30} tint="dark" style={styles.moda}>
-      <TouchableOpacity style={styles.modalItem} >
-        <Text style={styles.modaltext}>🚪 Leave Room</Text>
+      <TouchableOpacity style={styles.modalItem} onPress={Leaveroom}>
+        <Text style={styles.modaltext}> Leave Room</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={[styles.modalItem,!isAdmin &&{opacity:0.5}]} onPress={handleimage} disabled={!isAdmin}>
-        <Text style={styles.modaltext}>🖼️ Change Wallpaper</Text>
+        <Text style={styles.modaltext}> Change Wallpaper</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={[styles.modalItem,!isAdmin &&{opacity:0.5}]}  disabled={!isAdmin}>
+        <Text style={styles.modaltext}> Host Livespace</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={[styles.modalItem,!isAdmin &&{opacity:0.5}]} onPress={openclosemodal} disabled={!isAdmin}>
@@ -393,7 +534,11 @@ throw new Error("something is wrong")
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.modalItem}>
-        <Text style={styles.modaltext}>🔔 Mute Notifications</Text>
+        <Text style={styles.modaltext}> Mute Notifications</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.modalItem} onPress={()=>navigation.navigate('MembersScreen',{roomid:roomid,roomname:roomname,roomcreator:roomcreator})}>
+        <Text style={styles.modaltext}>View members </Text>
       </TouchableOpacity>
 
       {/* Example of a "Danger" action style */}
@@ -545,25 +690,20 @@ const styles = StyleSheet.create({
 
   /* ========== INFO GLASS CARD ========== */
   infoBox: {
-    position: 'absolute',
-    bottom: 18,
-    left: 16,
-    right: 16,
+   marginHorizontal:16,
+   marginTop:-32,
     padding: 20,
     borderRadius: 22,
-    
     // Glassmorphism effect
     backgroundColor: 'rgba(30,30,30,0.7)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
-    // iOS only in RN, else use blurView component
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
     shadowRadius: 16,
     elevation: 12, // Android shadow
-  
-    // Floating vibe
+    // Floating vibebb
     transform: [{ translateY: -4 }],
   },
   
@@ -626,23 +766,30 @@ const styles = StyleSheet.create({
   },
 
   userInfo: {
-  flexDirection:'row',
     marginLeft: 10,
+  },
+  nameRow:{
+    flexDirection:'row',
+    alignItems:'center',
+    gap:6
   },
 
   username: {
     color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 12,
+    fontWeight: '700',
+    fontSize: 22,
+    
   },
 full:{
   color: 'rgba(255,255,255,0.45)',
-  fontSize: 12,
-  fontWeight:'400'
+  fontSize: 15,
+  fontWeight:'500',
+ 
 },
   time: {
     color: 'rgba(255,255,255,0.45)',
-    fontSize: 12,
+    fontSize: 11,
+    fontWeight:'400',
     marginTop: 2,
   },
 
@@ -720,7 +867,6 @@ full:{
     marginTop:8
   },
   mediaitem:{
-    aspectRatio:1,
     marginBottom:4,
     borderRadius:12,
     overflow:'hidden',
