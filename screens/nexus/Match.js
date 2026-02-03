@@ -118,7 +118,7 @@ return()=>Buddysocket.disconnect();
         sender:usersid,
         receiver:userid,
         type:'sentbuddy',
-        message:'Buddy Reque'
+        message:'Buddy Request'
       }
         // Emit to server
         socket.emit('Removeuser', userDetails);
@@ -135,7 +135,7 @@ return()=>Buddysocket.disconnect();
         } else {
           navigation.navigate('CampusNexus');
         }
-      }, 2600);
+      }, 1600);
         // Move to next buddy or navigate if done
        
       };

@@ -13,6 +13,7 @@ const { Server } = require('socket.io'); // Import Server from socket.io
 const { log, timeStamp, error } = require('console');
 const { result } = require('lodash');
 
+
 //"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" -u root -p buddy > backup.sql
 //very important
 // CORS middleware 
@@ -1925,7 +1926,7 @@ app.get('/searchinterestroom',(req,res)=>{
 app.get('/getactiverooms',(req,res)=>{
   const sql=`select cr.id,cr.roomname,cr.roomdescription,cr.roompasskey,cr.selectmode,
    cr.selecttype,cr.creatorid, count(a.roomid) as members_count from createinterestroom cr 
-   left join roomparticipants a on cr.id=a.roomid   group by cr.id,cr.roomname,
+   left join roomparticipants a on cr.id=a.roomid group by cr.id,cr.roomname,
    cr.roomdescription,cr.roompasskey,
   cr.selectmode, cr.selecttype,cr.creatorid order by  coalesce(members_count,0) desc limit 6 ; `
     db.query(sql,(err,result)=>{
@@ -2836,7 +2837,24 @@ io.on('connection', (socket) => {
     );
   });
 
-  socket.on('disconnect', () => {
+  socket.on('RoomComment',(data)=>{
+    const {postid,roomid,usersId,comment}=data;
+    db.query(`insert into commenting(commenttext,senderid,room_of_posts_id,postid(?,?,?,?)`,[comment,usersId,roomid,postid],(err,result)=>{
+      if(err){
+        console.log('A database error occured while inserting room comment');
+        return;
+      }
+      db.query(`select cr.id,cr.commenttext,cr.senderid,cr.posted_at,a.USERNAME as usersname ,a.FULLNAME as usersfull, a.image from commenting cr join projecttables a 
+      on a.ID=cr.senderid where cr.postid=? and cr.room_of_posts_id=?`,[postid,roomid],(err,result)=>{
+        if(err){
+          console.log('A databse error occured while inserthing room comment');
+          return;
+        }
+        io.to(roomid).emit('ReleaseComment',result)
+      })
+    })
+  })
+  socket.on('leavegrouproom', () => {
     console.log('user disconnected:', userId);
 
     for (const [rid, users] of roomOnlineUsers.entries()) {
@@ -2868,7 +2886,7 @@ app.get('/roomimage',(req,res)=>{
 app.get('/imagefromusers',(req,res)=>{
   const {roomidforimage}=req.query
   db.query(`select cr.id,cr.roomid,a.image from roomparticipants cr 
-  inner join projecttables a on cr.userid=a.ID where cr.userid=? order by cr.joined desc limit 5`,[roomidforimage],(err,result)=>{
+  inner join projecttables a on cr.userid=a.ID where cr.roomid=? order by cr.joined desc limit 5`,[roomidforimage],(err,result)=>{
     if(err){
     return res.status(500).json({error:'An error occured'})
     }
@@ -3113,7 +3131,37 @@ io.on('connection', (socket) => {
     );
   }
 });
-
+app.post('/leaveroom',(req,res)=>{
+  const {roomid,searchid}=req.body;
+db.query(`delete from roomparticipants where roomid=? and userid=?`,[roomid,searchid],(err,result)=>{
+  if(err){
+    return res.status(500).json({error:'Database Error'})
+  }
+  res.status(200).json({success:true})
+})
+})
+app.get('/fetchpostcomment',(req,res)=>{
+  const {postid,roomid}=req.query;
+  db.query(`select cr.id,cr.commenttext,cr.senderid,cr.posted_at,a.USERNAME as usersname ,a.FULLNAME as usersfull, a.image from commenting cr join projecttables a 
+  on a.ID=cr.senderid where cr.postid=? and cr.room_of_posts_id=?`,[postid,roomid],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:'A database Error occured'})
+    }
+    res.json(result)
+  })
+})
+app.get('/isFollowingformembers',(req,res)=>{
+  const {senderid}=req.query;
+  db.query(`SELECT receiver_id 
+  FROM follows 
+  WHERE sender_id = ?
+  `,[senderid],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:'A database Error occured'})
+    }
+    res.json(result)
+  })
+})
 server.listen(3000, () => {
   console.log('Server running on http://localhost:3000');
 });

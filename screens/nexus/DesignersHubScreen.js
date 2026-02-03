@@ -32,9 +32,76 @@ const API_BASE_URL = "http://192.168.0.136:3000";
 import { io } from "socket.io-client";
 
 import { Video } from "expo-av";
+function TheComments({ item }) {
+  const timestamp = (time) => {
+    if (!time) return "Just now";
+    const olddate = new Date(time);
+    const now = new Date();
+    const seconds = Math.floor((now - olddate) / 1000);
+
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months}mo ago`;
+
+    return `${Math.floor(months / 12)}y ago`;
+  };
+  return (
+    <View style={styles.cmRootShell}>
+      {/* Main Comment */}
+      <View style={styles.cmPrimaryLane}>
+        <Image
+          source={{ uri:`${API_BASE_URL}${item.image}` }}
+          style={styles.cmAvatarOrb}
+        />
+
+        <View style={styles.cmTextStack}>
+          <View style={styles.cmSpeechCapsule}>
+            <Text style={styles.cmHandleText}>@{item.usersname}</Text>
+            <Text style={styles.cmMessageBody}>{item.commenttext}</Text>
+          </View>
+
+          <View style={styles.cmMetaRail}>
+            <Text style={styles.cmTimestamp}>{timestamp(item.posted_at)}</Text>
+
+            <Pressable style={styles.cmPulseButton}>
+              <Ionicons name="heart" size={16} color="#ff375f" />
+              <Text style={styles.cmPulseCount}>{item.likes}</Text>
+            </Pressable>
+
+            {/* <Pressable>
+              <Text style={styles.cmReplyTrigger}>Reply</Text>
+            </Pressable> */}
+          </View>
+        </View>
+      </View>
+
+      {/* Replies */}
+      {/* {itemrep.map((reply) => (
+        <View key={reply.id} style={styles.cmEchoLane}>
+          <Image
+            source={{ uri: reply.avatar }}
+            style={styles.cmEchoAvatar}
+          />
+
+          <View style={styles.cmEchoCapsule}>
+            <Text style={styles.cmHandleText}>{reply.username}</Text>
+            <Text style={styles.cmMessageBody}>{reply.commenttext}</Text>
+            <Text style={styles.cmTimestamp}>{reply.time}</Text>
+          </View>
+        </View>
+      ))} */}
+    </View>
+  );
+}
 
 // Separate Component for Post Items
-const PostChild = ({ item ,user,navigation}) => {
+const PostChild = ({ item ,user,navigation,Roomid}) => {
   const searchid = user?.id;
   const roomdetais=item.id
   const videoref=useRef(null)
@@ -43,6 +110,7 @@ const [likeCount,SetlikeCount]=useState(0)
 const [isMutating,SetisMutating]=useState(false)
 const [postcomment,SetPostcomment]=useState([])
 const [commentmodal,Setcommentmodal]=useState(false)
+const [commentText,setcommentText]=useState("")
 const scaleAnim=useRef(new Animated.Value(1)).current;
 
 useEffect(()=>{
@@ -108,7 +176,7 @@ Animated.timing(scaleAnim,{
           body:JSON.stringify({searchid,roomdetais})
         })
         if(!res.ok){
-          console.log('Something is wrongb');
+          console.log('Something is wrong');
           return;
         }
       }catch(err){
@@ -157,10 +225,39 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
   const postImages = safeParse(item.postimage);
   const postVideos = safeParse(item.postvideo);
   
+  useEffect(()=>{
+    if(!socket) return;
+    socket.on('ReleaseComment',(data)=>{
+      SetPostcomment(data)
+    })
+  },[roomdetais])
   
-  
-  
-  
+  useEffect(()=>{
+    const fetchPostComment=async()=>{
+      try{
+        const res=await fetch(`${API_BASE_URL}/fetchpostcomment?postid=${roomdetais}&roomid=${Roomid}`);
+        if(!res.ok){
+          console.log('Something went wrong fetching comment for a room');
+          return;
+        }
+        const data=await res.json()
+        SetPostcomment(data)
+      }catch(err){
+        console.log(err);
+        return;
+      }
+    }
+    fetchPostComment()
+  },[roomdetais,Roomid])
+  const handleComment=()=>{
+    if(!socket || commentText.length===0) return;
+    const commentval={
+     postid:roomdetais,
+     usersId:searchid,
+     comment:commentText
+    }
+    socket.emit('RoomComment',commentval)
+  }
   
   
   
@@ -248,7 +345,7 @@ const TotalItems=postImages.length + postVideos.length;
       </View>)}
 
      
-      <View style={styles.reactions}>
+  ``    <View style={styles.reactions}>
       
         <TouchableOpacity onPress={postroomlikes}>
             <Animated.View style={{transform:[{scale:scaleAnim}]}}>
@@ -266,7 +363,37 @@ const TotalItems=postImages.length + postVideos.length;
         <TouchableOpacity><Text style={styles.reactText}>🔁 {item.reactions?.share || 0}</Text></TouchableOpacity>
 
 
-
+<Modal visible={commentmodal} animationType="fade" onRequestClose={()=>Setcommentmodal(false)} transparent>
+  <Pressable onPress={()=>Setcommentmodal(false)} style={{flex:1,backgroundColor:'rgba(0,0,0,0.6)'}}>
+    {/* Content Container */}
+    <Pressable onPress={()=>{}} style={{width:'100%',marginTop:40,borderRadius:15,backgroundColor:'#111'}}>
+      {/* Header */}
+      <View style={styles.modalContentheader}>
+        <Text style={{color:'#fff',fontSize:16,fontWeight:'600'}}>{postcomment.length} Comments</Text>
+        <Pressable onPress={()=>Setcommentmodal(false)} style={{position:'absolute',right:10}}>
+          <Ionicons name="close" size={22} color='#fff'/>
+        </Pressable>
+      </View>
+      <FlatList 
+      data={postcomment}
+      keyExtractor={(item)=>`active-${item.id}`}
+      renderItem={({item})=>(<TheComments item={item}/>)}
+      showsVerticalScrollIndicator={false}
+      />
+      <View style={styles.inputBar}>
+        <TextInput
+        value={commentText}
+        onChangeText={setcommentText}
+        placeholder="#777"
+        style={styles.inputText}
+        />
+        <Pressable style={{marginLeft:10}} onPress={handleComment}>
+<Ionicons name="send" size={20} color='#0A84FF'/>
+        </Pressable>
+      </View>
+    </Pressable>
+  </Pressable>
+</Modal>
 
       </View>
     </BlurView>
@@ -438,7 +565,23 @@ throw new Error("something is wrong")
     Setbiomodal(false); // close modal after sending
   }
   const Leaveroom=async()=>{
-
+    if(!searchid ||!roomid) return;
+try{
+  const res=await fetch(`${API_BASE_URL}/leaveroom`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({roomid,searchid})
+  })
+  if(!res.ok){
+    console.log('Soemthing went wrong posting leaaveroom in room logic');
+    return;
+  }
+}catch(err){
+  console.log(err);
+  return;
+}finally{
+  navigation.navigate('InterestRoom')
+}
   }
   return (
     <LinearGradient colors={["#0b0f14", "#111827"]} style={styles.container}>
@@ -491,7 +634,7 @@ throw new Error("something is wrong")
         <FlatList
           data={postsarray}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => <PostChild item={item} navigation={navigation} user={user} socket={socket}/>}
+          renderItem={({ item }) => <PostChild item={item} navigation={navigation} user={user} socket={socket} Roomid={roomid}/>}
           contentContainerStyle={styles.scrollContent}
           ListEmptyComponent={<Text style={{color: 'white', textAlign: 'center', marginTop: 20}}>No posts yet.</Text>}
         />
@@ -533,9 +676,6 @@ throw new Error("something is wrong")
         <Text style={styles.modaltext}>Add room Bio</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.modalItem}>
-        <Text style={styles.modaltext}> Mute Notifications</Text>
-      </TouchableOpacity>
 
       <TouchableOpacity style={styles.modalItem} onPress={()=>navigation.navigate('MembersScreen',{roomid:roomid,roomname:roomname,roomcreator:roomcreator})}>
         <Text style={styles.modaltext}>View members </Text>
@@ -808,7 +948,7 @@ full:{
 
   reactText: {
     color: 'rgba(255,255,255,0.55)',
-    fontSize: 13,
+    fontSize: 18,
   },
 
   /* ========== FLOATING ACTION BUTTON ========== */
@@ -886,8 +1026,132 @@ borderRadius:12
     fontSize: 14,
     lineHeight: 19,
     color: "rgba(203,213,225,0.95)",
-  }
-  
+  },
+  inputText:{
+    flex:1,
+    color:'#fff',
+    borderRadius:20,
+    paddingHorizontal:14,
+    paddingVertical:8,
+    fontSize:14,
+    backgroundColor:'#0A84FF'
+  },
+  inputBar:{
+    position:'absolute',
+    bottom:0,
+    left:0,
+    right:0,
+    flexDirection:'row',
+    alignItems:'center',
+    padding:10,
+    borderTopWidth:0.5,
+    borderTopColor:'#333',
+    backgroundColor:'#111'
+  },
+  modalContentheader:{
+    flexDirection:'row',
+    alignItems:'center',
+    justifyContent:'center',
+    paddingVertical:10,
+    paddingHorizontal:10,
+    borderBottomWidth:0.5,
+    borderBottomColor:'#fff'
+  },
+
+  cmRootShell: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+
+  cmPrimaryLane: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+
+  cmAvatarOrb: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    marginRight: 10,
+    backgroundColor: "#ddd",
+  },
+
+  cmTextStack: {
+    flex: 1,
+  },
+
+  cmSpeechCapsule: {
+    backgroundColor: "#f2f2f7",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+
+  cmHandleText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#111",
+    marginBottom: 2,
+  },
+
+  cmMessageBody: {
+    fontSize: 14,
+    color: "#222",
+    lineHeight: 20,
+  },
+
+  cmMetaRail: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+    paddingLeft: 6,
+    gap: 14,
+  },
+
+  cmTimestamp: {
+    fontSize: 11,
+    color: "#888",
+  },
+
+  cmPulseButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  cmPulseCount: {
+    fontSize: 12,
+    color: "#444",
+  },
+
+  cmReplyTrigger: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#555",
+  },
+
+  /* Replies */
+  cmEchoLane: {
+    flexDirection: "row",
+    marginLeft: 48,
+    marginTop: 8,
+  },
+
+  cmEchoAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 8,
+    backgroundColor: "#ddd",
+  },
+
+  cmEchoCapsule: {
+    backgroundColor: "#f5f5f5",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flex: 1,
+  },
 });
 
 

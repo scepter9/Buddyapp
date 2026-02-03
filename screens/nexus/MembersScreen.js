@@ -20,14 +20,56 @@ import { AuthorContext } from "../AuthorContext";
 import { io } from "socket.io-client";
 import socket from "../Socket";
 
-function ViewMembers({item,navigation,roomcreator,socket}){
-  
 
+function ViewMembers({item,navigation,roomcreator}){
+  const [followstate,Setfollowstate]=useState(false)
+  const [followstateSet,SetfollowstateSet]=useState(new Set())
     const {user}=useContext(AuthorContext)
     const usersid=user?.id;
-    const theowner=usersid===roomcreator
+    const theowner=Number(item.userid)===Number(roomcreator)
+    const isSelf=Number(usersid)===Number(item.userid)
     const [openmodal, setopenmodal] = useState(false)
- 
+ useEffect(()=>{
+  const Fetchfollowing=async()=>{
+    try{
+      const res=await fetch(`${API_BASE_URL}/isFollowingformembers`)
+      if(!res.ok){
+        console.log('Soemthing went wrong while fetching memebers');
+        return;
+      }
+      const data=await res.json()
+      
+SetfollowstateSet(data)
+const isFollowinga=followstateSet.has(item.userid);
+Setfollowstate(isFollowinga)
+    }catch(err){
+console.log(err);
+    }
+  }
+  Fetchfollowing()
+ },[])
+
+  
+    const followToggle=async()=>{
+      const receiver_id=item.userid;
+      const endpoint=followstate?'unfollow':'follow';
+try{
+  const res=await fetch(`${API_BASE_URL}/${endpoint}`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({receiver_id})
+  })
+  if(!res.ok){
+    console.log('Something went wrong trying to post followers in members screen');
+    return;
+  }else{
+  Setfollowstate(prev => !prev)
+  }
+}catch(err){
+  console.log(err);
+}
+    }
+    
     const handleadminadd=()=>{
       if(!socket) return;
       socket.emit('MakeAdmin',item.userid)
@@ -69,10 +111,18 @@ return(
             </View>
             <Text style={styles.username}>{item.usersname}</Text>
         </View>
-        <View style={styles.followButtom}>
-            <Text style={styles.followButtonText}>Follow</Text>
-        </View>
-        {theowner &&(
+        <Pressable
+  style={[
+    styles.followButtom,
+    followstate && { opacity: 0.5 }
+  ]}
+  
+  onPress={followToggle}
+>
+
+            <Text style={[styles.followButtonText,followstate && {opacity:0.5}]} >{followstate?'unfollow':'follow'}</Text>
+        </Pressable>
+        {theowner &&!isSelf &&(
           <View>
           <TouchableOpacity  onPress={()=>setopenmodal(true)} >
              <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
@@ -95,11 +145,11 @@ return(
   >
     {/* STOP PROPAGATION */}
     <Pressable
-      style={styles.highlight}
+      style={styles.highlight} 
       onPress={() => {}}
     >
       {/* MAKE ADMIN */}
-      {item.isAdmin===0 ?(
+      {item.isAdmin===0?(
         <Pressable
         style={styles.actionRow}
         onPress={handleadminadd}
@@ -291,7 +341,7 @@ const ListEmpty = ({ isLoading, searchQuery }) => {
       <View style={styles.searchWrapper}>
         <Ionicons name="search" size={18} color="#888" />
         <TextInput
-        value={searchQuery}
+        value={searchQuery}  
         onChangeText={setSearchquery}
           placeholder="Search by username "
           placeholderTextColor="#888"
@@ -302,7 +352,7 @@ const ListEmpty = ({ isLoading, searchQuery }) => {
       data={fetchedMembers}
       keyExtractor={(item) => `${item.userid}-${item.id}`}
 
-      renderItem={({item})=>(<ViewMembers item={item} navigation={navigation}  roomcreator={roomcreator} socket={socket} users={memberscount}/>)}
+      renderItem={({item})=>(<ViewMembers item={item} navigation={navigation}  roomcreator={roomcreator}  users={memberscount}/>)}
       ItemSeparatorComponent={()=><View style={styles.seperator}></View>}
       ListEmptyComponent={
         <ListEmpty isLoading={isLoading} searchQuery={searchQuery} />
