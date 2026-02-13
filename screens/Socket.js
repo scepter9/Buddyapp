@@ -5,8 +5,9 @@ const API_BASE_URL = "http://192.168.0.136:3000";
 
 const socket = io(API_BASE_URL, {
   transports: ['websocket'],
+  
   withCredentials: true,
-  autoConnect: false, // important
+  autoConnect: true, // important
 });
 
 export default socket;

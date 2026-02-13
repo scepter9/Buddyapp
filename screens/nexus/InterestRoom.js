@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext,createContext} from 'react';
+import React, { useEffect, useState, useContext,createContext, useCallback} from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   Image
 } from 'react-native';
 import BottomNavigator from '../BottomNavigator';
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from 'expo-linear-gradient';
 import { AuthorContext } from '../AuthorContext';
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -292,23 +293,24 @@ setSearch(val)
     return()=>clearTimeout(searchInterestroom);
   },[searchQuery])
 
-useEffect(()=>{
-  const FetchHappeningnow=async()=>{
-    try{
-      const res=await fetch(`${API_BASE_URL}/fetchhappening`)
-      if(!res.ok){
-        console.log('Something went wrong');
-        return;
-      }
-  const answer=await res.json()
-  SetHappeningNow(answer)
-    }catch(err){
-      console.log('An error occured');
-    }
-  }
-  FetchHappeningnow()
-},[])
-  useEffect(()=>{
+// useEffect(()=>{
+//   const FetchHappeningnow=async()=>{
+//     try{
+//       const res=await fetch(`${API_BASE_URL}/fetchhappening`)
+//       if(!res.ok){
+//         console.log('Something went wrong');
+//         return;
+//       }
+//   const answer=await res.json()
+//   SetHappeningNow(answer)
+//     }catch(err){
+//       console.log('An error occured');
+//     }
+//   }
+//   FetchHappeningnow()
+// },[])
+useFocusEffect(
+  useCallback(()=>{
 
     const FetchActiveRooms=async()=>{
       try{
@@ -326,8 +328,9 @@ Setactiveroom(data)
     }
     FetchActiveRooms()
   },[])
-
-  useEffect(()=>{
+)
+useFocusEffect(
+  useCallback(()=>{
     const fetchjoinedrooms=async()=>{
       try{
         const response=await fetch(`${API_BASE_URL}/getjoinroom?yourid=${sender}`)
@@ -342,6 +345,7 @@ Setactiveroom(data)
     }
     fetchjoinedrooms()
   },[])
+)
   return (
     <SafeAreaView style={styles.safeview}>
     <ScrollView style={styles.container}
@@ -475,14 +479,14 @@ ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
       </View>
 
       {/* PITCH BUTTON SECTION */}
-      <View style={styles.pitchSection}>
+      {/* <View style={styles.pitchSection}>
         <Text style={styles.pitchCatch}>
           💡 Got an idea worth sharing? Turn your thoughts into action with a pitch.
         </Text>
         <TouchableOpacity style={styles.pitchBtn} onPress={()=>navigation.navigate('PitchDeck')}>
           <Text style={styles.pitchBtnText}>View Pitches</Text>
         </TouchableOpacity>
-      </View>
+      </View> */}
     
 
     </ScrollView>

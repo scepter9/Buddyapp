@@ -122,46 +122,29 @@ export default function CampusNexus({ navigation }) {
 
 
         {/* Campus Spotlight */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Campus Spotlight</Text>
-          <View style={styles.spotlightCard}>
-            <Text style={styles.spotlightHeader}>🌟 Personality of the Day</Text>
-            <Text style={styles.highlightName}>Emily R.</Text>
-            <Text style={styles.highlightDesc}>
-              Known for making everyone smile 😊
-            </Text>
-          </View>
-          <View style={styles.spotlightCard}>
-            <Text style={styles.spotlightHeader}>🔥 Most Active</Text>
-            <Text style={styles.highlightName}>Marcus J.</Text>
-            <Text style={styles.highlightDesc}>
-              Joined 15 discussions today
-            </Text>
-          </View>
+      {/* 🔥 Daily Streak Tracker */}
+<View style={styles.sectionCard}>
+  <Text style={styles.sectionTitle}>🔥 Daily Streak</Text>
+  <View style={styles.streakContainer}>
+    <Text style={styles.streakText}>You are on a 5-day streak! 🔥</Text>
+    <TouchableOpacity style={styles.streakBtn}>
+      <Text style={styles.streakBtnText}>Keep it going →</Text>
+    </TouchableOpacity>
+  </View>
+</View>
 
-          <Text style={styles.rankTitle}>🏆 Top 3 Campus Stars</Text>
-          <View style={[styles.leaderCard, styles.top1]}>
-            <Text style={styles.rank}>#1</Text>
-            <Text style={styles.name}>Alex M.</Text>
-            <Text style={styles.points}>1,250 pts</Text>
-          </View>
-          <View style={[styles.leaderCard, styles.top2]}>
-            <Text style={styles.rank}>#2</Text>
-            <Text style={styles.name}>Sarah K.</Text>
-            <Text style={styles.points}>1,100 pts</Text>
-          </View>
-          <View style={[styles.leaderCard, styles.top3]}>
-            <Text style={styles.rank}>#3</Text>
-            <Text style={styles.name}>James T.</Text>
-            <Text style={styles.points}>950 pts</Text>
-          </View>
-
-          <TouchableOpacity style={styles.seeAll}>
-            <Text style={{ fontWeight: "600", color: "#0f172a" }}>
-              See Full Rankings
-            </Text>
-          </TouchableOpacity>
-        </View>
+{/* 🎲 Random Spotlight */}
+<View style={styles.sectionCard}>
+  <Text style={styles.sectionTitle}>🎲 Random Spotlight</Text>
+  <TouchableOpacity 
+    style={styles.randomCard} 
+    onPress={() => console.log("Navigate to random item")}
+  >
+    <Text style={styles.randomEmoji}>🚀</Text>
+    <Text style={styles.randomTitle}>AI Club</Text>
+    <Text style={styles.randomDesc}>120 active members</Text>
+  </TouchableOpacity>
+</View>
 
         {/* 🔥 Anonymous Zone (Redesigned for Gen Z) */}
         <View style={styles.sectionCard}>
@@ -195,216 +178,415 @@ export default function CampusNexus({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  wrapper:{
-    flex:1,
-     backgroundColor: "#1e293b",
+  wrapper: {
+    flex: 1,
+    backgroundColor: "#0b1120",
   },
-  container: { flex: 1, padding: 20 },
+
+  container: {
+    flex: 1,
+    paddingHorizontal: 22,
+    paddingTop: 18,
+  },
+
+  /* ================= INTEREST CARD ================= */
 
   interestCard: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginTop: 30,
+    borderRadius: 28,
+    overflow: "hidden",
+    marginTop: 32,
     borderWidth: 1,
-    borderColor: 'rgba(0,217,255,0.2)',
-    backgroundColor: '#0f172a',
+    borderColor: "rgba(0,217,255,0.25)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    shadowColor: "#00d9ff",
+    shadowOpacity: 0.25,
+    shadowRadius: 25,
+    elevation: 12,
   },
 
   interestBg: {
-    borderRadius: 20,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
+    paddingVertical: 22,
+    paddingHorizontal: 20,
   },
 
   interestContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+    flexDirection: "row",
+    alignItems: "center",
   },
 
   iconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(0,217,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "rgba(0,217,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 18,
   },
 
   interestIcon: {
-    fontSize: 28,
+    fontSize: 30,
   },
 
   interestTitle: {
-    color: '#eaf6ff',
-    fontSize: 18,
-    fontWeight: '800',
+    color: "#ffffff",
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
 
   interestDesc: {
-    color: 'rgba(234,246,255,0.65)',
+    color: "rgba(255,255,255,0.7)",
     fontSize: 14,
-    marginTop: 4,
+    marginTop: 6,
   },
 
   interestStats: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 10,
+    flexDirection: "row",
+    marginTop: 12,
   },
 
   statText: {
-    color: '#00d9ff',
+    color: "#00d9ff",
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "700",
+    marginRight: 16,
   },
 
   interestFooter: {
-    marginTop: 16,
+    marginTop: 18,
     borderTopWidth: 1,
-    borderColor: 'rgba(0,217,255,0.15)',
-    paddingVertical: 10,
-    alignItems: 'center',
+    borderColor: "rgba(0,217,255,0.2)",
+    paddingTop: 14,
+    alignItems: "center",
   },
 
   joinText: {
-    color: '#00d9ff',
-    fontWeight: '700',
+    color: "#00d9ff",
+    fontWeight: "800",
     fontSize: 15,
+    letterSpacing: 0.5,
   },
 
+  /* ================= CAMPUS PULSE ================= */
 
-  /* Pulse */
   pulseTile: {
-    backgroundColor: "#1e293b",
-    borderRadius: 20,
-    padding: 22,
-    marginBottom: 14,
+    borderRadius: 30,
+    padding: 28,
+    marginBottom: 22,
+    overflow: "hidden",
+    shadowColor: "#ff3cac",
+    shadowOpacity: 0.4,
+    shadowRadius: 30,
+    elevation: 15,
   },
-  pulseTitle: { fontSize: 22, fontWeight: "700", color: "#f9fafb", marginBottom: 6 },
-  pulseDesc: { color: "#d1d5db" },
 
-  /* Section Card */
+  pulseTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#ffffff",
+    marginBottom: 10,
+    letterSpacing: 0.8,
+  },
+
+  pulseDesc: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 14,
+  },
+
+  /* ================= SECTION CARD ================= */
+
   sectionCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
-    padding: 18,
-    marginTop: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 30,
+    padding: 22,
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
-  sectionTitle: { fontSize: 20, fontWeight: "700", marginBottom: 12, color: "#0f172a" },
-  subHeader: { fontSize: 16, fontWeight: "600", marginTop: 10, marginBottom: 6 },
 
-  /* Hangouts */
-  hangoutGrid: { flexDirection: "column" },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    marginBottom: 16,
+    color: "#ffffff",
+    letterSpacing: 0.5,
+  },
+
+  subHeader: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: 14,
+    marginBottom: 8,
+    color: "#ffffff",
+  },
+
+  /* ================= HANGOUTS ================= */
+
+  hangoutGrid: {
+    flexDirection: "column",
+  },
+
   hangCard: {
     width: "100%",
-    minHeight: 110,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    minHeight: 120,
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 18,
     justifyContent: "center",
+    shadowOpacity: 0.3,
+    shadowRadius: 18,
+    elevation: 10,
   },
-  hangTitle: { fontSize: 16, fontWeight: "700", color: "#fff" },
-  hangDesc: { color: "#d1d5db" },
+
+  hangTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+
+  hangDesc: {
+    color: "rgba(255,255,255,0.85)",
+    marginTop: 8,
+    fontSize: 13,
+  },
+
   meetup: { backgroundColor: "#2563eb" },
   join: { backgroundColor: "#db2777" },
   oneonone: { backgroundColor: "#16a34a" },
   trivia: { backgroundColor: "#9333ea" },
 
-  /* Buddy */
+  /* ================= BUDDY MATCH ================= */
+
   buddyMatch: {
-    backgroundColor: "#3796a6",
-    borderRadius: 20,
-    padding: 22,
+    borderRadius: 30,
+    padding: 30,
     alignItems: "center",
+    marginTop: 24,
+    overflow: "hidden",
+    shadowColor: "#00c6ff",
+    shadowOpacity: 0.35,
+    shadowRadius: 25,
+    elevation: 14,
+  },
+
+  buddyAvatar: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    marginBottom: 14,
+  },
+
+  buddyTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: 0.5,
+  },
+
+  buddyDesc: {
+    color: "rgba(255,255,255,0.9)",
+    marginVertical: 10,
+    fontSize: 14,
+    textAlign: "center",
+  },
+
+  ctaBtn: {
+    backgroundColor: "#ffffff",
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    borderRadius: 40,
+    marginTop: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+
+  ctaText: {
+    fontWeight: "800",
+    color: "#0f172a",
+    letterSpacing: 0.5,
+  },
+
+  /* ================= ROOMS ================= */
+
+  roomScroll: {
     marginTop: 14,
   },
-  buddyAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "rgba(255,255,255,0.3)",
-    marginBottom: 10,
-  },
-  buddyTitle: { fontSize: 18, fontWeight: "700", color: "#fff" },
-  buddyDesc: { color: "#fff", marginVertical: 6 },
-  ctaBtn: {
-    backgroundColor: "#fff",
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 12,
-    marginTop: 10,
-  },
-  ctaText: { fontWeight: "600", color: "#374151" },
 
-  /* Rooms */
-  roomScroll: { marginTop: 10 },
   roomCard: {
-    width: 180,
-    borderRadius: 16,
-    padding: 16,
-    marginRight: 14,
-    minHeight: 140,
+    width: 200,
+    borderRadius: 24,
+    padding: 20,
+    marginRight: 16,
+    minHeight: 150,
   },
-  roomHeader: { color: "#f9fafb", marginBottom: 4 },
-  roomTitle: { fontWeight: "700", fontSize: 16, color: "#f9fafb" },
-  roomDesc: { color: "#e5e7eb" },
+
+  roomHeader: {
+    color: "rgba(255,255,255,0.8)",
+    marginBottom: 6,
+  },
+
+  roomTitle: {
+    fontWeight: "800",
+    fontSize: 17,
+    color: "#ffffff",
+  },
+
+  roomDesc: {
+    color: "rgba(255,255,255,0.8)",
+    marginTop: 6,
+  },
+
   sports: { backgroundColor: "#2563eb" },
   coding: { backgroundColor: "#db2777" },
   art: { backgroundColor: "#16a34a" },
 
-  /* Spotlight */
+  /* ================= SPOTLIGHT ================= */
+
   spotlightCard: {
-    backgroundColor: "#f9fafb",
-    padding: 14,
-    borderRadius: 14,
-    marginBottom: 10,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    padding: 18,
+    borderRadius: 20,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
   },
-  spotlightHeader: { fontWeight: "700", fontSize: 16 },
-  highlightName: { fontWeight: "600", fontSize: 15, marginTop: 4 },
-  highlightDesc: { color: "#374151" },
-  rankTitle: { marginTop: 10, fontWeight: "700" },
+
+  spotlightHeader: {
+    fontWeight: "800",
+    fontSize: 16,
+    color: "#ffffff",
+  },
+
+  highlightName: {
+    fontWeight: "700",
+    fontSize: 15,
+    marginTop: 6,
+    color: "#ffffff",
+  },
+
+  highlightDesc: {
+    color: "rgba(255,255,255,0.75)",
+    marginTop: 4,
+  },
+
+  rankTitle: {
+    marginTop: 16,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+
   leaderCard: {
     flexDirection: "row",
     justifyContent: "space-between",
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "#f9fafb",
-    marginTop: 6,
-  },
-  top1: { borderLeftWidth: 4, borderLeftColor: "#f59e0b" },
-  top2: { borderLeftWidth: 4, borderLeftColor: "#9ca3af" },
-  top3: { borderLeftWidth: 4, borderLeftColor: "#a16207" },
-  rank: { fontWeight: "700" },
-  seeAll: {
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.05)",
     marginTop: 10,
-    alignSelf: "center",
-    backgroundColor: "#e5e7eb",
-    padding: 10,
-    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
-  /* Anonymous Zone */
-  liveCard: {
-    backgroundColor: "#0f172a",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
+  top1: { borderLeftWidth: 4, borderLeftColor: "#facc15" },
+  top2: { borderLeftWidth: 4, borderLeftColor: "#cbd5e1" },
+  top3: { borderLeftWidth: 4, borderLeftColor: "#d97706" },
+
+  rank: {
+    fontWeight: "800",
+    color: "#ffffff",
   },
-  liveTopic: { color: "#f9fafb", fontWeight: "700", fontSize: 15 },
-  liveMeta: { color: "#94a3b8", marginTop: 4 },
+
+  seeAll: {
+    marginTop: 16,
+    alignSelf: "center",
+    backgroundColor: "#ffffff",
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    borderRadius: 30,
+  },
+
+  /* ================= ANONYMOUS ZONE ================= */
+
+  liveCard: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+  },
+
+  liveTopic: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 15,
+  },
+
+  liveMeta: {
+    color: "rgba(255,255,255,0.6)",
+    marginTop: 6,
+  },
 
   anonCard: {
     width: "100%",
-    minHeight: 100,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    minHeight: 110,
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 18,
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 12,
   },
+
   create: { backgroundColor: "#2563eb" },
   questions: { backgroundColor: "#9333ea" },
+  streakContainer: {
+    backgroundColor: "#10213a",
+    padding: 16,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  streakText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#00d9ff",
+    marginBottom: 10,
+  },
+  streakBtn: {
+    backgroundColor: "#00d9ff",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  streakBtnText: {
+    color: "#0f172a",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  
+  randomCard: {
+    backgroundColor: "#0b1629",
+    borderRadius: 20,
+    padding: 18,
+    alignItems: "center",
+  },
+  randomEmoji: {
+    fontSize: 28,
+    marginBottom: 6,
+  },
+  randomTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#eaf6ff",
+  },
+  randomDesc: {
+    color: "rgba(234,246,255,0.7)",
+    fontSize: 14,
+    marginTop: 4,
+    textAlign: "center",
+  }
 });

@@ -114,7 +114,7 @@ const [commentText,setcommentText]=useState("")
 const scaleAnim=useRef(new Animated.Value(1)).current;
 
 useEffect(()=>{
-  if(!searchid && !roomdetais) return
+  if(!searchid || !roomdetais) return
   const fetchlikestate=async()=>{
    
     try{
@@ -133,7 +133,7 @@ useEffect(()=>{
 },[searchid,roomdetais])
  useEffect(()=>{
   const fetchlikes=async()=>{
-    if(!searchid && !roomdetais) return
+    if(!searchid || !roomdetais) return
     try{
       const res=await fetch(`${API_BASE_URL}/fetchlikes?room=${roomdetais}`)
       if(!res.ok){
@@ -141,7 +141,7 @@ useEffect(()=>{
         return;
       }
       const data=await res.json()
-    SetlikeCount(data.roomlikenum)
+    SetlikeCount(data.count)
     }catch(err){
       console.log(err);
     }
@@ -345,21 +345,21 @@ const TotalItems=postImages.length + postVideos.length;
       </View>)}
 
      
-  ``    <View style={styles.reactions}>
+      <View style={styles.reactions}>
       
         <TouchableOpacity onPress={postroomlikes}>
             <Animated.View style={{transform:[{scale:scaleAnim}]}}>
             <FontAwesome
         name={likebyme ? "heart" : "heart-o"}
-        size={30}
+        size={20}
         color={likebyme ? "#ff2ed8" : "#fff"}
       />
-        </Animated.View> 
-          <Text style={styles.reactText}> {likeCount}</Text>
+        </Animated.View><Text style={styles.reactText}> {likeCount}</Text>
+
         
           </TouchableOpacity>
-        <TouchableOpacity><Text style={styles.reactText}>
-    <FontAwesome name="comment-o" size={30} color="#fff" /> {item.reactions?.comment || 0}</Text></TouchableOpacity>
+        <TouchableOpacity><Text style={styles.reactText} onPress={()=>Setcommentmodal(true)}>
+    <FontAwesome name="comment-o" size={20} color="#fff" /> {postcomment.length}</Text></TouchableOpacity>
         <TouchableOpacity><Text style={styles.reactText}>🔁 {item.reactions?.share || 0}</Text></TouchableOpacity>
 
 
@@ -416,8 +416,12 @@ const isAdmin=searchid===roomcreator
   useEffect(() => {
     if (!searchid || !roomid) return;
   
+    const sentdata={
+      receiveroomid:roomid,
+      usersValue:searchid
+    }
     // join room
-    socket.emit("joingrouproom", roomid);
+    socket.emit("joingrouproom", sentdata);
   
     const onlineHandler = (count) => {
       setOnlineCount(count);
@@ -433,34 +437,17 @@ const isAdmin=searchid===roomcreator
   
   
   useEffect(() => {
-    if (!socket.current) return;
+    if (!socket) return;
   
-    socket.current.on("gottenbio", (data) => {
+    socket.on("gottenbio", (data) => {
       setbiostore(data);
     });
   
     return () => { 
-      socket.current.off("gottenbio");
+      socket.off("gottenbio");
     };
   }, [roomid]);
-  // useEffect(()=>{
-  //   if(!roomcreator || !isAdmin) return ;
-  //   const fetchAdmin=async()=>{
-  //     try{
-  //       const res=await fetch(`${API_BASE_URL}/updateadminlogic`,{
-  //         method:'POST',
-  //         headers:{'Content-Type':'application/json'},
-  //         body:JSON.stringify({searchid,roomid})
-  //       })
-  //       if(!res.ok){
-  //         console.log('something went wrong trying to update ');
-  //       }
-  //     }catch(err){
-  //       throw new Error(err)
-  //     }
-  //   }
-  //  fetchAdmin()
-  // },[searchid,roomid])
+  
  
   useFocusEffect(
   useCallback(() => {
@@ -544,8 +531,8 @@ Setroomimage(value)
       const data=await postimage.json()
     
       const theimage=data.imageUrl
-      if (!socketref.current) return;
-socketref.current.emit("sendimage", theimage);
+      if (!socket) return;
+socket.emit("sendimage", theimage);
 
 
      }
@@ -564,16 +551,36 @@ throw new Error("something is wrong")
     socket.emit('updatebio', biotext);
     Setbiomodal(false); // close modal after sending
   }
-  const Leaveroom=async()=>{
+  const ConfirmLeave=()=>{
+    Alert.alert(
+      isAdmin?'Delete Room':'LeaveRoom',
+      'Are you sure you want to complete this Action? it cant be undone. ',
+      [
+        {
+          text:'Cancel',
+          style:'cancel',
+onPress:()=>console.log(`User Cancelled`)
+        },
+        {
+          text:isAdmin?'Delete':'Leave',
+          style:'destructive',
+onPress:()=>Leavelogic()
+        }
+      ],
+      {cancelable:true}
+    )
+  }
+  const Leavelogic=async()=>{
     if(!searchid ||!roomid) return;
+    const sendRoute=isAdmin?'leaveroom':'Deleteroom';
 try{
-  const res=await fetch(`${API_BASE_URL}/leaveroom`,{
+  const res=await fetch(`${API_BASE_URL}/${sendRoute}`,{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({roomid,searchid})
   })
   if(!res.ok){
-    console.log('Soemthing went wrong posting leaaveroom in room logic');
+    console.log('Soemthing went wrong posting leaveroom in room logic');
     return;
   }
 }catch(err){
@@ -582,6 +589,10 @@ try{
 }finally{
   navigation.navigate('InterestRoom')
 }
+  }
+  const GotoMembers=()=>{
+    setOpenModal(false)
+    navigation.navigate('MembersScreen',{roomid:roomid,roomname:roomname,roomcreator:roomcreator})
   }
   return (
     <LinearGradient colors={["#0b0f14", "#111827"]} style={styles.container}>
@@ -660,8 +671,8 @@ try{
     onPress={() => setOpenModal(false)}
   ><TouchableWithoutFeedback>
     <BlurView intensity={30} tint="dark" style={styles.moda}>
-      <TouchableOpacity style={styles.modalItem} onPress={Leaveroom}>
-        <Text style={styles.modaltext}> Leave Room</Text>
+      <TouchableOpacity style={styles.modalItem} onPress={ConfirmLeave}>
+        <Text style={styles.modaltext}> {isAdmin?'Delete Room':'Leave Room'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={[styles.modalItem,!isAdmin &&{opacity:0.5}]} onPress={handleimage} disabled={!isAdmin}>
@@ -677,7 +688,7 @@ try{
       </TouchableOpacity>
 
 
-      <TouchableOpacity style={styles.modalItem} onPress={()=>navigation.navigate('MembersScreen',{roomid:roomid,roomname:roomname,roomcreator:roomcreator})}>
+      <TouchableOpacity style={styles.modalItem} onPress={GotoMembers}>
         <Text style={styles.modaltext}>View members </Text>
       </TouchableOpacity>
 

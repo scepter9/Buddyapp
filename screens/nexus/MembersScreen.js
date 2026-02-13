@@ -21,35 +21,44 @@ import { io } from "socket.io-client";
 import socket from "../Socket";
 
 
-function ViewMembers({item,navigation,roomcreator}){
+function ViewMembers({item,navigation,roomcreator,roomid}){
   const [followstate,Setfollowstate]=useState(false)
-  const [followstateSet,SetfollowstateSet]=useState(new Set())
+ 
     const {user}=useContext(AuthorContext)
     const usersid=user?.id;
     const theowner=Number(item.userid)===Number(roomcreator)
     const isSelf=Number(usersid)===Number(item.userid)
+    const amCreator=Number(usersid)===Number(roomcreator)
     const [openmodal, setopenmodal] = useState(false)
+    const isAdmin = Number(item.isAdmin) === 1;
+    const [modalIsAdmin, setModalIsAdmin] = useState(false);
+
+  
+
  useEffect(()=>{
   const Fetchfollowing=async()=>{
     try{
-      const res=await fetch(`${API_BASE_URL}/isFollowingformembers`)
+      const res=await fetch(`${API_BASE_URL}/isFollowingformembers?senderid=${usersid}`)
       if(!res.ok){
         console.log('Soemthing went wrong while fetching memebers');
         return;
       }
       const data=await res.json()
+      const mappedUsers = data.map(r => Number(r.receiver_id))
+      const mappedusersSet = new Set(mappedUsers)
       
-SetfollowstateSet(data)
-const isFollowinga=followstateSet.has(item.userid);
-Setfollowstate(isFollowinga)
+      const isFollowinga = mappedusersSet.has(Number(item.userid))
+      Setfollowstate(isFollowinga)
+      
     }catch(err){
 console.log(err);
     }
   }
   Fetchfollowing()
- },[])
+ },[usersid, item.userid])
 
-  
+
+
     const followToggle=async()=>{
       const receiver_id=item.userid;
       const endpoint=followstate?'unfollow':'follow';
@@ -70,19 +79,50 @@ try{
 }
     }
     
-    const handleadminadd=()=>{
-      if(!socket) return;
-      socket.emit('MakeAdmin',item.userid)
-      setopenmodal(false)
-    }
-    const handleadminremove=()=>{
-      if(!socket) return;
-      socket.emit('RemoveAdmin',item.userid)
-      setopenmodal(false)
-    }
+    const handleadminadd = () => {
+      if (!socket) return;
+    
+      const payload = { userid: item.userid, roomid ,senderid:usersid};
+    
+      if (!socket.connected) {
+        console.log('Socket not connected. Waiting...');
+        socket.once('connect', () => {
+          console.log('Socket now connected! Emitting MakeAdmin.');
+          socket.emit('MakeAdmin', payload);
+        });
+      } else {
+        socket.emit('MakeAdmin', payload);
+      }
+    
+      setopenmodal(false);
+    };
+    
+    
+    
+    const handleadminremove = () => {
+      if (!socket) return;
+    
+      const payload = { userid: item.userid, roomid ,senderid:usersid};
+    
+      if (!socket.connected) {
+        console.log('Socket not connected. Waiting...');
+        socket.once('connect', () => {
+          console.log('Socket now connected! Emitting RemoveAdmin.');
+          socket.emit('RemoveAdmin', payload);
+        });
+      } else {
+        socket.emit('RemoveAdmin', payload);
+      }
+    
+      setopenmodal(false);
+    };
+    
     const handleremove=()=>{
       if(!socket) return;
-      socket.emit('RemoveMember',item.userid)
+      socket.emit('RemoveMember',{
+        userid: item.userid,
+        roomid,senderid:usersid
+      })
       setopenmodal(false)
     }
 return(
@@ -111,20 +151,29 @@ return(
             </View>
             <Text style={styles.username}>{item.usersname}</Text>
         </View>
-        <Pressable
-  style={[
-    styles.followButtom,
-    followstate && { opacity: 0.5 }
-  ]}
-  
-  onPress={followToggle}
+        {!isSelf && (
+          <Pressable
+          style={[
+            styles.followButtom,
+            followstate && { opacity: 0.5 }
+          ]}
+          
+          onPress={followToggle}
+        >
+        
+                    <Text style={[styles.followButtonText,followstate && {opacity:0.5}]} >{followstate?'unfollow':'follow'}</Text>
+                </Pressable>
+        )}
+        
+        { amCreator&&!isSelf &&(
+          <View>
+          <TouchableOpacity
+  onPress={() => {
+    setopenmodal(true);
+  }
+  }
 >
 
-            <Text style={[styles.followButtonText,followstate && {opacity:0.5}]} >{followstate?'unfollow':'follow'}</Text>
-        </Pressable>
-        {theowner &&!isSelf &&(
-          <View>
-          <TouchableOpacity  onPress={()=>setopenmodal(true)} >
              <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
              </TouchableOpacity>
              
@@ -132,55 +181,46 @@ return(
 </View>
         )}
        
-       <Modal
-  transparent
-  animationType="fade"
-  visible={openmodal}
-  onRequestClose={() => setopenmodal(false)}
->
-  {/* BACKDROP */}
-  <Pressable
-    style={styles.backdrop}
-    onPress={() => setopenmodal(false)}
-  >
-    {/* STOP PROPAGATION */}
+       <Modal transparent animationType="fade" visible={openmodal}>
+  <View style={styles.backdrop}>
+
+    {/* CLICK-TO-CLOSE AREA (The Backdrop) */}
     <Pressable
-      style={styles.highlight} 
-      onPress={() => {}}
-    >
-      {/* MAKE ADMIN */}
-      {item.isAdmin===0?(
-        <Pressable
-        style={styles.actionRow}
-        onPress={handleadminadd}
-      >
-        <Ionicons name="star-outline" size={22} color="#ffc" />
-        <Text style={styles.actionText}>Make Admin</Text>
-      </Pressable>
-      ):(
-        <Pressable
-        style={styles.actionRow}
-        onPress={handleadminremove}
-      >
-        <Ionicons name="star-outline" size={22} color="#ffcc" />
-        <Text style={styles.actionText}>Remove Admin</Text>
-      </Pressable>
-      )}
-      
+      style={StyleSheet.absoluteFill}
+      onPress={() => setopenmodal(false)}
+    />
+
+    {/* ACTUAL MODAL CONTENT - Change this View to a Pressable */}
+    <Pressable style={styles.highlight}> 
+   
+
+    {!isAdmin ? (
+  <TouchableOpacity style={styles.actionRow} onPress={handleadminadd} activeOpacity={0.8}>
+    <Ionicons name="star-outline" size={22} color="#ffc" />
+    <Text style={styles.actionText}>Make Admin</Text>
+  </TouchableOpacity>
+) : (
+  <TouchableOpacity style={styles.actionRow} onPress={handleadminremove} activeOpacity={0.8}>
+    <Ionicons name="star-outline" size={22} color="#ffcc" />
+    <Text style={styles.actionText}>Remove Admin</Text>
+  </TouchableOpacity>
+)}
 
       <View style={styles.divider} />
 
-      {/* REMOVE USER */}
-      <Pressable
+      <TouchableOpacity
         style={styles.actionRow}
         onPress={handleremove}
+        activeOpacity={0.8}
       >
         <Ionicons name="trash-outline" size={22} color="#ff453a" />
         <Text style={styles.actionText}>Remove User</Text>
-      </Pressable>
+      </TouchableOpacity>
+
     </Pressable>
-  </Pressable>
+  </View>
 </Modal>
+
 
        
        
@@ -258,21 +298,16 @@ useEffect(()=>{
         console.log(`An error whlle fetching Memberscount in members screen`);
       }
 const data=await res.json()
-setmemberscount(data)
+setmemberscount(data.members)
     }catch(err){
       console.log(err);
     }
   }
   Getmemeberscount()
 },[roomid])
-useEffect(() => {
-  if (!socket) return;
 
-  const adminHandler = data => setfetchedMembers(data);
-  socket.on('UpdateAfterAdmin', adminHandler);
 
-  return () => socket.off('UpdateAfterAdmin', adminHandler);
-}, [socket]);
+
 
 useEffect(()=>{
   if (!searchQuery.trim()) {
@@ -298,16 +333,23 @@ useEffect(()=>{
   return()=>clearTimeout(fetchuser)
   
 },[searchQuery])
+
 useEffect(() => {
-  if (!socket) return;
+  const handler = data => {
+    setMembers(data);
+    setfetchedMembers(data);
+    setmemberscount(data.length);
+  };
 
-  const deleteHandler = data => {
-setfetchedMembers(data)
-  }
-  socket.on('UpdateAfterDelete', deleteHandler);
+  socket.on('UpdateAfterAdmin', handler);
+  socket.on('UpdateAfterDelete', handler);
 
-  return () => socket.off('UpdateAfterDelete', deleteHandler);
-}, [socket]);
+  return () => {
+    socket.off('UpdateAfterAdmin', handler);
+    socket.off('UpdateAfterDelete', handler);
+  };
+}, []);
+
 
 
 
@@ -332,7 +374,7 @@ const ListEmpty = ({ isLoading, searchQuery }) => {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Members</Text>
+          <Text style={styles.headerTitle}>{memberscount} Members</Text>
           <Text style={styles.headerSubtitle}>{roomname?roomname:''}</Text>
         </View>
       </View>
@@ -352,7 +394,7 @@ const ListEmpty = ({ isLoading, searchQuery }) => {
       data={fetchedMembers}
       keyExtractor={(item) => `${item.userid}-${item.id}`}
 
-      renderItem={({item})=>(<ViewMembers item={item} navigation={navigation}  roomcreator={roomcreator}  users={memberscount}/>)}
+      renderItem={({item})=>(<ViewMembers item={item} navigation={navigation}  roomcreator={roomcreator}  users={memberscount} roomid={roomid}/>)}
       ItemSeparatorComponent={()=><View style={styles.seperator}></View>}
       ListEmptyComponent={
         <ListEmpty isLoading={isLoading} searchQuery={searchQuery} />
