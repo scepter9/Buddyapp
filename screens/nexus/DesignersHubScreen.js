@@ -222,7 +222,7 @@ const FlatListRef=useRef(null)
 const isUser=item.sender_id===searchid;
 const [selectedValue,setselectedValues]=useState(null);
 
-const [currentOffset,setCurrentoffset]=useState(0)
+const scrollOffset = useRef(0);
 const setUser=(id,name,userid,thetext)=>{
   setselectedValues({
     commentupdateid:id,
@@ -430,7 +430,9 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
       message:'Check this Post '
     })
   }
-  
+  useEffect(() => {
+    FlatListRef.current?.scrollToEnd({ animated: true });
+  }, [postcomment.length]);
   return (
     <BlurView intensity={50} tint="dark" style={styles.post}>
       <View style={styles.userRow}>
@@ -555,7 +557,11 @@ const TotalItems=postImages.length + postVideos.length;
 
          <Modal visible={commentmodal} animationType="slide" onRequestClose={()=>Setcommentmodal(false)} transparent>
   
-  <Pressable onPress={()=>Setcommentmodal(false)} style={{flex:1,backgroundColor:'rgba(0,0,0,0.6)',justifyContent:'flex-end'}}>
+         <Pressable
+  onPress={()=>Setcommentmodal(false)}
+  style={{flex:1,backgroundColor:'rgba(0,0,0,0.6)',justifyContent:'flex-end'}}
+  pointerEvents="box-none"
+>
     {/* Content Container */}
     <KeyboardAvoidingView
   style={{ flex: 1, justifyContent: 'flex-end' }}
@@ -576,22 +582,28 @@ const TotalItems=postImages.length + postVideos.length;
       <FlatList 
       ref={FlatListRef}
       data={postcomment}
-      onScroll={(e)=>setCurrentoffset(e.nativeEvent.contentOffset.y)}
+      onScroll={(e) => {
+        scrollOffset.current = e.nativeEvent.contentOffset.y;
+      }}
       scrollEventThrottle={16}
       keyExtractor={(item)=>`active-${item.id}`}
       renderItem={({item})=>(<TheComments item={item} userisId={searchid} onSelect={setUser} onSelectidforindex={setuserindex}
      />)}
       showsVerticalScrollIndicator={false}
-      onContentSizeChange={()=>FlatListRef.current?.scrollToEnd({animated:true})}
+    
       keyboardShouldPersistTaps='handled'
+      initialNumToRender={10}
+      maxToRenderPerBatch={10}
+      windowSize={5}
+      removeClippedSubviews={true}
       />
-      <TouchableOpacity
+      {/* <TouchableOpacity
   onPress={setBacktouser}
   activeOpacity={0.8}
   style={styles.floatingBackBtn}
 >
   <Ionicons name="arrow-down-circle" size={22} color="#fff" />
-</TouchableOpacity>
+</TouchableOpacity> */}
     <ScrollView
         keyboardShouldPersistTaps='handled'
         style={{flexGrow:0}}
@@ -1055,7 +1067,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius:24,
     paddingHorizontal:16,
     paddingTop:10,
-  alignSelf:'stretch'
+  alignSelf:'stretch',
+  position: 'relative',
+  overflow: 'visible',
   },
 grabber: {
   width: 40,
@@ -1490,21 +1504,18 @@ replyPreviewName:{
   fontSize:13,
   fontWeight:'600'
 },
-floatingBackBtn:{
-  position:'absolute',
-  bottom:80,
-  right:20,
-  width:48,
-  height:48,
-  borderRadius:24,
-  justifyContent:'center',
-  alignItems:'center',
-  backgroundColor:'#6D5BFF',
-  shadowColor:'#000',
-  shadowOffset:{width:0,height:4},
-  shadowOpacity:0.3,
-  shadowRadius:6,
-  elevation:8
+floatingBackBtn: {
+  position: 'absolute',
+  bottom: 80,
+  right: 20,
+  width: 48,
+  height: 48,
+  borderRadius: 24,
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: '#6D5BFF',
+  zIndex: 9999,
+  elevation: 30
 }
 });
 
