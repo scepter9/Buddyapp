@@ -13,12 +13,12 @@ import {
   TouchableWithoutFeedback,
   Alert,
   TextInput,
-  Keyboard ,
   KeyboardAvoidingView,
   Platform,
   Animated,
   Pressable,
-  ScrollView
+  ScrollView,
+  Keyboard
 } from "react-native";
 
 import { useFocusEffect } from "@react-navigation/native";
@@ -38,45 +38,18 @@ function TheComments({ item ,onSelect,onSelectidforindex}) {
   const {user}=useContext(AuthorContext)
   const userisId=user?.id
   const commentid=item.id;
-  const [likebyme,Setlikebyme]=useState(false)
-const [likeCount,SetlikeCount]=useState(0)
+  const [likebyme,Setlikebyme]=useState(Boolean(item.likestate))
+const [likeCount,SetlikeCount]=useState(item.likecount ?? 0)
 const [isMutating,SetisMutating]=useState(false)
 const scaleAnim=useRef(new Animated.Value(1)).current;
-  useEffect(()=>{
-    if(!commentid || !user) return;
-    const fetchlikestate=async()=>{
-     
-      try{
-        const res=await fetch(`${API_BASE_URL}/fetchcommentlikestate?user=${userisId}&comment=${commentid}`)
-        if(!res.ok){
-          console.log('something went wrong');
-          return;
-        }
-        const data=await res.json()
-      Setlikebyme(data.length>0)
-      }catch(err){
-        console.log(err);
-      }
-        }
-        fetchlikestate()
-  },[userisId,commentid])
-   useEffect(()=>{
-    const fetchlikes=async()=>{
-      if(!user || !commentid) return
-      try{
-        const res=await fetch(`${API_BASE_URL}/fetchcommentlikes?comment=${commentid}`)
-        if(!res.ok){
-          console.log('something went wrong');
-          return;
-        }
-        const data=await res.json()
-      SetlikeCount(data.count)
-      }catch(err){
-        console.log(err);
-      }
-    }
-    fetchlikes()
-   },[userisId,commentid])
+
+ 
+
+  // useEffect(() => {
+  //   if(!Showpost) return;
+  //   SetlikeCount();        
+  //   Setlikebyme();    
+  // }, [item.likecount, item.likestate]);
     
       const postroomlikes=async()=>{
         if(isMutating) return;
@@ -114,6 +87,7 @@ const scaleAnim=useRef(new Animated.Value(1)).current;
   SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
         }finally{
           SetisMutating(false)
+        
         }
           
         
@@ -164,7 +138,7 @@ const scaleAnim=useRef(new Animated.Value(1)).current;
         style={styles.replyPreviewAvatar}
       />
       <Text style={styles.replyPreviewName}>
-        {item.replyUserName}:
+        {item.replyUserName}: 
         <Text numberOfLines={1} ellipsizeMode="tail" style={styles.replyPreviewNamee}>
         {item.replytext}
       </Text>
@@ -182,20 +156,18 @@ const scaleAnim=useRef(new Animated.Value(1)).current;
           size={20}
           />
         </TouchableOpacity>
-      <Pressable style={styles.cmPulseButton}>
-        <TouchableOpacity onPress={postroomlikes}>
-        <Animated.View style={{transform:[{scale:scaleAnim}]}}>
-        <FontAwesome
-        name={likebyme ? "heart" : "heart-o"}
-        size={20}
-        color={likebyme ? "#ff2ed8" : "#fff"}
-      /> 
-        </Animated.View>
-       
-        </TouchableOpacity>
+        <TouchableOpacity style={styles.cmPulseButton} onPress={postroomlikes}>
+  <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+    <FontAwesome
+      name={likebyme ? "heart" : "heart-o"}
+      size={20}
+      color={likebyme ? "#ff2ed8" : "#fff"}
+    />
+  </Animated.View>
+
+  <Text style={styles.cmPulseCount}>{likeCount}</Text>
+</TouchableOpacity>
       
-        <Text style={styles.cmPulseCount}>{likeCount}</Text>
-      </Pressable>
       </View>
     </View>
 
@@ -221,28 +193,35 @@ const scaleAnim=useRef(new Animated.Value(1)).current;
 const FlatListRef=useRef(null)
 const isUser=item.sender_id===searchid;
 const [selectedValue,setselectedValues]=useState(null);
-
+const postcommentRef=useRef(postcomment)
 const scrollOffset = useRef(0);
-const setUser=(id,name,userid,thetext)=>{
+const [page,Setpage]=useState(1);
+const [Showpost,setShowpost]=useState(false)
+const MemoizeThecomments=React.memo(TheComments)
+useEffect(()=>{
+  postcommentRef.current=postcomment;
+},[postcomment])
+const setUser=useCallback((id,name,userid,thetext)=>{
   setselectedValues({
     commentupdateid:id,
     usersname:name,
     replyuserId:userid,
     replyusertext:thetext
   })
-}
-const setuserindex=(theid)=>{
+},[]);
+const setuserindex = useCallback((theid)=>{
   if(!theid) return;
-  const theIndex=postcomment.findIndex(user=>user.id===theid)
-  if(theIndex!==-1){
+
+  const theIndex = postcomment.findIndex(user=>user.id===theid)
+
+  if(theIndex !== -1){
     FlatListRef.current?.scrollToIndex({
       index: theIndex,
       animated: true,
       viewPosition: 0.3
     })
-}
-
-}
+  }
+},[postcomment])
 const setBacktouser=()=>{
 FlatListRef.current?.scrollToOffset({
   offset:currentOffset,
@@ -357,6 +336,12 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
     // Fallback for anything else
     return [];
   };
+  const renderComment=useCallback(({item})=>(
+    <MemoizeThecomments
+    item={item}
+    userisId={searchid} onSelect={setUser} onSelectidforindex={setuserindex}
+    />
+  ),[setUser,setuserindex,searchid])
   
   const postImages = safeParse(item.postimage);
   const postVideos = safeParse(item.postvideo);
@@ -378,23 +363,30 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
   },[roomdetais,socket])
   
   useEffect(()=>{
+    
     const fetchPostComment=async()=>{
+      if(Showpost) return;
+      setShowpost(true)
       try{
-        const res=await fetch(`${API_BASE_URL}/fetchpostcomment?postid=${roomdetais}&roomid=${Roomid}`);
+        const res=await fetch(`${API_BASE_URL}/fetchpostcomment?postid=${roomdetais}&roomid=${Roomid}&userIs=${searchid}&page=${page}`);
         if(!res.ok){
           console.log('Something went wrong fetching comment for a room');
           return;
         }
         const data=await res.json()
-        SetPostcomment(data)
+        SetPostcomment(prev=>[...prev,...data])
+        
+       
+        setShowpost(false)
       }catch(err){
         console.log(err);
         return;
       }
     }
     fetchPostComment()
-  },[roomdetais,Roomid])
+  },[roomdetais,Roomid,page])
   const handleComment=()=>{
+    Keyboard.dismiss()
     if(!socket || commentText.trim()==='') return;
     const commentval={
       postid:roomdetais,
@@ -555,101 +547,99 @@ const TotalItems=postImages.length + postVideos.length;
          <TouchableOpacity onPress={shareLogic}><Text style={styles.reactText}><Ionicons name="repeat-outline" size={32} color='#aaa'/>
          {item.reactions?.share || 0}</Text></TouchableOpacity>
 
-         <Modal visible={commentmodal} animationType="slide" onRequestClose={()=>Setcommentmodal(false)} transparent>
-  
-         <Pressable
-  onPress={()=>Setcommentmodal(false)}
-  style={{flex:1,backgroundColor:'rgba(0,0,0,0.6)',justifyContent:'flex-end'}}
-  pointerEvents="box-none"
+         <Modal
+  visible={commentmodal}
+  animationType="slide"
+  onRequestClose={() => Setcommentmodal(false)}
+  transparent
 >
-    {/* Content Container */}
-    <KeyboardAvoidingView
-  style={{ flex: 1, justifyContent: 'flex-end' }}
-  behavior={Platform.OS === "ios" ? "padding" : "height"}
->
-    <Pressable onPress={()=>{}} style={styles.commentModalll}>
-   
-      {/* Header */}
-      <View style={styles.modalContentheader}>
-   
-      
-     
-        <Text style={{color:'#fff',fontSize:16,fontWeight:'600'}}>{postcomment.length} Comments</Text>
-        <Pressable onPress={()=>Setcommentmodal(false)} style={{position:'absolute',right:10}}>
-          <Ionicons name="close" size={22} color='#fff'/>
-        </Pressable>
-      </View>  
-      <FlatList 
-      ref={FlatListRef}
-      data={postcomment}
-      onScroll={(e) => {
-        scrollOffset.current = e.nativeEvent.contentOffset.y;
-      }}
-      scrollEventThrottle={16}
-      keyExtractor={(item)=>`active-${item.id}`}
-      renderItem={({item})=>(<TheComments item={item} userisId={searchid} onSelect={setUser} onSelectidforindex={setuserindex}
-     />)}
-      showsVerticalScrollIndicator={false}
+  {/* Backdrop */}
+  <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
     
-      keyboardShouldPersistTaps='handled'
-      initialNumToRender={10}
-      maxToRenderPerBatch={10}
-      windowSize={5}
-      removeClippedSubviews={true}
-      />
-      {/* <TouchableOpacity
-  onPress={setBacktouser}
-  activeOpacity={0.8}
-  style={styles.floatingBackBtn}
->
-  <Ionicons name="arrow-down-circle" size={22} color="#fff" />
-</TouchableOpacity> */}
-    <ScrollView
-        keyboardShouldPersistTaps='handled'
-        style={{flexGrow:0}}
-        keyboardDismissMode="none"
-        contentContainerStyle={{padding:10}}
-        >
-      <View style={styles.inputBar}>
-      {selectedValue && (
-  <View style={styles.replyTag}>
-    <View style={styles.replyTagContent}>
-      <Ionicons name="arrow-undo-outline" size={14} color="#6D5BFF" />
-      <Text style={styles.replyText}>
-        Replying to <Text style={{fontWeight:'600'}}>{selectedValue.usersname}</Text>
-      </Text>
-    </View>
+    {/* Only the empty space above the modal is touchable for dismissal */}
+    <Pressable
+      style={{ flex: 1 }}
+      onPress={() => Setcommentmodal(false)}
+    />
 
-    <TouchableOpacity onPress={() => setselectedValues(null)}>
-      <Ionicons name="close" size={18} color="#999" />
-    </TouchableOpacity>
-  </View>
-)}
-        <TextInput
-        value={commentText}
-        onChangeText={setcommentText}
-        multiline={true}
-        placeholder="Type a comment..."
-        style={styles.inputText}
-        placeholderTextColor="#666"
-  blurOnSubmit={false}
-  returnKeyType="send"
-  onSubmitEditing={handleComment}
-  
-        />
-        <Pressable 
+    {/* Modal Content */}
+    <KeyboardAvoidingView
+      style={{ flex: 1, justifyContent: 'flex-end' }} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <View style={styles.commentModalll}>
+
+        {/* Header */}
+        <View style={styles.modalContentheader}>
+          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
+            {postcomment.length} Comments
+          </Text>
+          <Pressable onPress={() => Setcommentmodal(false)} style={{ position: 'absolute', right: 10 }}>
+            <Ionicons name="close" size={22} color="#fff" />
+          </Pressable>
+        </View>
+
+        {/* Comments List */}
+        <FlatList
+  ref={FlatListRef}
+  data={postcomment}
+  keyExtractor={(item) => `active-${item.id}`}
+  renderItem={renderComment}
+  showsVerticalScrollIndicator={false}
+
+  onEndReached={() => Setpage(prev => prev + 1)}
+  onEndReachedThreshold={0.5}
+  initialNumToRender={10}
+  maxToRenderPerBatch={10}
+  windowSize={5}
+  removeClippedSubviews={true}
+  contentContainerStyle={{ paddingBottom: 10 }}
+  style={{flex:1}}
+/>
+
+        {/* Input Bar */}
+        <View style={styles.inputBar}>
+          {selectedValue && (
+            <View style={styles.replyTag}>
+              <View style={styles.replyTagContent}>
+                <Ionicons name="arrow-undo-outline" size={14} color="#6D5BFF" />
+                <Text style={styles.replyText}>
+                  Replying to <Text style={{ fontWeight: '600' }}>{selectedValue.usersname}</Text>
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setselectedValues(null)}>
+                <Ionicons name="close" size={18} color="#999" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TextInput
+            value={commentText}
+            onChangeText={setcommentText}
+            multiline
+            placeholder="Type a comment..."
+            style={styles.inputText}
+            placeholderTextColor="#666"
+            blurOnSubmit={false}
+            returnKeyType="send"
+            onSubmitEditing={handleComment}
+          />
+
+<Pressable
   onPress={handleComment}
-  style={styles.sendBtn}
+  style={[
+    styles.sendBtn,
+    { opacity: commentText.trim() ? 1 : 0.4 }
+  ]}
+  disabled={!commentText.trim()}
 >
-  <Ionicons name="send" size={18} color="#fff" />
-</Pressable>
-        
+            <Ionicons name="send" size={18} color="#fff" />
+          </Pressable>
+        </View>
+
       </View>
-      </ScrollView>
-    </Pressable>
     </KeyboardAvoidingView>
-  </Pressable>
-  
+  </View>
 </Modal>
 
       </View>
@@ -668,6 +658,8 @@ export default function DesignersHubScreen({ navigation, route }) {
   const [biotext,Setbiotext]=useState("")
 const [biostore,setbiostore]=useState(null)
 const isAdmin=searchid===roomcreator
+const [page,Setpage]=useState(1)
+const [putmore,Setputmore]=useState(false)
  
   const [onlineCount, setOnlineCount] = useState(0);
   useEffect(() => {
@@ -709,12 +701,14 @@ const isAdmin=searchid===roomcreator
   useFocusEffect(
   useCallback(() => {
     const getRoomposts = async () => {
+      if(putmore) return;
+      Setputmore(true)
       try {
-        const res = await fetch(`${API_BASE_URL}/getroom?roomid=${roomid}`);
+        const res = await fetch(`${API_BASE_URL}/getroom?roomid=${roomid}&page=${page}`);
         if (!res.ok) throw new Error("Network response was not ok");
         const data = await res.json();
-        setPostarray(data);
-        
+        setPostarray(prev=>[...prev,...data]);
+        Setputmore(false)
       } catch (err) {
         console.error("Fetch error:", err);
       }
@@ -901,6 +895,8 @@ try{
         {/* List of Posts */}
         <FlatList
           data={postsarray}
+          onEndReached={()=>Setpage(prev=>prev+1)}
+          onEndReachedThreshold={0.5}
           keyExtractor={(item) => item.id.toString()}
           renderItem={({ item }) => <PostChild item={item} navigation={navigation} user={user} socket={socket} Roomid={roomid} Adminstate={isAdmin} 
           onDelete={(id)=>setPostarray(prev=>prev.filter(p=>p.id!==id))}/>}
@@ -1060,17 +1056,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0b0f14',
   },
-  commentModalll:{
-    height:'80%',
-    backgroundColor:'#111',
-    borderTopLeftRadius:24,
-    borderTopRightRadius:24,
-    paddingHorizontal:16,
-    paddingTop:10,
-  alignSelf:'stretch',
-  position: 'relative',
-  overflow: 'visible',
-  },
+  commentModalll: {
+    height: '80%', // instead of maxHeight
+    backgroundColor: '#111',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    alignSelf: 'stretch',
+    position: 'relative',
+    overflow: 'hidden', // let content scroll
+},
 grabber: {
   width: 40,
   height: 5,
@@ -1432,7 +1428,7 @@ cmTextColumn:{
     marginLeft:6
   },
   replyPreviewBubble: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#4FC3F7',
     borderLeftWidth: 3,
     borderLeftColor: '#4A90E2',
     padding: 8,

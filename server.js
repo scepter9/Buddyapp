@@ -2674,10 +2674,12 @@ app.post('/postscreen', (req, res) => {
 });
 
 app.get('/getroom',(req,res)=>{
-  const {roomid}=req.query;
+  const {roomid,page}=req.query;
+  const offset=(page-1)*20;
   db.query(`select cr.id,cr.sender_id,cr.post,cr.posted_at,cr.room_of_posts_id,
   cr.postvideo,cr.postimage,a.USERNAME as usersname,a.FULLNAME as fullname,a.image 
-   from roomposts cr  inner join projecttables a on cr.sender_id=a.ID where cr.room_of_posts_id=? order by  cr.posted_at desc`,[roomid],(err,result)=>{
+   from roomposts cr  inner join projecttables a on cr.sender_id=a.ID where cr.room_of_posts_id=? order by  cr.posted_at desc 
+   limit 20 offset ?`,[roomid,Number(offset)],(err,result)=>{
 if(err){
   res.status(500).json({error:'An error occured'})
 }
@@ -3178,10 +3180,46 @@ db.query(`delete from createinterestroom where id=? and creatorid=?`,[roomid,sea
 })
 })
 app.get('/fetchpostcomment',(req,res)=>{
-  const {postid,roomid}=req.query;
-  db.query(`select cr.id,cr.commenttext,cr.senderid,cr.posted_at,cr.replyid,cr.replytext,a.USERNAME as usersname ,a.FULLNAME as usersfull, a.image,b.image 
-  as replyUserImage,b.FULLNAME as replyUserName from commenting cr join projecttables a 
-on a.ID=cr.senderid left join projecttables b on b.ID=cr.replyuserid where cr.postid=? and cr.room_of_posts_id=?;`,[postid,roomid],(err,result)=>{
+  const {postid,roomid,userIs,page}=req.query;
+  const offset=(page-1)*15;
+  db.query(`SELECT 
+  cr.id,
+  cr.commenttext,
+  cr.senderid,
+  cr.posted_at,
+  cr.replyid,
+  cr.replytext,
+  
+  a.USERNAME as usersname,
+  a.FULLNAME as usersfull,
+  a.image,
+  
+  b.image as replyUserImage,
+  b.FULLNAME as replyUserName,
+  
+  (
+  SELECT COUNT(*)
+  FROM roomcommentlikes
+  WHERE user_id = ?
+  AND commentid = cr.id
+  ) as likestate,
+  
+  (
+  SELECT COUNT(*)
+  FROM roomcommentlikes
+  WHERE commentid = cr.id
+  ) as likecount
+  
+  FROM commenting cr
+  
+  JOIN projecttables a 
+  ON a.ID = cr.senderid
+  
+  LEFT JOIN projecttables b 
+  ON b.ID = cr.replyuserid
+  
+  WHERE cr.postid = ?
+  AND cr.room_of_posts_id = ? order by likecount desc limit 15 offset ?;`,[userIs, postid, roomid,Number(offset)],(err,result)=>{
     if(err){
       return res.status(500).json({error:'A database Error occured'})
     }

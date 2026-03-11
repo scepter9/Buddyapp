@@ -1,51 +1,56 @@
-// WITH Selected_rooms AS (
-//     SELECT 
-//         cr.id,
-//         cr.roomname AS title,
-//         cr.roomdescription AS subtitle,
-//         NULL AS image,
-//         'room' AS type,
-// count(a.roomid) as members_count
-//     FROM createinterestroom cr
-//     LEFT JOIN roomparticipants a ON cr.id = a.roomid
-//     GROUP BY cr.id, cr.roomname, cr.roomdescription
-//     ORDER BY RAND()
-//     LIMIT 20
+// WITH users_not_followed AS (
+//     SELECT DISTINCT f.receiver_id
+//     FROM follows f
+//     WHERE f.receiver_id != 3
+//     AND NOT EXISTS (
+//         SELECT 1
+//         FROM follows x
+//         WHERE x.sender_id = 3
+//         AND x.receiver_id = f.receiver_id
+//     )
 // ),
 
-// Selected_users AS (
+// user_suggestions AS (
 //     SELECT 
-//         ID AS id,
-//         USERNAME AS usersname,
-//         FULLNAME AS fullname,
-//         image,
+//         u.receiver_id AS id,
+//         p.username,
+//         p.fullname,
+//         p.image,
 //         'user' AS type,
-//         NULL AS meta
-//     FROM projecttables
-//     ORDER BY RAND()
-//     LIMIT 50
+//         NULL AS members_count
+//     FROM users_not_followed u
+//     JOIN projecttables p 
+//         ON p.id = u.receiver_id
 // ),
 
-// Selected_meetups AS (
+// room_suggestions AS (
 //     SELECT 
-//         id,
-//         title,
-//         location AS subtitle,
-//         description,
-//         'meetup' as type,
-//         NULL AS meta
-//     FROM meetups
-//     ORDER BY RAND()
-//     LIMIT 10
+//         r.id AS id,
+//         r.roomname AS username,
+//         r.roomdescription AS fullname,
+//         r.room_image AS image,
+//         'room' AS type,
+//         COUNT(rp.userid) AS members_count
+//     FROM createinterestroom r
+    
+//     LEFT JOIN roomparticipants rp
+//         ON rp.roomid = r.id
+    
+//     WHERE NOT EXISTS (
+//         SELECT 1
+//         FROM roomparticipants x
+//         WHERE x.roomid = r.id
+//         AND x.userid = 3
+//     )
+    
+//     GROUP BY r.id
 // )
 
 // SELECT *
 // FROM (
-//     SELECT * FROM Selected_rooms
+//     SELECT * FROM user_suggestions
 //     UNION ALL
-//     SELECT * FROM Selected_users
-//     UNION ALL
-//     SELECT * FROM Selected_meetups
-// ) combined
+//     SELECT * FROM room_suggestions
+// ) AS combined_suggestions
 // ORDER BY RAND()
 // LIMIT 1;
