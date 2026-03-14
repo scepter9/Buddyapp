@@ -1,9 +1,35 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity ,SafeAreaView} from "react-native";
 import BottomNavigator from "../BottomNavigator";
 import { LinearGradient } from 'expo-linear-gradient';
 
+const API_BASE_URL = "http://192.168.0.136:3000";
+
 export default function CampusNexus({ navigation }) {
+  const [Screenstats,setScreenstats]=useState({roomcount:0,roommemberscount:0})
+  useEffect(()=>{
+    const fetchStats=async()=>{
+      try{
+const res=await fetch(`${API_BASE_URL}/roomstats`)
+if(!res.ok){
+  console.log(`Error trying to fetch room stats`);
+  return;
+}
+const data=await res.json()
+setScreenstats({roomcount:data[0].amountofrooms ?? 0 ,roommemberscount:data[0].amountofusers ?? 0})
+      }catch(err){
+        console.log(`Error trying to fetch room stats`,err);
+  return;
+      }
+    }
+    fetchStats()
+  },[])
+  const formatNumber = (val) => {
+    if (!val) return "0";
+    if (val < 1000) return val.toString();
+    if (val < 1000000) return (val / 1000).toFixed(1) + "k";
+    return (val / 1000000).toFixed(1) + "m";
+  };
   return (
     // <SafeAreaView style={styles.wrapper}>
     <View style={{ flex: 1, backgroundColor: "#0f172a" }}>
@@ -107,8 +133,8 @@ export default function CampusNexus({ navigation }) {
             Join live spaces, explore passions, and build with others.
           </Text>
           <View style={styles.interestStats}>
-            <Text style={styles.statText}>🔥 230+ Active Rooms</Text>
-            <Text style={styles.statText}>👥 1.4k Members</Text>
+            <Text style={styles.statText}>{Screenstats.roomcount>0 ?`🔥${formatNumber(Screenstats.roomcount)}+ Active Rooms`:`No rooms to show yet, Enter 'mission control'  `}</Text>
+            <Text style={styles.statText}>  {Screenstats.roommemberscount >0 ?`👥 ${formatNumber(Screenstats.roommemberscount)} Members`:''} </Text>
           </View>
         </View>
       </View>

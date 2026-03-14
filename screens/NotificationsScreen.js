@@ -169,37 +169,83 @@ socket.emit('Removethisnotification',sendingvalues)
         <Text style={notificationItemStyles.timestamp}>{formatTimeAgo(created_at)}</Text>
       </View>
     </TouchableOpacity>
-    <Modal visible={openmodal} animationType='fade' onRequestClose={()=>setopenmodal(false)}>
-    <View style={styles.modalOverlay}>
-  <View style={styles.modalCard}>
-    <Text style={styles.titleText}>Epic Match Unlocked! 🔥 </Text>
-<Text style={styles.subtitleText}>You just matched with a buddy🤝,same weird energy ,similar interests,zero chills.Ready to see what chaos unfolds? </Text>
+    <Modal
+  visible={openmodal}
+  animationType="fade"
+  onRequestClose={() => setopenmodal(false)}
+  transparent
+>
+  <View style={styles.modalOverlay}>
 
-    <View style={styles.avatarWrapper}>
-      <Image source={ imageSource } style={styles.avatarImage} />
-    </View>
+    <LinearGradient
+      colors={["#0F1023", "#1B1336", "#2B0F3F"]}
+      style={styles.modalBackground}
+    >
 
-    <Text style={styles.usernameText}>{sender_name}</Text>
+      <View style={styles.modalCard}>
 
-    <View style={styles.actionsRow}>
-      <TouchableOpacity style={styles.primaryButton}  onPress={() => {
-                  navigation.navigate('MessageUser', { 
-                    recipientId: id, 
-                    recipientName: sender_name, 
-                    recipientImage: imageSource 
-                  });
-                }}>
-        <Text style={styles.primaryButtonText}>Dive in already!</Text>
-      </TouchableOpacity>
+        <LinearGradient
+          colors={["#8B5CF6", "#EC4899"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.matchBadge}
+        >
+          <Text style={styles.badgeText}>⚡ NEW MATCH</Text>
+        </LinearGradient>
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={() =>setopenmodal(false)}>
-        <Text style={styles.secondaryButtonText}>Nah,Later</Text>
-      </TouchableOpacity>
-    </View>
+        <Text style={styles.titleText}>Epic Match</Text>
+        <Text style={styles.titleAccent}>Unlocked 🔥</Text>
+
+        <Text style={styles.subtitleText}>
+          You just matched with a buddy 🤝, same weird energy, similar interests,
+          zero chills. Ready to see what chaos unfolds?
+        </Text>
+
+        <View style={styles.avatarWrapper}>
+          <View style={styles.avatarInner}>
+            <Image source={imageSource} style={styles.avatarImage} />
+          </View>
+          <Text style={styles.handshakeEmoji}>🤝</Text>
+        </View>
+
+        <Text style={styles.usernameText}>{sender_name}</Text>
+
+        <View style={styles.actionsRow}>
+
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate("MessageUser", {
+                recipientId: id,
+                recipientName: sender_name,
+                recipientImage: imageSource,
+              })
+            }
+          >
+            <LinearGradient
+              colors={["#FF4FA3", "#D946EF", "#8B5CF6"]}
+              style={styles.primaryButton}
+            >
+              <Text style={styles.primaryButtonText}>
+                Dive in already! 🚀
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => setopenmodal(false)}
+          >
+            <Text style={styles.secondaryButtonText}>Nah, Later</Text>
+          </TouchableOpacity>
+
+        </View>
+
+      </View>
+
+    </LinearGradient>
+
   </View>
-</View>
-
-    </Modal>
+</Modal>
     </View>
   );
 });
@@ -618,111 +664,138 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
  
-  modalOverlay: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.4)",
-  },
+ 
 
-  modalCard: {
-    backgroundColor: "#fff",
-    width: "70%",
-    paddingTop: 40,
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-    borderRadius: 20,
-    elevation: 8, // Android shadow
-    shadowColor: "#000", // iOS shadow
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-  },
+    modalOverlay: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+  
+    modalBackground: {
+      flex: 1,
+      width: "100%",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+  
+    modalCard: {
+      width: "82%",
+      paddingTop: 35,
+      paddingBottom: 30,
+      borderRadius: 28,
+      alignItems: "center",
+      backgroundColor: "rgba(58,42,90,0.85)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.08)",
+    },
+  
+    matchBadge: {
+      paddingHorizontal: 16,
+      paddingVertical: 6,
+      borderRadius: 20,
+      marginBottom: 15,
+    },
+  
+    badgeText: {
+      color: "#fff",
+      fontWeight: "600",
+      fontSize: 12,
+    },
+  
+    titleText: {
+      fontSize: 26,
+      fontWeight: "700",
+      color: "#fff",
+      textAlign: "center",
+    },
+  
+    titleAccent: {
+      fontSize: 26,
+      fontWeight: "700",
+      color: "#C084FC",
+      textAlign: "center",
+      marginBottom: 10,
+    },
+  
+    subtitleText: {
+      color: "#B4B0D0",
+      fontSize: 13,
+      textAlign: "center",
+      paddingHorizontal: 30,
+      marginBottom: 25,
+    },
+  
+    avatarWrapper: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      borderWidth: 3,
+      borderColor: "#34D399",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 10,
+    },
+  
+    avatarInner: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      overflow: "hidden",
+    },
+  
+    avatarImage: {
+      width: "100%",
+      height: "100%",
+      resizeMode: "cover",
+    },
+  
+    handshakeEmoji: {
+      position: "absolute",
+      right: -10,
+      top: 5,
+      fontSize: 18,
+    },
+  
+    usernameText: {
+      color: "#fff",
+      fontSize: 20,
+      fontWeight: "700",
+      marginTop: 8,
+    },
+  
+    actionsRow: {
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 20,
+    },
+  
+    primaryButton: {
+      paddingVertical: 14,
+      paddingHorizontal: 22,
+      borderRadius: 18,
+    },
+  
+    primaryButtonText: {
+      color: "#fff",
+      fontWeight: "700",
+    },
+  
+    secondaryButton: {
+      paddingVertical: 14,
+      paddingHorizontal: 22,
+      borderRadius: 18,
+      backgroundColor: "rgba(255,255,255,0.08)",
+    },
+  
+    secondaryButtonText: {
+      color: "#D1D5DB",
+      fontWeight: "600",
+    },
+  
+  });
 
-  /* ===== Text ===== */
-  titleText: {
-    marginBottom: 10,
-    fontSize: 20,
-    fontWeight: "900",
-    textAlign: "center",
-    letterSpacing: 0.5,
-    color: "#111",
-    textShadowColor: "rgba(0,0,0,0.25)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-
-  subtitleText: {
-    marginBottom: 20,
-    fontSize: 16,
-    textAlign: "center",
-    color: "#666",
-  },
-
-  usernameText: {
-    marginTop: 12,
-    marginBottom: 20,
-    fontSize: 17,
-    fontWeight: "600",
-    textAlign: "center",
-    color: "#222",
-  },
-
-  /* ===== Avatar ===== */
-  avatarWrapper: {
-    alignSelf: "center",
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 4,
-    borderColor: "rgba(128,0,128,0.6)",
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-
-  avatarImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
-
-  /* ===== Actions ===== */
-  actionsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
-    gap: 12,
-  },
-
-  primaryButton: {
-    flex: 1,
-    backgroundColor: "#6C4EFF",
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-
-  primaryButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  secondaryButton: {
-    flex: 1,
-    backgroundColor: "#F2F2F2",
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-
-  secondaryButtonText: {
-    color: "#444",
-    fontSize: 15,
-    fontWeight: "500",
-  },
 
 
-});
 
 export default NotificationScreen;

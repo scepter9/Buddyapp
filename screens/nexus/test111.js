@@ -54,3 +54,11 @@
 // ) AS combined_suggestions
 // ORDER BY RAND()
 // LIMIT 1;
+
+
+
+
+
+
+
+

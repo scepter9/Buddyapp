@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useMemo ,useRef, useCallback} from "react";
+import React, { useEffect, useState, useContext, useMemo ,useRef, useCallback, Activity} from "react";
 import {
   View,
   Text,
@@ -18,7 +18,9 @@ import {
   Animated,
   Pressable,
   ScrollView,
-  Keyboard
+  Keyboard,
+  ActivityIndicator,
+  PanResponder
 } from "react-native";
 
 import { useFocusEffect } from "@react-navigation/native";
@@ -34,7 +36,7 @@ const API_BASE_URL = "http://192.168.0.136:3000";
 import { io } from "socket.io-client";
 
 import { Video } from "expo-av";
-function TheComments({ item ,onSelect,onSelectidforindex}) {
+function TheComments({ item ,onSelect,onSelectidforindex,onremove,thepostid,Roomid}) {
   const {user}=useContext(AuthorContext)
   const userisId=user?.id
   const commentid=item.id;
@@ -42,9 +44,25 @@ function TheComments({ item ,onSelect,onSelectidforindex}) {
 const [likeCount,SetlikeCount]=useState(item.likecount ?? 0)
 const [isMutating,SetisMutating]=useState(false)
 const scaleAnim=useRef(new Animated.Value(1)).current;
-
+const translateX=useRef(new Animated.Value(0)).current;
  
-
+const eraseComment=async()=>{
+  try{
+    const res=await fetch(`${API_BASE_URL}/removeroomcomment`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({commentid,thepostid,Roomid})
+    })
+    if(!res.ok){
+      console.log('An error occured deleting roomcomment');
+      return;
+    }
+    onremove(commentid)
+  }catch(err){
+    console.log('An error occured deleting roomcomment',err);
+      return;
+  }
+}
   // useEffect(() => {
   //   if(!Showpost) return;
   //   SetlikeCount();        
@@ -111,9 +129,40 @@ const scaleAnim=useRef(new Animated.Value(1)).current;
     return `${Math.floor(months / 12)}y ago`;
   };
 
+const panResponse=useRef(
+  PanResponder.create({
+    onMoveShouldSetPanResponder:()=>true,
+    onPanResponderMove:(_,gesture)=>{
+      if(gesture.dx>0 && gesture.dx<=100){
+        translateX.setValue(gesture.dx)
+      }
+    },
+    onPanResponderRelease:(_,gesture)=>{
+      if(gesture.dx >60){
+        Animated.timing(translateX,{
+          toValue:100,
+          duration:200,
+          useNativeDriver:true
+        }).start(()=>eraseComment)
+      }else{
+        Animated.spring(translateX,{
+          toValue:0,
+          useNativeDriver:true
+        }).start()
+      }
+    }
+
+  })
+).current;
   return (
-  <View style={styles.cmRootShell}>
-    
+<View style={styles.cmRootShell}>
+  <View style={styles.Deletecontain}>
+    <FontAwesome name="trash" color="#fff"/>
+  </View>
+<Animated.View {...panResponse.panHandlers}style={[styles.cmRootShellswipe,{transform:[{translateX}],
+  opacity:translateX.interpolate({
+    inputRange:[0,150],outputRange:[1,0.8],extrapolate:'clamp'
+  })}]}>
 <View style={styles.cmPrimaryLane}>
   <Image source={{uri:`${API_BASE_URL}/uploads/${item.image}`} } style={styles.cmAvatarOrb}/>
 
@@ -138,8 +187,7 @@ const scaleAnim=useRef(new Animated.Value(1)).current;
         style={styles.replyPreviewAvatar}
       />
       <Text style={styles.replyPreviewName}>
-        {item.replyUserName}: 
-        <Text numberOfLines={1} ellipsizeMode="tail" style={styles.replyPreviewNamee}>
+        {item.replyUserName}:   <Text numberOfLines={1} ellipsizeMode="tail" style={styles.replyPreviewNamee}>
         {item.replytext}
       </Text>
       </Text>
@@ -174,6 +222,7 @@ const scaleAnim=useRef(new Animated.Value(1)).current;
 <Text style={styles.cmTimestamp}>{timestamp(item.posted_at)} </Text>
   </View>
 </View>
+</Animated.View>
   </View>
   );
 }
@@ -195,7 +244,9 @@ const isUser=item.sender_id===searchid;
 const [selectedValue,setselectedValues]=useState(null);
 const postcommentRef=useRef(postcomment)
 const scrollOffset = useRef(0);
-const [page,Setpage]=useState(1);
+const [hasmore,Sethasmore]=useState(true)
+const [Loadingmore,setLoadingmore]=useState(false)
+
 const [Showpost,setShowpost]=useState(false)
 const MemoizeThecomments=React.memo(TheComments)
 useEffect(()=>{
@@ -339,7 +390,7 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
   const renderComment=useCallback(({item})=>(
     <MemoizeThecomments
     item={item}
-    userisId={searchid} onSelect={setUser} onSelectidforindex={setuserindex}
+    userisId={searchid} onSelect={setUser} onSelectidforindex={setuserindex} thepostid={roomdetais} Roomid={Roomid}
     />
   ),[setUser,setuserindex,searchid])
   
@@ -368,13 +419,13 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
       if(Showpost) return;
       setShowpost(true)
       try{
-        const res=await fetch(`${API_BASE_URL}/fetchpostcomment?postid=${roomdetais}&roomid=${Roomid}&userIs=${searchid}&page=${page}`);
+        const res=await fetch(`${API_BASE_URL}/fetchpostcomment?postid=${roomdetais}&roomid=${Roomid}&userIs=${searchid}`);
         if(!res.ok){
           console.log('Something went wrong fetching comment for a room');
           return;
         }
         const data=await res.json()
-        SetPostcomment(prev=>[...prev,...data])
+        SetPostcomment(data)
         
        
         setShowpost(false)
@@ -384,7 +435,25 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
       }
     }
     fetchPostComment()
-  },[roomdetais,Roomid,page])
+  },[roomdetais,Roomid])
+  const Loadingoldercomment=async()=>{
+    if(Loadingmore || !hasmore) return;
+ setLoadingmore(true)
+  const lastposted=postcomment[postcomment.length-1].posted_at
+const res=await fetch(`${API_BASE_URL}/getcommentolder?lasttime=${lastposted}&postid=${roomdetais}&roomid=${Roomid}&userIs=${searchid}`)
+if(!res.ok){
+  console.log(`Something went wrong `);
+  return;
+}
+const data=await res.json();
+if(data.length===0){ 
+  Sethasmore(false)
+}
+  else{
+SetPostcomment(prev=>[...prev,...data])
+}
+setLoadingmore(false)
+}
   const handleComment=()=>{
     Keyboard.dismiss()
     if(!socket || commentText.trim()==='') return;
@@ -438,12 +507,12 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
          
           <Text style={styles.time}>{getTimestamp(item.posted_at)}</Text>
         </View>
-        {isUser && Adminstate && (
+        {isUser || Adminstate && (
   <TouchableOpacity
     style={{
       paddingHorizontal: 12,
       paddingVertical: 8,
-      backgroundColor: '#dc2626',
+     
       borderRadius: 8,
       alignItems: 'center',
       minWidth: 80,
@@ -452,9 +521,7 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
     }}
     onPress={DeletePost}
   >
-    <Text style={{ fontWeight: '600', fontSize: 12, color: 'white' }}>
-      Delete
-    </Text>
+    <Ionicons name="trash-outline" size={20} color="#dc2626"/>
   </TouchableOpacity>
 )}
       </View>
@@ -548,98 +615,105 @@ const TotalItems=postImages.length + postVideos.length;
          {item.reactions?.share || 0}</Text></TouchableOpacity>
 
          <Modal
-  visible={commentmodal}
-  animationType="slide"
-  onRequestClose={() => Setcommentmodal(false)}
-  transparent
+visible={commentmodal}
+animationType="slide"
+onRequestClose={() => Setcommentmodal(false)}
+transparent
 >
-  {/* Backdrop */}
-  <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-    
-    {/* Only the empty space above the modal is touchable for dismissal */}
-    <Pressable
-      style={{ flex: 1 }}
-      onPress={() => Setcommentmodal(false)}
-    />
+<KeyboardAvoidingView
+style={{ flex: 1 }}
+behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+>
+<View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
 
-    {/* Modal Content */}
-    <KeyboardAvoidingView
-      style={{ flex: 1, justifyContent: 'flex-end' }} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <View style={styles.commentModalll}>
-
-        {/* Header */}
-        <View style={styles.modalContentheader}>
-          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
-            {postcomment.length} Comments
-          </Text>
-          <Pressable onPress={() => Setcommentmodal(false)} style={{ position: 'absolute', right: 10 }}>
-            <Ionicons name="close" size={22} color="#fff" />
-          </Pressable>
-        </View>
-
-        {/* Comments List */}
-        <FlatList
-  ref={FlatListRef}
-  data={postcomment}
-  keyExtractor={(item) => `active-${item.id}`}
-  renderItem={renderComment}
-  showsVerticalScrollIndicator={false}
-
-  onEndReached={() => Setpage(prev => prev + 1)}
-  onEndReachedThreshold={0.5}
-  initialNumToRender={10}
-  maxToRenderPerBatch={10}
-  windowSize={5}
-  removeClippedSubviews={true}
-  contentContainerStyle={{ paddingBottom: 10 }}
-  style={{flex:1}}
+{/* Dismiss backdrop */}
+<Pressable
+style={{ flex: 1 }}
+onPress={() => Setcommentmodal(false)}
 />
 
-        {/* Input Bar */}
-        <View style={styles.inputBar}>
-          {selectedValue && (
-            <View style={styles.replyTag}>
-              <View style={styles.replyTagContent}>
-                <Ionicons name="arrow-undo-outline" size={14} color="#6D5BFF" />
-                <Text style={styles.replyText}>
-                  Replying to <Text style={{ fontWeight: '600' }}>{selectedValue.usersname}</Text>
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setselectedValues(null)}>
-                <Ionicons name="close" size={18} color="#999" />
-              </TouchableOpacity>
-            </View>
-          )}
+{/* Modal Content */}
+<View style={styles.commentModalll}>
 
-          <TextInput
-            value={commentText}
-            onChangeText={setcommentText}
-            multiline
-            placeholder="Type a comment..."
-            style={styles.inputText}
-            placeholderTextColor="#666"
-            blurOnSubmit={false}
-            returnKeyType="send"
-            onSubmitEditing={handleComment}
-          />
+{/* Header */}
+<View style={styles.grabber} />
+<View style={styles.modalContentheader}>
+<Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
+{postcomment.length} Comments
+</Text>
+<Pressable onPress={() => Setcommentmodal(false)} style={{ position: 'absolute', right: 10 }}>
+<Ionicons name="close" size={22} color="#fff" />
+</Pressable>
+</View>
 
+{/* Comments List */}
+<FlatList
+ref={FlatListRef}
+data={postcomment}
+keyExtractor={(item) => `active-${item.id}`}
+renderItem={renderComment}
+onremove={(id)=>SetPostcomment(prev=>prev.filter(a=>a.id!==id))}
+showsVerticalScrollIndicator={false}
+onEndReached={Loadingoldercomment}
+onEndReachedThreshold={0.5}
+initialNumToRender={10}
+maxToRenderPerBatch={10}
+windowSize={5}
+removeClippedSubviews={true}
+contentContainerStyle={{ paddingBottom: 10 }}
+ListFooterComponent={Loadingmore?<ActivityIndicator/>:null}
+style={{ flex: 1 }}
+/>
+
+{/* Reply tag + Input */}
+<View style={{
+paddingHorizontal: 12,
+paddingTop: 8,
+paddingBottom: Platform.OS === 'ios' ? 24 : 16, // ← safe bottom padding
+borderTopWidth: StyleSheet.hairlineWidth,
+borderTopColor: 'rgba(255,255,255,0.08)',
+gap: 6,
+}}>
+{selectedValue && (
+<View style={styles.replyTag}>
+<View style={styles.replyTagContent}>
+<Ionicons name="arrow-undo-outline" size={14} color="#6D5BFF" />
+<Text style={styles.replyText}>
+Replying to <Text style={{ fontWeight: '600' }}>{selectedValue.usersname}</Text>
+</Text>
+</View>
+<TouchableOpacity onPress={() => setselectedValues(null)}>
+<Ionicons name="close" size={18} color="#999" />
+</TouchableOpacity>
+</View>
+)}
+
+<View style={styles.inputBar}>
+<TextInput
+value={commentText}
+onChangeText={setcommentText}
+multiline
+placeholder="Type a comment..."
+style={styles.inputText}
+placeholderTextColor="#666"
+blurOnSubmit={false}
+returnKeyType="send"
+onSubmitEditing={handleComment}
+/>
 <Pressable
-  onPress={handleComment}
-  style={[
-    styles.sendBtn,
-    { opacity: commentText.trim() ? 1 : 0.4 }
-  ]}
-  disabled={!commentText.trim()}
+onPress={handleComment}
+style={[styles.sendBtn, { opacity: commentText.trim() ? 1 : 0.4 }]}
+disabled={!commentText.trim()}
 >
-            <Ionicons name="send" size={18} color="#fff" />
-          </Pressable>
-        </View>
+<Ionicons name="send" size={18} color="#fff" />
+</Pressable>
+</View>
+</View>
 
-      </View>
-    </KeyboardAvoidingView>
-  </View>
+</View>
+</View>
+</KeyboardAvoidingView>
 </Modal>
 
       </View>
@@ -658,8 +732,9 @@ export default function DesignersHubScreen({ navigation, route }) {
   const [biotext,Setbiotext]=useState("")
 const [biostore,setbiostore]=useState(null)
 const isAdmin=searchid===roomcreator
-const [page,Setpage]=useState(1)
-const [putmore,Setputmore]=useState(false)
+
+const [hasmore,Sethasmore]=useState(true)
+const [Loadingmore,setLoadingmore]=useState(false)
  
   const [onlineCount, setOnlineCount] = useState(0);
   useEffect(() => {
@@ -698,23 +773,39 @@ const [putmore,Setputmore]=useState(false)
   }, [roomid]);
   
  
-  useFocusEffect(
-  useCallback(() => {
+  useEffect(()=>{
     const getRoomposts = async () => {
-      if(putmore) return;
-      Setputmore(true)
       try {
-        const res = await fetch(`${API_BASE_URL}/getroom?roomid=${roomid}&page=${page}`);
+        const res = await fetch(`${API_BASE_URL}/getroom?roomid=${roomid}`);
         if (!res.ok) throw new Error("Network response was not ok");
         const data = await res.json();
-        setPostarray(prev=>[...prev,...data]);
+        setPostarray(data);
         Setputmore(false)
       } catch (err) {
         console.error("Fetch error:", err);
       }
     };
     getRoomposts();
-  }, [roomid]))
+  },[roomid])
+  const Loadingolderposts=async()=>{
+    if(Loadingmore || !hasmore) return;
+ setLoadingmore(true)
+  const lastposted=postsarray[postsarray.length-1].posted_at
+const res=await fetch(`${API_BASE_URL}/getroomolder?lasttime=${lastposted}&roomid=${roomid}`)
+if(!res.ok){
+  console.log(`Something went wrong `);
+  return;
+}
+const data=await res.json();
+if(data.length===0){ 
+  Sethasmore(false)
+}
+  else{
+setPostarray(prev=>[...prev,...data])
+}
+setLoadingmore(false)
+}
+  
 useEffect(()=>{
   const fetchroompicture=async()=>{
     try{
@@ -895,12 +986,13 @@ try{
         {/* List of Posts */}
         <FlatList
           data={postsarray}
-          onEndReached={()=>Setpage(prev=>prev+1)}
+          onEndReached={Loadingolderposts}
           onEndReachedThreshold={0.5}
           keyExtractor={(item) => item.id.toString()}
           renderItem={({ item }) => <PostChild item={item} navigation={navigation} user={user} socket={socket} Roomid={roomid} Adminstate={isAdmin} 
           onDelete={(id)=>setPostarray(prev=>prev.filter(p=>p.id!==id))}/>}
           contentContainerStyle={styles.scrollContent}
+          ListFooterComponent={ Loadingmore? <ActivityIndicator/> :null}
           ListEmptyComponent={<Text style={{color: 'white', textAlign: 'center', marginTop: 20}}>No posts yet.</Text>}
         />
 
@@ -1346,7 +1438,29 @@ borderRadius:12
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomColor:'rgba(255,255,255,0.08)',
-    borderBottomWidth:StyleSheet.hairlineWidth
+    borderBottomWidth:StyleSheet.hairlineWidth,
+    position:'relative'
+  },
+  cmRootShellswipe: {
+    width:'100%',
+    backgroundColor:'#000',
+    borderRadius:12,
+    shadowColor:'#000',
+    shadowOffset:{width:0,height:2},
+    shadowRadius:4,
+    elevation:3
+  },
+  Deletecontain:{
+    position:'absolute',
+    right:16,
+    top:10,
+    bottom:10,
+    width:80,
+    backgroundColor:'#ff3b30',
+    borderRadius:12,
+    alignItems:'center',
+    justifyContent:'center',
+    flexDirection:'row'
   },
 
   cmPrimaryLane: {
@@ -1448,18 +1562,8 @@ replyUserRow:{
   alignItems:'center'
 },
 
-replyPreviewAvatar:{
-  width:18,
-  height:18,
-  borderRadius:9,
-  marginRight:6
-},
 
-replyPreviewName:{
-  color:'#fff',
-  fontSize:13,
-  fontWeight:'600'
-},
+
 replyPreviewNamee:{
   color:'#aaa',
   fontSize:11,
@@ -1477,11 +1581,7 @@ replyPreviewBubble:{
   marginBottom:6
 },
 
-replyLabel:{
-  fontSize:11,
-  color:'#aaa',
-  marginBottom:2
-},
+
 
 replyUserRow:{
   flexDirection:'row',

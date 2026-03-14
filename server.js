@@ -2674,19 +2674,26 @@ app.post('/postscreen', (req, res) => {
 });
 
 app.get('/getroom',(req,res)=>{
-  const {roomid,page}=req.query;
-  const offset=(page-1)*20;
+  const {roomid}=req.query;
+  
   db.query(`select cr.id,cr.sender_id,cr.post,cr.posted_at,cr.room_of_posts_id,
   cr.postvideo,cr.postimage,a.USERNAME as usersname,a.FULLNAME as fullname,a.image 
    from roomposts cr  inner join projecttables a on cr.sender_id=a.ID where cr.room_of_posts_id=? order by  cr.posted_at desc 
-   limit 20 offset ?`,[roomid,Number(offset)],(err,result)=>{
+   limit 20 `,[roomid],(err,result)=>{
 if(err){
   res.status(500).json({error:'An error occured'})
 }
 res.json(result)
    })
 })
-
+app.get('/getroomolder',(req,res)=>{
+  const {lasttime,roomid}=req.query;
+db.query(`select cr.id,cr.sender_id,cr.post,cr.posted_at,cr.room_of_posts_id,
+cr.postvideo,cr.postimage,a.USERNAME as usersname,a.FULLNAME as fullname,a.image 
+ from roomposts cr  inner join projecttables a on cr.sender_id=a.ID where cr.room_of_posts_id=? and cr.posted_at< ?
+order by  cr.posted_at desc 
+ limit 20 `,[roomid,lasttime])
+})
 const roomOnlineUsers = new Map();
 io.on('connection', (socket) => {
   let roomid = null;
@@ -3180,8 +3187,8 @@ db.query(`delete from createinterestroom where id=? and creatorid=?`,[roomid,sea
 })
 })
 app.get('/fetchpostcomment',(req,res)=>{
-  const {postid,roomid,userIs,page}=req.query;
-  const offset=(page-1)*15;
+  const {postid,roomid,userIs}=req.query;
+  
   db.query(`SELECT 
   cr.id,
   cr.commenttext,
@@ -3219,7 +3226,54 @@ app.get('/fetchpostcomment',(req,res)=>{
   ON b.ID = cr.replyuserid
   
   WHERE cr.postid = ?
-  AND cr.room_of_posts_id = ? order by likecount desc limit 15 offset ?;`,[userIs, postid, roomid,Number(offset)],(err,result)=>{
+  AND cr.room_of_posts_id = ? order by likecount desc limit 15 ;`,[userIs, postid, roomid],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:'A database Error occured'})
+    }
+    res.json(result)
+  })
+})
+app.get('/getcommentolder',(req,res)=>{
+  const {lasttime,postid,roomid,userIs}=req.query;
+  
+  db.query(`SELECT 
+  cr.id,
+  cr.commenttext,
+  cr.senderid,
+  cr.posted_at,
+  cr.replyid,
+  cr.replytext,
+  
+  a.USERNAME as usersname,
+  a.FULLNAME as usersfull,
+  a.image,
+  
+  b.image as replyUserImage,
+  b.FULLNAME as replyUserName,
+  
+  (
+  SELECT COUNT(*)
+  FROM roomcommentlikes
+  WHERE user_id = ?
+  AND commentid = cr.id
+  ) as likestate,
+  
+  (
+  SELECT COUNT(*)
+  FROM roomcommentlikes
+  WHERE commentid = cr.id
+  ) as likecount
+  
+  FROM commenting cr
+  
+  JOIN projecttables a 
+  ON a.ID = cr.senderid
+  
+  LEFT JOIN projecttables b 
+  ON b.ID = cr.replyuserid
+  
+  WHERE cr.postid = ?
+  AND cr.room_of_posts_id = ? and cr.posted_at<? order by likecount desc limit 15 ;`,[userIs, postid, roomid,lasttime],(err,result)=>{
     if(err){
       return res.status(500).json({error:'A database Error occured'})
     }
@@ -3243,6 +3297,24 @@ app.post('/deleteroompostlogic',(req,res)=>{
   db.query('delete from roomposts where id=? and sender_id=?',[roomdetais,searchid],(err,result)=>{
     if(err){
       return res.status(500).json({error:'An error ocuured'})
+    }
+    res.status(200).json({success:true})
+  })
+})
+app.get('/roomstats',(req,res)=>{
+  db.query(`select (select count(*) from createinterestroom) as amountofrooms ,
+   (select count(userid) from roomparticipants) as amountofusers `,(err,result)=>{
+    if(err){
+      return res.status(500).json({error:`A database Error occured`})
+    }
+    res.json(result)
+   })
+})
+app.post('/removeroomcomment',(req,res)=>{
+  const {commentid,thepostid,Roomid}=req.body;
+  db.query(`delete from commenting where room_of_posts_id=? and postid=? and id=?`,[Roomid,thepostid,commentid],(err,result)=>{
+    if(err){
+      res.status(500).json({error:'A database error occured'})
     }
     res.status(200).json({success:true})
   })
