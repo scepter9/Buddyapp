@@ -31,12 +31,12 @@ import { BlurView } from "expo-blur";
 import { AuthorContext } from "../AuthorContext";
 import { Ionicons } from "@expo/vector-icons";
 import socket from '../Socket'
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
 const API_BASE_URL = "http://192.168.0.136:3000";
 import { io } from "socket.io-client";
 
 import { Video } from "expo-av";
-function TheComments({ item ,onSelect,onSelectidforindex,onremove,thepostid,Roomid}) {
+function TheComments({ item ,onSelect,onSelectidforindex,onremove,thepostid,Roomid,isAdminstate}) {
   const {user}=useContext(AuthorContext)
   const userisId=user?.id
   const commentid=item.id;
@@ -45,7 +45,11 @@ const [likeCount,SetlikeCount]=useState(item.likecount ?? 0)
 const [isMutating,SetisMutating]=useState(false)
 const scaleAnim=useRef(new Animated.Value(1)).current;
 const translateX=useRef(new Animated.Value(0)).current;
- 
+
+ const canDeleteRef=useRef(null)
+ useEffect(()=>{
+  canDeleteRef.current=Number(item.sender_id)===Number(userisId) || isAdminstate
+ },[item.sender_id,userisId,isAdminstate])
 const eraseComment=async()=>{
   try{
     const res=await fetch(`${API_BASE_URL}/removeroomcomment`,{
@@ -131,7 +135,10 @@ const eraseComment=async()=>{
 
 const panResponse=useRef(
   PanResponder.create({
-    onMoveShouldSetPanResponder:()=>true,
+    onMoveShouldSetPanResponder:(_,gesture)=>{
+if(!canDeleteRef.current) return false
+return gesture.dx>5
+    },
     onPanResponderMove:(_,gesture)=>{
       if(gesture.dx>0 && gesture.dx<=100){
         translateX.setValue(gesture.dx)
@@ -143,7 +150,7 @@ const panResponse=useRef(
           toValue:100,
           duration:200,
           useNativeDriver:true
-        }).start(()=>eraseComment)
+        }).start(()=>eraseComment())
       }else{
         Animated.spring(translateX,{
           toValue:0,
@@ -159,10 +166,8 @@ const panResponse=useRef(
   <View style={styles.Deletecontain}>
     <FontAwesome name="trash" color="#fff"/>
   </View>
-<Animated.View {...panResponse.panHandlers}style={[styles.cmRootShellswipe,{transform:[{translateX}],
-  opacity:translateX.interpolate({
-    inputRange:[0,150],outputRange:[1,0.8],extrapolate:'clamp'
-  })}]}>
+<Animated.View {...panResponse.panHandlers}style={[styles.cmRootShellswipe,{transform:[{translateX}]
+  }]}>
 <View style={styles.cmPrimaryLane}>
   <Image source={{uri:`${API_BASE_URL}/uploads/${item.image}`} } style={styles.cmAvatarOrb}/>
 
@@ -226,7 +231,7 @@ const panResponse=useRef(
   </View>
   );
 }
-
+const MemoizeThecomments=React.memo(TheComments)
 // Separate Component for Post Items
 const PostChild = ({ item ,user,navigation,Roomid,Adminstate,onDelete}) => {
   const searchid = user?.id;
@@ -246,9 +251,19 @@ const postcommentRef=useRef(postcomment)
 const scrollOffset = useRef(0);
 const [hasmore,Sethasmore]=useState(true)
 const [Loadingmore,setLoadingmore]=useState(false)
-
+const init=useRef(true)
 const [Showpost,setShowpost]=useState(false)
-const MemoizeThecomments=React.memo(TheComments)
+const showkey=`${searchid}-showkey`;
+const [showswipehint,Setshowswipehint]=useState(false)
+useEffect(()=>{
+  const showstate=AsyncStorage.getItem(showkey)
+  if(!showstate){
+    Setshowswipehint(true)
+    AsyncStorage.setItem(showkey,`thekey-${searchid}`)
+  }else{
+    return;
+  }
+},[])
 useEffect(()=>{
   postcommentRef.current=postcomment;
 },[postcomment])
@@ -355,7 +370,12 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
         
       
     }
-  
+    const formatNumber = (val) => {
+      if (!val) return "0";
+      if (val < 1000) return val.toString();
+      if (val < 1000000) return (val / 1000).toFixed(1) + "k";
+      return (val / 1000000).toFixed(1) + "m";
+    };
   const getTimestamp = (time) => {
     if (!time) return "Just now";
     const olddate = new Date(time);
@@ -390,8 +410,9 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
   const renderComment=useCallback(({item})=>(
     <MemoizeThecomments
     item={item}
-    userisId={searchid} onSelect={setUser} onSelectidforindex={setuserindex} thepostid={roomdetais} Roomid={Roomid}
-    />
+    userisId={searchid} onSelect={setUser} onSelectidforindex={setuserindex} thepostid={roomdetais} 
+    Roomid={Roomid} onremove={(id)=>SetPostcomment(prev=>prev.filter(a=>a.id!==id)) }
+    isAdminstate={Adminstate}/>
   ),[setUser,setuserindex,searchid])
   
   const postImages = safeParse(item.postimage);
@@ -411,7 +432,8 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
     return () => {
       socket.off('ReleaseComment', handler);
     }
-  },[roomdetais,socket])
+  },[roomdetais])
+  
   
   useEffect(()=>{
     
@@ -437,6 +459,7 @@ SetlikeCount(prev=>wasliked?prev+1:Math.max(0,prev-1))
     fetchPostComment()
   },[roomdetais,Roomid])
   const Loadingoldercomment=async()=>{
+    try{
     if(Loadingmore || !hasmore) return;
  setLoadingmore(true)
   const lastposted=postcomment[postcomment.length-1].posted_at
@@ -452,7 +475,9 @@ if(data.length===0){
   else{
 SetPostcomment(prev=>[...prev,...data])
 }
+}finally{
 setLoadingmore(false)
+}
 }
   const handleComment=()=>{
     Keyboard.dismiss()
@@ -491,7 +516,12 @@ setLoadingmore(false)
       message:'Check this Post '
     })
   }
+  
   useEffect(() => {
+    if(init.current){
+      init.current=false;
+      return;
+    }
     FlatListRef.current?.scrollToEnd({ animated: true });
   }, [postcomment.length]);
   return (
@@ -507,7 +537,7 @@ setLoadingmore(false)
          
           <Text style={styles.time}>{getTimestamp(item.posted_at)}</Text>
         </View>
-        {isUser || Adminstate && (
+        {(isUser || Adminstate) && (
   <TouchableOpacity
     style={{
       paddingHorizontal: 12,
@@ -604,10 +634,10 @@ const TotalItems=postImages.length + postVideos.length;
       color={likebyme ? "#FF9500" : "#aaa"}
     />
   </Animated.View>
-  <Text style={styles.reactText}>{likeCount}</Text>
+  <Text style={styles.reactText}>{formatNumber(likeCount)}</Text>
 </TouchableOpacity>
         <TouchableOpacity><Text style={styles.reactText} onPress={()=>Setcommentmodal(true)}>
-   <Ionicons name="chatbubbles"size={32} color='#aaa' /> {postcomment.length}</Text></TouchableOpacity>
+   <Ionicons name="chatbubbles"size={32} color='#aaa' /> {formatNumber(postcomment.length)}</Text></TouchableOpacity>
 
 
  
@@ -646,14 +676,19 @@ onPress={() => Setcommentmodal(false)}
 <Ionicons name="close" size={22} color="#fff" />
 </Pressable>
 </View>
-
+{showswipehint && (
+  <View style={styles.showswipebanner}>
+    <Ionicons name="arrow-forward" size={14} color="#fff"/>
+    <Text style={styles.showswipetext}> Swipe right to delete {Adminstate?`a`:`your`} comment</Text>
+  </View>
+)}
 {/* Comments List */}
 <FlatList
 ref={FlatListRef}
 data={postcomment}
 keyExtractor={(item) => `active-${item.id}`}
 renderItem={renderComment}
-onremove={(id)=>SetPostcomment(prev=>prev.filter(a=>a.id!==id))}
+
 showsVerticalScrollIndicator={false}
 onEndReached={Loadingoldercomment}
 onEndReachedThreshold={0.5}
@@ -723,6 +758,7 @@ disabled={!commentText.trim()}
 
 export default function DesignersHubScreen({ navigation, route }) {
   const [postsarray, setPostarray] = useState([]);
+  const [currentpostarray,setcurrentpostarray]=useState([])
   const [openModal,setOpenModal]=useState(false)
   const { roomid ,roomname,roomcreator} = route.params;
   const { user } = useContext(AuthorContext);
@@ -732,6 +768,9 @@ export default function DesignersHubScreen({ navigation, route }) {
   const [biotext,Setbiotext]=useState("")
 const [biostore,setbiostore]=useState(null)
 const isAdmin=searchid===roomcreator
+const bannerAnim=useRef(new Animated.Value(0)).current;
+const [showbanner,setshowbanner]=useState(false)
+const FlatListRef=useRef(null)
 
 const [hasmore,Sethasmore]=useState(true)
 const [Loadingmore,setLoadingmore]=useState(false)
@@ -758,7 +797,12 @@ const [Loadingmore,setLoadingmore]=useState(false)
       socket.off("online-count", onlineHandler);
     };
   }, [searchid, roomid]);
-  
+  const formatNumber = (val) => {
+    if (!val) return "0";
+    if (val < 1000) return val.toString();
+    if (val < 1000000) return (val / 1000).toFixed(1) + "k";
+    return (val / 1000000).toFixed(1) + "m";
+  };
   
   useEffect(() => {
     if (!socket) return;
@@ -780,7 +824,6 @@ const [Loadingmore,setLoadingmore]=useState(false)
         if (!res.ok) throw new Error("Network response was not ok");
         const data = await res.json();
         setPostarray(data);
-        Setputmore(false)
       } catch (err) {
         console.error("Fetch error:", err);
       }
@@ -788,6 +831,7 @@ const [Loadingmore,setLoadingmore]=useState(false)
     getRoomposts();
   },[roomid])
   const Loadingolderposts=async()=>{
+    try{
     if(Loadingmore || !hasmore) return;
  setLoadingmore(true)
   const lastposted=postsarray[postsarray.length-1].posted_at
@@ -804,8 +848,53 @@ if(data.length===0){
 setPostarray(prev=>[...prev,...data])
 }
 setLoadingmore(false)
+    }finally{
+      setLoadingmore(false)
+    }
 }
+useEffect(()=>{
+  const interval=setInterval(async()=>{
+try{
+const thelastpostTime=postsarray[postsarray.length-1].posted_at;
+const res=await fetch(`${API_BASE_URL}/getroomlater?checktime=${thelastpostTime}&roomid=${roomid}`)
+if(!res.ok){
+  console.log(`Failed to fetch current posts`);
+  return;
+}
+const data=await res.json()
+if(data.length>0){
+Showbanner(data)
+}
+}catch(err){
+  console.log(`Failed to fetch current posts`,err);
+  return;
+}
+  },30000)
+  return()=>clearInterval(interval)
+},[roomid])
   
+const Showbanner=(fetchedposts)=>{
+setcurrentpostarray(fetchedposts)
+setshowbanner(true)
+Animated.spring(bannerAnim,{
+  toValue:1,
+  useNativeDriver:true,
+  friction:10,
+  tension:80,
+}).start();
+};
+const mergeBanner=()=>{
+  Animated.spring(bannerAnim,{
+    toValue:0,
+    useNativeDriver:true,
+    duration:200
+  }).start(()=>{
+    setPostarray(prev=>[...currentpostarray,...prev])
+    setcurrentpostarray([])
+    setshowbanner(false)
+    FlatListRef.current?.scrollToOffset({offset:0,animated:true})
+  })
+}
 useEffect(()=>{
   const fetchroompicture=async()=>{
     try{
@@ -830,7 +919,7 @@ fetchroompicture()
 Setroomimage(value)
     })
     return()=>socket.off('getimage')
-  })
+  },[roomimage])
   const handleimage = async () => {
     
      
@@ -914,7 +1003,7 @@ onPress:()=>Leavelogic()
   }
   const Leavelogic=async()=>{
     if(!searchid ||!roomid) return;
-    const sendRoute=isAdmin?'leaveroom':'Deleteroom';
+    const sendRoute=isAdmin?'Deleteroom':'leaveroom';
 try{
   const res=await fetch(`${API_BASE_URL}/${sendRoute}`,{
     method:'POST',
@@ -983,8 +1072,24 @@ try{
   
     } 
   </View>
+  {showbanner && (
+    <Animated.View style={[styles.newPostsbanner,{opacity:bannerAnim,
+    transform:[{translateY:bannerAnim.interpolate({
+      inputRange:[0,1],
+      outputRange:[-20,0]
+    })}]}]}>
+<TouchableOpacity style={newPostspill} onPress={mergeBanner} activeOpacity={0.5}>
+  <Ionicons name="time-outline" size={14} color="#fff"/>
+  <Text style={styles.newPoststext}>
+{formatNumber(currentpostarray.length)} new {currentpostarray.length===1?`post`:`posts`}
+  </Text>
+  <Ionicons name="chevron-down" size={14} color='#fff'/>
+</TouchableOpacity>
+    </Animated.View>
+  )}
         {/* List of Posts */}
         <FlatList
+        ref={FlatListRef}
           data={postsarray}
           onEndReached={Loadingolderposts}
           onEndReachedThreshold={0.5}
@@ -1443,7 +1548,7 @@ borderRadius:12
   },
   cmRootShellswipe: {
     width:'100%',
-    backgroundColor:'#000',
+    backgroundColor:'#111',
     borderRadius:12,
     shadowColor:'#000',
     shadowOffset:{width:0,height:2},
@@ -1612,6 +1717,47 @@ floatingBackBtn: {
   backgroundColor: '#6D5BFF',
   zIndex: 9999,
   elevation: 30
+},
+newPostsbanner:{
+  alignItems:'center',
+  marginTop:8,
+  marginBottom:4,
+  zIndex:10
+},
+newPostspill:{
+  flexDirection:'row',
+  alignItems:'center',
+  gap:6,
+  paddingHorizontal:18,
+  paddingVertical:10,
+  borderRadius:999,
+  borderWidth:0.5,
+  backgroundColor:'rgba(255,255,255,0.12)',
+  borderColor:'rgba(255,255,255,0.2)'
+},
+newPoststext:{
+  color:'#fff',
+  fontSize:13,
+  fontWeight:'600',
+  letterSpacing:0.2
+},
+showswipebanner:{
+  flexDirection:'row',
+  alignItems:'center',
+  gap:6,
+  backgroundColor:'rgba(255,59,48,0.85)',
+  alignSelf:'center',
+  paddingHorizontal:14,
+  paddingVertical:8,
+  borderRadius:999,
+  marginBottom:10,
+  alignSelf:'center'
+
+},
+showswipetext:{
+  color:'#fff',
+  fontSize:14,
+  fontWeight:'600'
 }
 });
 
