@@ -2694,7 +2694,7 @@ cr.postvideo,cr.postimage,a.USERNAME as usersname,a.FULLNAME as fullname,a.image
 order by  cr.posted_at desc 
  limit 20 `,[roomid,lasttime],(err,result)=>{
   if(err){
-    res.status(500).json({error:'A database error occured'})
+   return res.status(500).json({error:'A database error occured'})
   }
   res.json(result)
  })
@@ -2707,7 +2707,7 @@ cr.postvideo,cr.postimage,a.USERNAME as usersname,a.FULLNAME as fullname,a.image
 order by  cr.posted_at desc 
  limit 20 `,[roomid,checktime],(err,result)=>{
   if(err){
-    res.status(500).json({error:'A database error occured'})
+   return res.status(500).json({error:'A database error occured'})
   }
   res.json(result)
  })

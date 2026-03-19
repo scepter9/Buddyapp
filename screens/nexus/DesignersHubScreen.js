@@ -236,7 +236,7 @@ const MemoizeThecomments=React.memo(TheComments)
 const PostChild = ({ item ,user,navigation,Roomid,Adminstate,onDelete}) => {
   const searchid = user?.id;
   const roomdetais=item.id
-  const videoref=useRef(null)
+  const videoref=useRef({})
 const [likebyme,Setlikebyme]=useState(false)
 const [likeCount,SetlikeCount]=useState(0)
 const [isMutating,SetisMutating]=useState(false)
@@ -255,15 +255,23 @@ const init=useRef(true)
 const [Showpost,setShowpost]=useState(false)
 const showkey=`${searchid}-showkey`;
 const [showswipehint,Setshowswipehint]=useState(false)
+
 useEffect(()=>{
-  const showstate=AsyncStorage.getItem(showkey)
-  if(!showstate){
-    Setshowswipehint(true)
-    AsyncStorage.setItem(showkey,`thekey-${searchid}`)
-  }else{
-    return;
+  if(!searchid) return;
+  const checkhint=async()=>{
+    const showstate=await AsyncStorage.getItem(showkey)
+    if(!showstate){
+      Setshowswipehint(true)
+      setTimeout(() => {
+        Setshowswipehint(false)
+      }, 3000);
+      AsyncStorage.setItem(showkey,`thekey-${searchid}`)
+    }else{
+      return;
+    }
   }
-},[])
+  checkhint()
+},[searchid])
 useEffect(()=>{
   postcommentRef.current=postcomment;
 },[postcomment])
@@ -473,7 +481,11 @@ if(data.length===0){
   Sethasmore(false)
 }
   else{
-SetPostcomment(prev=>[...prev,...data])
+SetPostcomment(prev=>{
+  const prevcomments=new Set(prev.map(p=>p.id))
+  const isnewcomment=data.filter(p=>!prevcomments.has(p))
+  return [...data,...isnewcomment]
+})
 }
 }finally{
 setLoadingmore(false)
@@ -493,6 +505,7 @@ setLoadingmore(false)
     }
     socket.emit('RoomComment',commentval)
     setcommentText('')
+    setselectedValues(null)
   }
   
   const DeletePost=async()=>{
@@ -589,14 +602,14 @@ const TotalItems=postImages.length + postVideos.length;
       key={index}
       activeOpacity={0.8}
       style={[styles.mediaitem,{width:itemWidth,height:itemHeight}]}
-      onPress={()=>{videoref.current?.pauseAsync()
+      onPress={()=>{Object.values(videoref.current).forEach(ref=>{ref?.pauseAsync()})
         navigation.navigate('ViewImage',{imagevalue:fullUri,mediatype:isVideo?'video ':'image'})}
         }
       >
         {isVideo ?
         <Video
         source={{ uri: fullUri }}
-        ref={videoref}
+        ref={(ref)=>{videoref.current[index]=ref}}
         style={styles.mediacontent}
         resizeMode="cover"
         useNativeControls
@@ -697,7 +710,11 @@ maxToRenderPerBatch={10}
 windowSize={5}
 removeClippedSubviews={true}
 contentContainerStyle={{ paddingBottom: 10 }}
-ListFooterComponent={Loadingmore?<ActivityIndicator/>:null}
+ListFooterComponent={<View style={{paddingVertical:16,alignItems:'center'}}>{Loadingmore&&(<ActivityIndicator size="large" color="#1D9BF0"/>)} </View> }
+ListEmptyComponent={
+  <Text style={{textAlign:'center',marginTop:30,fontSize:14,color:'rgba(255,255,255,0.3)'}}>  No comments yet. Be the first!
+  </Text>
+}
 style={{ flex: 1 }}
 />
 
@@ -771,11 +788,14 @@ const isAdmin=searchid===roomcreator
 const bannerAnim=useRef(new Animated.Value(0)).current;
 const [showbanner,setshowbanner]=useState(false)
 const FlatListRef=useRef(null)
-
+const postsarrayRef=useRef(postsarray)
 const [hasmore,Sethasmore]=useState(true)
 const [Loadingmore,setLoadingmore]=useState(false)
  
   const [onlineCount, setOnlineCount] = useState(0);
+  useEffect(()=>{
+    postsarrayRef.current=postsarray;
+  },[postsarray])
   useEffect(() => {
     if (!searchid || !roomid) return;
   
@@ -847,15 +867,18 @@ if(data.length===0){
   else{
 setPostarray(prev=>[...prev,...data])
 }
-setLoadingmore(false)
     }finally{
       setLoadingmore(false)
     }
 }
-useEffect(()=>{
+useFocusEffect(
+useCallback(()=>{
+  if(!postsarrayRef.current.length) return
   const interval=setInterval(async()=>{
 try{
-const thelastpostTime=postsarray[postsarray.length-1].posted_at;
+  const arr=postsarrayRef.current;
+  if(!arr.length) return;
+const thelastpostTime=arr[0].posted_at;
 const res=await fetch(`${API_BASE_URL}/getroomlater?checktime=${thelastpostTime}&roomid=${roomid}`)
 if(!res.ok){
   console.log(`Failed to fetch current posts`);
@@ -872,6 +895,7 @@ Showbanner(data)
   },30000)
   return()=>clearInterval(interval)
 },[roomid])
+)
   
 const Showbanner=(fetchedposts)=>{
 setcurrentpostarray(fetchedposts)
@@ -884,12 +908,17 @@ Animated.spring(bannerAnim,{
 }).start();
 };
 const mergeBanner=()=>{
-  Animated.spring(bannerAnim,{
+  Animated.timing(bannerAnim,{
     toValue:0,
     useNativeDriver:true,
     duration:200
   }).start(()=>{
-    setPostarray(prev=>[...currentpostarray,...prev])
+    setPostarray(prev=>{
+      const existingids=new Set(prev.map(p=>p.id))
+      const isNew=currentpostarray.filter(p=>!existingids.has(p.id))
+      return [...isNew,...prev]
+
+    })
     setcurrentpostarray([])
     setshowbanner(false)
     FlatListRef.current?.scrollToOffset({offset:0,animated:true})
@@ -1078,7 +1107,7 @@ try{
       inputRange:[0,1],
       outputRange:[-20,0]
     })}]}]}>
-<TouchableOpacity style={newPostspill} onPress={mergeBanner} activeOpacity={0.5}>
+<TouchableOpacity style={styles.newPostspill} onPress={mergeBanner} activeOpacity={0.5}>
   <Ionicons name="time-outline" size={14} color="#fff"/>
   <Text style={styles.newPoststext}>
 {formatNumber(currentpostarray.length)} new {currentpostarray.length===1?`post`:`posts`}
@@ -1097,7 +1126,7 @@ try{
           renderItem={({ item }) => <PostChild item={item} navigation={navigation} user={user} socket={socket} Roomid={roomid} Adminstate={isAdmin} 
           onDelete={(id)=>setPostarray(prev=>prev.filter(p=>p.id!==id))}/>}
           contentContainerStyle={styles.scrollContent}
-          ListFooterComponent={ Loadingmore? <ActivityIndicator/> :null}
+          ListFooterComponent={<View style={{paddingVertical:16,alignItems:'center'}}>{Loadingmore&&(<ActivityIndicator size="large" color="#1D9BF0"/>)} </View> }
           ListEmptyComponent={<Text style={{color: 'white', textAlign: 'center', marginTop: 20}}>No posts yet.</Text>}
         />
 
@@ -1219,7 +1248,7 @@ try{
             >
               <Text style={{ color: "#E5E7EB", fontWeight: "600" }}>Cancel</Text>
             </TouchableOpacity>
-
+/
             {/* Update Bio */}
             <TouchableOpacity
               onPress={handlebio}
@@ -1647,18 +1676,19 @@ cmTextColumn:{
     marginLeft:6
   },
   replyPreviewBubble: {
-    backgroundColor: '#4FC3F7',
+    backgroundColor: 'rgba(109,91,255,0.12)',
     borderLeftWidth: 3,
-    borderLeftColor: '#4A90E2',
+    borderLeftColor: 'rgba(109,91,255,0.5)',
     padding: 8,
     borderRadius: 8,
     alignSelf:'flex-start',
+    borderTopLeftRadius:0,
     marginBottom:6
   },
 
 replyLabel:{
   fontSize:11,
-  color:'#aaa',
+  color:'rgba(109,91,255,0.7)',
   marginBottom:2
 },
 
@@ -1670,7 +1700,7 @@ replyUserRow:{
 
 
 replyPreviewNamee:{
-  color:'#aaa',
+  color:'rgba(255,255,255,0.45)',
   fontSize:11,
   fontStyle:'italic',
   fontWeight:'400',
@@ -1678,13 +1708,7 @@ replyPreviewNamee:{
   marginTop:2
 
 },
-replyPreviewBubble:{
-  alignSelf:'flex-start',
-  backgroundColor:'rgba(255,255,255,0.06)',
-  padding:8,
-  borderRadius:14,
-  marginBottom:6
-},
+
 
 
 
@@ -1701,7 +1725,7 @@ replyPreviewAvatar:{
 },
 
 replyPreviewName:{
-  color:'#fff',
+  color:'rgba(255,255,255,0.9)',
   fontSize:13,
   fontWeight:'600'
 },

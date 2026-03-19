@@ -15,7 +15,8 @@ import {
   TouchableWithoutFeedback,
   Alert,
   Keyboard,
-  ScrollView
+  ScrollView,
+  ActivityIndicator
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
@@ -46,6 +47,7 @@ const [images,Setimages]=useState([])
 const [videos,SetVideos]=useState([])
 const [displayimage,setdisplayimage]=useState(false)
 const [displayvideo,setdisplayvid]=useState(false)
+const isSubmittingref=useRef(false);
 useEffect(()=>{
   const postroominsocket=io(API_BASE_URL,{
     query:{userId:searchid},
@@ -75,6 +77,8 @@ useEffect(()=>{
    
         
         const postNewtext = async () => {
+          if(isSubmittingref.current) return;
+          isSubmittingref.current=true
           const roomid = route?.params?.roomid ;
           if (!roomid) {
             console.log('Room ID is missing, cannot post');
@@ -153,6 +157,7 @@ useEffect(()=>{
           } catch (err) {
             console.log("Posting failed:", err.message);
           }finally{
+            isSubmittingref.current=false
           navigation.goBack()
           }
         };
@@ -396,8 +401,10 @@ useEffect(()=>{
                 activeOpacity={0.9}
                 onPressIn={onPressIn}
                 onPressOut={onPressOut}
-                style={styles.postBtnWrapper}
+                style={[styles.postBtnWrapper,isSubmittingref.current && {opacity:0.5}]}
                 onPress={postNewtext}
+                disabled={isSubmittingref.current}
+
               >
                 <LinearGradient
                   colors={["#00d9ff", "#8a2be2"]}
@@ -405,7 +412,8 @@ useEffect(()=>{
                   end={[1, 0]}
                   style={styles.postBtn}
                 >
-                  <Text style={styles.postBtnText}>Post</Text>
+                  {isSubmittingref.current?<ActivityIndicator size="small" color="#fff"/>:<Text style={styles.postBtnText}>Post</Text>}
+                  
                 </LinearGradient>
                 </TouchableOpacity>
                 <TouchableOpacity
