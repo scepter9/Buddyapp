@@ -11,7 +11,10 @@ const path = require('path');
 const http = require('http'); // Import http module
 const { Server } = require('socket.io'); // Import Server from socket.io
 const { log, timeStamp, error } = require('console');
-const { result } = require('lodash');
+const { result, last } = require('lodash');
+const bcrypt = require('bcrypt');
+const cron=require('node-cron');
+const { report } = require('process');
 
 
 //"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" -u root -p buddy > backup.sql
@@ -60,9 +63,9 @@ io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
 
     // When a user logs in or establishes their session, associate their userId with their socket.id
-    socket.on('registerUser', (userId) => {
+    socket.on('register', (userId) => {
         if (userId) {
-            connectedUsers.set(userId, socket.id);
+            connectedUsers.set(String(userId), socket.id);
             console.log(`User ${userId} registered with socket ID ${socket.id}`);
         }
     });
@@ -78,6 +81,7 @@ io.on('connection', (socket) => {
             }
         }
     });
+    
 });
 
 
@@ -107,60 +111,304 @@ const db = mysql.createPool({
   console.log('MySQL pool created');
   
 
-
-
-
-// Register route
-app.post('/Register', (req, res) => {
-    const { fullname, username, email, phone, password } = req.body;
-
-    if (!fullname || !username || !email || !phone || !password) {
-        return res.status(400).json({ error: 'All fields are required' });
-    }
-
-    const sql = `INSERT INTO projecttables 
-    (FULLNAME, USERNAME, EMAIL, PHONE, PASSWORD, VERIFICATION, Gender, join_date) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())`;
-
-    db.query(sql, [fullname, username, email, phone, password, 'pending', 'Not specified'], (err, result) => {
-        if (err) {
-            console.error('Error inserting user:', err);
-            return res.status(500).json({ error: 'Database error' });
-        }
-
-        req.session.user = { id: result.insertId, fullname, username, email, phone };
-        res.status(200).json({ message: 'User registered and session started' });
+  setInterval(() => {
+    db.query(`DELETE FROM pending_registrations WHERE expires_at < NOW()`, (err) => {
+      if (err) console.error('Cleanup error:', err);
+      else console.log('Cleared expired pending registrations');
     });
+  }, 60 * 60 * 1000);
+  
+  app.post('/check-availability', (req, res) => {
+    const { email, username } = req.body;
+  
+    const sql = `
+      SELECT 
+        SUM(EMAIL = ?) as emailTaken,
+        SUM(USERNAME = ?) as usernameTaken
+      FROM projecttables
+      WHERE EMAIL = ? OR USERNAME = ?
+    `;
+  
+    db.query(sql, [email, username, email, username], (err, results) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+  
+      return res.status(200).json({
+        emailTaken: results[0].emailTaken > 0,
+        usernameTaken: results[0].usernameTaken > 0,
+      });
+    });
+  });
+  
+// Register route
+app.post('/send-verification', (req, res) => {
+  const { fullname, username, email, phone, password,
+      selectedValueschool,selectinterestname } = req.body;
+
+      if (!fullname || !username || !email || !phone || !password || !selectedValueschool || !selectinterestname) {
+          return res.status(400).json({ error: 'All fields are required' });
+      }
+// Check duplicates in main table
+const checkSql = `
+  SELECT ID FROM projecttables 
+  WHERE EMAIL = ? OR USERNAME = ?
+`;
+
+db.query(checkSql, [email, username], async (err, results) => {
+  if (err) return res.status(500).json({ error: 'Database error' });
+
+  if (results.length > 0) {
+    return res.status(409).json({ error: 'Email or username already taken' });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 10 * 60 * 1000);
+
+    // Clear any previous pending entry for this email
+    db.query(`DELETE FROM pending_registrations WHERE email = ?`, [email], (err2) => {
+      if (err2) return res.status(500).json({ error: 'Database error' });
+
+      const insertSql = `
+        INSERT INTO pending_registrations 
+        (fullname, username, email, phone, passworde, code, expires_at,uni,interest)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?,?)
+      `;
+
+      db.query(
+        insertSql,
+        [fullname, username, email, phone, hashedPassword, code, expires,selectedValueschool,JSON.stringify(selectinterestname)],
+        (err3) => {
+          if (err3) return res.status(500).json({ error: 'Failed to save registration' ,err3});
+
+          const mailOptions = {
+            from: `"Buddy App" <${process.env.EMAIL_USER}>`,
+            to: email,
+            subject: 'Welcome to Buddy 🎉 — Confirm your email',
+            html: `
+              <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#0a0a0f;color:#ffffff;border-radius:16px;overflow:hidden">
+                <div style="background:linear-gradient(135deg,#00D2FF,#7C3AED);padding:32px;text-align:center">
+                  <h1 style="margin:0;font-size:28px;font-weight:900;letter-spacing:-1px">buddy</h1>
+                  <p style="margin:6px 0 0;font-size:13px;opacity:0.85">Your campus, your people.</p>
+                </div>
+                <div style="padding:32px">
+                  <p style="font-size:16px;margin:0 0 8px">Hey <strong>${fullname.split(' ')[0]}</strong> 👋,</p>
+                  <p style="font-size:14px;color:rgba(255,255,255,0.7);line-height:1.7;margin:0 0 20px">
+                    Welcome to Buddy — we're genuinely glad you're here.<br><br>
+                    Buddy was built for Nigerian university students, by someone who knows exactly what campus life feels like. Finding your people, connecting with coursemates, building your circle — that's what this is for. And you're one of the first to be part of it.
+                  </p>
+                  <p style="font-size:14px;color:rgba(255,255,255,0.7);margin:0 0 20px">
+                    Before you dive in, confirm it's really you with the code below.
+                  </p>
+                  <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:24px;text-align:center;margin:0 0 24px">
+                    <p style="margin:0 0 8px;font-size:12px;color:rgba(255,255,255,0.4);letter-spacing:0.1em;text-transform:uppercase">Your verification code</p>
+                    <p style="margin:0;font-size:36px;font-weight:900;letter-spacing:8px;color:#00D2FF">${code}</p>
+                    <p style="margin:8px 0 0;font-size:11px;color:rgba(255,255,255,0.3)">Expires in 10 minutes</p>
+                  </div>
+                  <p style="font-size:13px;color:rgba(255,255,255,0.4);line-height:1.6;margin:0 0 28px">
+                    If you didn't create a Buddy account, you can safely ignore this email.
+                  </p>
+                  <p style="font-size:14px;color:rgba(255,255,255,0.7);margin:0">
+                    See you on campus,<br>
+                    <strong style="color:#ffffff">The Buddy Team 🚀</strong>
+                  </p>
+                </div>
+                <div style="padding:16px 32px;border-top:1px solid rgba(255,255,255,0.06);text-align:center">
+                  <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.2)">© 2025 Buddy — Nigerian Universities Network</p>
+                </div>
+              </div>
+            `
+          };
+
+          transporter.sendMail(mailOptions, (mailErr) => {
+            if (mailErr) {
+              console.error('Email error:', mailErr);
+              return res.status(500).json({ error: 'Failed to send email' });
+            }
+            return res.status(200).json({
+              success: true,
+              message: 'Verification code sent to email'
+            });
+          });
+        }
+      );
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+});
+
+
+app.post('/verify-registration', (req, res) => {
+const { email, code } = req.body;
+
+if (!email || !code) {
+  return res.status(400).json({ error: 'Email and code are required' });
+}
+
+const checkSql = `
+  SELECT * FROM pending_registrations
+  WHERE email = ? AND code = ? AND expires_at > NOW()
+`;
+
+db.query(checkSql, [email, code], (err, results) => {
+  if (err) return res.status(500).json({ error: 'Database error' });
+
+  if (results.length === 0) {
+    return res.status(400).json({ error: 'Invalid or expired code' });
+  }
+
+  const user = results[0];
+
+  const insertSql = `
+  INSERT INTO projecttables 
+  (FULLNAME, USERNAME, EMAIL, PHONE, PASSWORD, VERIFICATION, university, interests, join_date)
+  VALUES (?, ?, ?, ?, ?, 'verified', ?, ?, CURDATE())
+`;
+
+db.query(
+  insertSql,
+  [user.fullname, user.username, user.email, user.phone, user.passworde, user.uni,   JSON.stringify(user.interest)],
+    (err2, result) => {
+      if (err2) {
+        console.error(err2);
+        return res.status(500).json({ error: 'Failed to create account' });
+      }
+
+      // Clean up pending table
+      db.query(`DELETE FROM pending_registrations WHERE email = ?`, [email]);
+
+      // Start session
+      req.session.user = {
+        id: result.insertId,
+        fullname: user.fullname,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+      };
+
+      return res.status(201).json({
+        success: true,
+        message: 'Account created',
+        user: req.session.user
+      });
+    }
+  );
+});
+});
+
+
+
+app.post('/resend-verification', (req, res) => {
+const { email } = req.body;
+
+if (!email) {
+  return res.status(400).json({ error: 'Email is required' });
+}
+
+const checkSql = `SELECT * FROM pending_registrations WHERE email = ?`;
+
+db.query(checkSql, [email], (err, results) => {
+  if (err) return res.status(500).json({ error: 'Database error' });
+
+  if (results.length === 0) {
+    return res.status(404).json({ error: 'No pending registration found' });
+  }
+
+  const user = results[0];
+  const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const newExpires = new Date(Date.now() + 10 * 60 * 1000);
+
+  const updateSql = `
+    UPDATE pending_registrations 
+    SET code = ?, expires_at = ? 
+    WHERE email = ?
+  `;
+
+  db.query(updateSql, [newCode, newExpires, email], (err2) => {
+    if (err2) return res.status(500).json({ error: 'Failed to update code' });
+
+    const mailOptions = {
+      from: `"Buddy App" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Your new Buddy verification code',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#0a0a0f;color:#ffffff;border-radius:16px;overflow:hidden">
+          <div style="background:linear-gradient(135deg,#00D2FF,#7C3AED);padding:32px;text-align:center">
+            <h1 style="margin:0;font-size:28px;font-weight:900">buddy</h1>
+          </div>
+          <div style="padding:32px">
+            <p style="font-size:15px;color:rgba(255,255,255,0.8);margin:0 0 20px">
+              Hey ${user.fullname.split(' ')[0]} 👋, here's your new verification code:
+            </p>
+            <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:24px;text-align:center">
+              <p style="margin:0 0 8px;font-size:12px;color:rgba(255,255,255,0.4);letter-spacing:0.1em;text-transform:uppercase">Verification code</p>
+              <p style="margin:0;font-size:36px;font-weight:900;letter-spacing:8px;color:#00D2FF">${newCode}</p>
+              <p style="margin:8px 0 0;font-size:11px;color:rgba(255,255,255,0.3)">Expires in 10 minutes</p>
+            </div>
+          </div>
+        </div>
+      `
+    };
+
+    transporter.sendMail(mailOptions, (mailErr) => {
+      if (mailErr) return res.status(500).json({ error: 'Failed to send email' });
+      return res.status(200).json({ success: true, message: 'New code sent' });
+    });
+  });
+});
 });
 
 // Login route
+
+
 app.post('/Login', (req, res) => {
-    const { username, password } = req.body;
+  const { username, password } = req.body;
 
-    const query = 'SELECT * FROM projecttables WHERE USERNAME = ?';
-    db.query(query, [username], (err, results) => {
-        if (err) return res.status(500).json({ error: 'Server error' });
+  if (!username || !password) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
 
-        if (results.length === 0) {
-            return res.status(401).json({ error: 'Invalid username' });
-        }
+  const sql = `SELECT * FROM projecttables WHERE USERNAME = ?`;
 
-        const user = results[0];
-        if (user.PASSWORD !== password) {
-            return res.status(401).json({ error: 'Invalid password' });
-        }
+  db.query(sql, [username], async (err, results) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
 
-        req.session.user = {
-            id: user.ID,
-            fullname: user.FULLNAME,
-            email: user.EMAIL,
-            username: user.USERNAME,
-            phone: user.PHONE,
-            image:user.image,
-        };
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'Invalid username' });
+    }
 
-        return res.json({ message: 'Login successful', user: req.session.user });
+    const user = results[0];
+
+    // Compare typed password against the hash in DB
+    const isMatch = await bcrypt.compare(password, user.PASSWORD);
+
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+
+    // Check email is verified before allowing login
+    if (user.VERIFICATION !== 'verified') {
+      return res.status(403).json({ error: 'Please verify your email first' });
+    }
+
+    req.session.user = {
+      id: user.ID,
+      fullname: user.FULLNAME,
+      username: user.USERNAME,
+      email: user.EMAIL,
+      phone: user.PHONE,
+      image:user.image,
+    
+    };
+
+    return res.status(200).json({
+      message: 'Login successful',
+      user: req.session.user
     });
+  });
 });
  
 
@@ -171,7 +419,7 @@ app.get('/Profile', (req, res) => {
 
     const sql = `
     SELECT ID as id, FULLNAME as name, EMAIL as email, BIO as about, FOLLOWERS, FOLLOWING,
-           IS_PRO as isPro, DATE_FORMAT(join_date, '%M %Y') as joinDate, IMAGE as image
+           IS_PRO as isPro, DATE_FORMAT(join_date, '%M %Y') as joinDate, IMAGE as image,university,interests
     FROM projecttables
     WHERE ID = ?`;
 
@@ -201,8 +449,9 @@ app.get('/About',(req,res)=>{
 // **FIXED** Get another user's profile
 app.get('/users/:id', (req, res) => {
     const sql = `
-    SELECT ID as id, FULLNAME as name, EMAIL as email, BIO as about, FOLLOWERS, FOLLOWING,
-           IS_PRO as isPro, DATE_FORMAT(join_date, '%M %Y') as joinDate, IMAGE as image, FOLLOWERS AS followers, FOLLOWING AS following
+    SELECT ID as id, FULLNAME as name, EMAIL as email, BIO as about,
+           IS_PRO as isPro, DATE_FORMAT(join_date, '%M %Y') as joinDate, IMAGE as image, FOLLOWERS AS followers, FOLLOWING AS following,
+           university,department,interests
     FROM projecttables
     WHERE ID = ?`;
 
@@ -288,7 +537,8 @@ app.post('/forgot-password', (req, res) => {
                     success: true,
                     message: 'Reset code sent',
                     userId: results[0].ID,
-                    email: email // or any ID you want to pass to ResetPassword screen
+                    email: email,
+                    thecode:code // or any ID you want to pass to ResetPassword screen
                 });
 
             });
@@ -319,12 +569,6 @@ app.post('/reset-password', async (req, res) => {
             return res.status(400).json({ error: 'Invalid or expired code' });
         }
 
-        try {
-            // If you are using bcrypt, ensure it's imported at the top and uncomment this:
-            // const hashedPassword = await bcrypt.hash(newPassword, 10);
-            // const updateSql = `UPDATE projecttables SET PASSWORD = ?, reset_token = NULL, token_expires = NULL WHERE EMAIL = ?`;
-            // db.query(updateSql, [hashedPassword, email], (err2) => {
-
             const updateSql = `
             UPDATE projecttables
             SET PASSWORD = ?, reset_token = NULL, token_expires = NULL
@@ -335,9 +579,7 @@ app.post('/reset-password', async (req, res) => {
 
                 return res.status(200).json({ message: 'Password reset successful' });
             });
-        } catch (hashErr) {
-            return res.status(500).json({ error: 'Error hashing password' });
-        }
+       
     });
 });
 
@@ -351,8 +593,20 @@ const storage = multer.diskStorage({
         cb(null, uniqueName);
     },
 });
+
+const audioStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, 'uploads/audio/'),
+  filename: (req, file, cb) => cb(null, `voice_${Date.now()}.m4a`),
+});
+
+const uploadAudio = multer({ storage: audioStorage, limits: { fileSize: 20 * 1024 * 1024 } });
+
 const upload = multer({ storage });
 
+app.post('/api/upload-audio', uploadAudio.single('audio'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  res.json({ audioUrl: `/uploads/audio/${req.file.filename}` });
+});
 
 app.get('/get-profile', (req, res) => {
     const userId = req.session.user?.id;
@@ -373,86 +627,172 @@ app.get('/get-profile', (req, res) => {
 
 // Update profile route
 app.post('/update-profile', upload.single('image'), (req, res) => {
-    const { name, about, phone, password } = req.body;
-    const image = req.file; // This will contain information about the uploaded file
-    const userId = req.session.user?.id;
+  const { name, about, university } = req.body;
+  const image = req.file;
+  const userId = req.session.user?.id;
 
-    if (!userId) {
-        return res.status(401).json({ error: 'Not authenticated' });
-    }
+  if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+  }
 
-    let updates = [];
-    let values = [];
+  let updates = [];
+  let values = [];
 
-    if (name && name.trim() !== '') {
-        updates.push('FULLNAME=?');
-        values.push(name);
-    }
+  // NAME
+  if (name && name.trim() !== '') {
+      updates.push('FULLNAME = ?');
+      values.push(name.trim());
+  }
 
-    if (about && about.trim() !== '') {
-        updates.push('BIO = ?'); // Correct column name in DB for 'about'
-        values.push(about);
-    }
+  // BIO
+  if (about && about.trim() !== '') {
+      updates.push('BIO = ?');
+      values.push(about.trim());
+  }
 
-    if (phone && phone.trim() !== '') {
-        updates.push('PHONE = ?');
-        values.push(phone);
-    }
+  // UNIVERSITY
+  if (university && university.trim() !== '') {
+      updates.push('UNIVERSITY = ?');
+      values.push(university.trim());
+  }
 
-    if (password && password.trim() !== '') {
-        // It's highly recommended to hash passwords, even for updates.
-        // If you're using bcrypt, you'd do:
-        // const hashedPassword = await bcrypt.hash(password, 10);
-        // updates.push('PASSWORD = ?');
-        // values.push(hashedPassword);
-        // For now, if you're not hashing:
-        updates.push('PASSWORD = ?');
-        values.push(password); // Be very careful storing plain passwords!
-    }
+  // IMAGE
+  if (image) {
+      const imagePath = image.filename;
 
-    if (image) {
-        // image.filename contains the unique name generated by multer
-        const imagePath = `${image.filename}`; // Store just the filename, or full path like `/uploads/${image.filename}`
-        updates.push('IMAGE = ?'); // Correct column name in DB for 'image'
-        values.push(imagePath); // Store the filename or relative path
-    }
+      updates.push('IMAGE = ?');
+      values.push(imagePath);
+  }
 
-    if (updates.length === 0) {
-        return res.status(400).json({ error: 'No data provided for update.' });
-    }
+  // NO CHANGES
+  if (updates.length === 0) {
+      return res.status(400).json({
+          error: 'No data provided for update.',
+      });
+  }
 
-    const sql = `UPDATE projecttables SET ${updates.join(', ')} WHERE id = ?`;
-    values.push(userId);
+  // FINAL QUERY
+  const sql = `
+      UPDATE projecttables 
+      SET ${updates.join(', ')} 
+      WHERE id = ?
+  `;
 
-    db.query(sql, values, (err, result) => {
-        if (err) {
-            console.error('Update profile error:', err);
-            return res.status(500).json({ error: 'Database error.' });
-        }
-        res.json({ message: 'Profile updated successfully.' });
-    });
-});
-app.post('/checkuser', (req, res) => {
-    const { SearchValue } = req.body;
-  
-    if (!SearchValue || SearchValue.trim() === '') {
-      return res.status(200).json([]);
-    }
-  
-    const SearchPattern = `%${SearchValue}%`;
-    const query = 'SELECT id, email, image, username, FULLNAME FROM projecttables WHERE USERNAME LIKE ? OR FULLNAME LIKE ?';
-  
-    db.query(query, [SearchPattern, SearchPattern], (err, results) => {
+  values.push(userId);
+
+  db.query(sql, values, (err, result) => {
       if (err) {
-        console.error(err);
-        return res.status(500).json({ error: 'Database Error' });
+          console.error('Update profile error:', err);
+
+          return res.status(500).json({
+              error: 'Database error.',
+          });
       }
-  
-      res.status(200).json(results);
-    });
+
+      res.json({
+          message: 'Profile updated successfully.',
+      });
   });
-  
-  // ... (existing unfollow route)
+});
+
+app.get('/checkuser', (req, res) => {
+  const userId = req.session.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+  const { SearchValue } = req.query;
+  if (!SearchValue?.trim()) return res.status(200).json([]);
+
+  const pattern = `%${SearchValue.trim()}%`;
+
+  db.query(
+    `SELECT id, email, image, username, FULLNAME 
+     FROM projecttables 
+     WHERE (USERNAME LIKE ? OR FULLNAME LIKE ?)
+       AND id != ?
+     LIMIT 20`,
+    [pattern, pattern, userId],
+    (err, results) => {
+      if (err) {
+        console.error('Search error:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.json(results);
+    }
+  );
+});
+
+app.get('/getusersyoumayknow', (req, res) => {
+  const userId = req.session.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+  // First fetch the user's university so the filter is dynamic
+  db.query(
+    'SELECT university FROM projecttables WHERE id = ?',
+    [userId],
+    (err, rows) => {
+      if (err || rows.length === 0) {
+        return res.status(500).json({ error: 'Could not fetch user data' });
+      }
+
+      const university = rows[0].university;
+
+    
+      const sql = `
+        WITH firstfilter AS (
+          SELECT n.*
+          FROM projecttables n
+          WHERE n.id != ?
+            AND n.university = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM follows
+              WHERE sender_id = ? AND receiver_id = n.id
+            )
+        ),
+        mutual_count AS (
+          SELECT p.id AS user_id, COUNT(*) AS mutuals
+          FROM firstfilter p
+          INNER JOIN follows f  ON f.receiver_id = ?
+          INNER JOIN follows f2 ON f.sender_id = f2.sender_id
+                                AND f2.receiver_id = p.id
+          GROUP BY p.id
+        ),
+        room_overlap AS (
+          SELECT DISTINCT p1.userid AS user_id
+          FROM roomparticipants p1
+          WHERE p1.userid IN (SELECT id FROM firstfilter)
+            AND p1.roomid IN (
+              SELECT roomid FROM roomparticipants WHERE userid = ?
+            )
+        )
+        SELECT
+          p.*,
+          COALESCE(mc.mutuals, 0) AS mutual_follower_count,
+          (
+            1 +
+            CASE WHEN ro.user_id IS NOT NULL THEN 2 ELSE 0 END +
+            CASE
+              WHEN COALESCE(mc.mutuals, 0) >= 5 THEN 6
+              WHEN COALESCE(mc.mutuals, 0) >= 2 THEN 4
+              ELSE 0
+            END
+          ) AS total_score
+        FROM firstfilter p
+        LEFT JOIN mutual_count  mc ON mc.user_id = p.id
+        LEFT JOIN room_overlap  ro ON ro.user_id = p.id
+        ORDER BY total_score DESC
+        LIMIT 20
+      `;
+
+      db.query(sql, [userId, university, userId, userId, userId], (err, result) => {
+        if (err) {
+          console.error('People you may know error:', err);
+          return res.status(500).json({ error: 'Database error' });
+        }
+        res.json(result);
+      });
+    }
+  );
+});
 
   app.post('/follow', (req, res) => {
     const { receiver_id } = req.body;
@@ -625,93 +965,118 @@ app.post('/unfollow', (req, res) => {
     });
 });
 
+
 app.get('/notifications', (req, res) => {
   const receiver_id = req.session.user?.id;
-  if (!receiver_id) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
+  if (!receiver_id) return res.status(401).json({ error: 'Not authenticated' });
 
   const sql = `
-    SELECT n.*, u.FULLNAME as sender_name, u.image AS sender_image
+    SELECT 
+      n.*,
+      u.FULLNAME AS sender_name,
+      u.image    AS sender_image
     FROM notifications n
-    JOIN projecttables u ON u.id = n.sender_id
+    LEFT JOIN projecttables u ON u.id = n.sender_id
     WHERE n.receiver_id = ?
     ORDER BY n.created_at DESC
   `;
 
   db.query(sql, [receiver_id], (err, results) => {
     if (err) {
-      console.error('Failed to fetch notifications:', err);
+      console.error('Fetch notifications error:', err);
       return res.status(500).json({ error: 'Database error' });
     }
     res.json(results);
   });
 });
 
-// In your backend:
+// ── Mark all as read ──
+app.post('/notifications/mark-as-read', (req, res) => {
+  const userId = req.session.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+  db.query(
+    'UPDATE notifications SET is_read = TRUE WHERE receiver_id = ? AND is_read = FALSE',
+    [userId],
+    (err) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.status(200).json({ message: 'Marked as read' });
+    }
+  );
+});
+
+// ── Unread count ──
+app.get('/notifications/unread/count', (req, res) => {
+  const userId = req.session.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+  db.query(
+    'SELECT COUNT(*) AS unreadCount FROM notifications WHERE receiver_id = ? AND is_read = FALSE',
+    [userId],
+    (err, results) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json({ unreadCount: results[0].unreadCount });
+    }
+  );
+});
+
+// ── Clear all notifications ──
+
+app.post('/notifications/clear-all', (req, res) => {
+  const userId = req.session.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+  db.query(
+    'DELETE FROM notifications WHERE receiver_id = ?',
+    [userId],
+    (err) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.status(200).json({ success: true });
+    }
+  );
+});
+
+app.post('/deletesinglenotification', (req, res) => {
+  const userId = req.session.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+  const { notid } = req.body;
+  if (!notid) return res.status(400).json({ error: 'Missing notification ID' });
+
+  // Verify ownership before deleting
+  db.query(
+    'DELETE FROM notifications WHERE id = ? AND receiver_id = ?',
+    [notid, userId],
+    (err, result) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (result.affectedRows === 0) {
+        return res.status(403).json({ error: 'Not authorized or notification not found' });
+      }
+const usersocket=connectedUsers.get(String(userId))
+      io.to(usersocket).emit('UpdateAfterdeletenotication', { deletedId: notid });
+
+      res.status(200).json({ success: true });
+    }
+  );
+});
+
+// ── Check follow status ──
 app.get('/check-follow/:userId', (req, res) => {
   const loggedInUserId = req.session.user?.id;
   const targetUserId = req.params.userId;
-
-  if (!loggedInUserId) {
-      return res.status(401).json({ error: 'Not authenticated' });
-  }
-
+  if (!loggedInUserId) return res.status(401).json({ error: 'Not authenticated' });
   if (parseInt(loggedInUserId) === parseInt(targetUserId)) {
-      // A user cannot follow themselves, so this check should return false for self-profile
-      return res.json({ success: true, isFollowing: false });
+    return res.json({ success: true, isFollowing: false });
   }
-
-  const sql = 'SELECT 1 FROM follows WHERE sender_id = ? AND receiver_id = ?';
-  db.query(sql, [loggedInUserId, targetUserId], (err, results) => {
-      if (err) {
-          console.error('Error checking follow status:', err);
-          return res.status(500).json({ error: 'Database error' });
-      }
-      // If results.length > 0, a record exists, meaning the user is following
-      const isFollowing = results.length > 0;
-      res.json({ success: true, isFollowing });
-  });
-});
-
-// Add this new route to your backend file
-app.post('/notifications/mark-as-read', (req, res) => {
-    const userId = req.session.user?.id; // Get user ID from session
-
-    if (!userId) {
-        return res.status(401).json({ error: 'Not authenticated' });
+  db.query(
+    'SELECT 1 FROM follows WHERE sender_id = ? AND receiver_id = ?',
+    [loggedInUserId, targetUserId],
+    (err, results) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json({ success: true, isFollowing: results.length > 0 });
     }
-
-   
-    const updateSql = 'UPDATE notifications SET is_read = TRUE WHERE receiver_id = ? AND is_read = FALSE';
-    db.query(updateSql, [userId], (err, result) => {
-        if (err) {
-            console.error('Error marking notifications as read:', err);
-            return res.status(500).json({ error: 'Failed to mark notifications as read' });
-        }
-        console.log(`User ${userId} notifications marked as read. Affected rows: ${result.affectedRows}`);
-        res.status(200).json({ message: 'Notifications marked as read' });
-    });
-
+  );
 });
-
-app.get('/notifications/unread/count', (req, res) => {
-  const userId = req.session.user?.id;
-  if (!userId) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-
-  const sql = 'SELECT COUNT(*) AS unreadCount FROM notifications WHERE receiver_id = ? AND is_read = FALSE';
-
-  db.query(sql, [userId], (err, results) => {
-    if (err) {
-      console.error('Error fetching unread count:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json({ unreadCount: results[0].unreadCount });
-  });
-});
-
 
 app.get('/messages', (req, res) => {
     const { senderId, receiverId } = req.query;
@@ -735,159 +1100,227 @@ app.get('/messages', (req, res) => {
     });
   });
   
-  // --- Socket.IO Real-Time Communication ---
   io.on('connection', (socket) => {
     const userId = socket.handshake.query.userId;
-    console.log(`User connected with ID: ${userId}`);
-  
+
     if (userId) {
-      connectedUsers.set(userId, socket.id);
-      console.log(`User ${userId} assigned to socket ID: ${socket.id}`);
+        connectedUsers.set(userId, socket.id);
     }
-  
+
     db.query(
-      'INSERT INTO users_online (user_id, socket_id, is_online, last_seen) VALUES (?, ?, TRUE, NOW()) ON DUPLICATE KEY UPDATE socket_id = VALUES(socket_id), is_online = TRUE, last_seen = NOW()',
-      [userId, socket.id]
+        'INSERT INTO users_online (user_id, socket_id, is_online, last_seen) VALUES (?, ?, TRUE, NOW()) ON DUPLICATE KEY UPDATE socket_id = VALUES(socket_id), is_online = TRUE, last_seen = NOW()',
+        [userId, socket.id]
     );
-  
+
     io.emit('user_online', userId);
-  
-    // --- sendMessage with block check ---
+
+    socket.on('typing', ({ receiverId }) => {
+        const receiverSocketId = connectedUsers.get(String(receiverId));
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit('typing', { senderId: userId });
+        }
+    });
+
     socket.on('sendMessage', (data, callback) => {
-      const { senderId, receiverId, type, text, imageUri } = data;
-  
-      // 1️⃣ Check if either user blocked the other
-      const checkBlockSQL = `
-        SELECT 1 FROM blocked_users
-        WHERE (blocker_id = ? AND blocked_id = ?)
-           OR (blocker_id = ? AND blocked_id = ?)
-      `;
-      db.query(checkBlockSQL, [senderId, receiverId, receiverId, senderId], (err, results) => {
-        if (err) return callback({ error: 'Database error' });
-  
-        if (results.length > 0) {
-          return callback({ error: 'Cannot send message — user is blocked' });
-        }
-  
-        // 2️⃣ Save message to DB
-        const sql = 'INSERT INTO messages(sender_id, receiver_id, type, text, image_uri, is_read) VALUES (?, ?, ?, ?, ?, ?)';
-        db.query(sql, [senderId, receiverId, type, text, imageUri, false], (err, result) => {
-          if (err) {
-            console.error('Database error on message insertion:', err);
-            return callback({ error: 'Database error: Message could not be saved.' });
-          }
-  
-          if (callback) callback({ success: true, messageId: result.insertId });
-  
-          const newMessage = {
-            id: result.insertId.toString(),
-            senderId,
-            receiverId,
-            type,
-            text,
-            imageUri,
-            timestamp: new Date().toISOString(),
-            isRead: false,
-          };
-  
-          // Send to receiver if online
-          const receiverSocketId = connectedUsers.get(String(receiverId));
-          if (receiverSocketId) {
-            io.to(receiverSocketId).emit('newMessage', newMessage);
-          }
+        const { senderId, receiverId, type, text, imageUri, audioUri, replyToId } = data;
+
+        const checkBlockSQL = `
+            SELECT 1 FROM blocked_users
+            WHERE (blocker_id = ? AND blocked_id = ?)
+               OR (blocker_id = ? AND blocked_id = ?)
+        `;
+        db.query(checkBlockSQL, [senderId, receiverId, receiverId, senderId], (err, results) => {
+            if (err) return callback?.({ error: 'Database error' });
+            if (results.length > 0) return callback?.({ error: 'Cannot send message — user is blocked' });
+
+            const sql = `
+                INSERT INTO messages (sender_id, receiver_id, type, text, image_uri, audio_uri, reply_to_id, is_read)
+                VALUES (?, ?, ?, ?, ?, ?, ?, FALSE)
+            `;
+            db.query(sql, [senderId, receiverId, type, text || null, imageUri || null, audioUri || null, replyToId || null], (err, result) => {
+                if (err) {
+                    console.error('Message insert error:', err);
+                    return callback?.({ error: 'Message could not be saved.' });
+                }
+
+                const messageId = result.insertId.toString();
+                callback?.({ success: true, id: messageId });
+
+                const newMessage = {
+                    id: messageId,
+                    senderId,
+                    receiverId,
+                    type,
+                    text: text || null,
+                    imageUri: imageUri || null,
+                    audioUri: audioUri || null,
+                    replyToId: replyToId || null,
+                    timestamp: new Date().toISOString(),
+                    isRead: false,
+                };
+
+                const receiverSocketId = connectedUsers.get(String(receiverId));
+                if (receiverSocketId) {
+                    io.to(receiverSocketId).emit('newMessage', newMessage);
+                }
+            });
         });
-      });
     });
-  
-    // --- Block / Unblock events ---
+
     socket.on('blockUser', ({ blockedId }) => {
-      const sql = 'INSERT INTO blocked_users (blocker_id, blocked_id) VALUES (?, ?)';
-      db.query(sql, [userId, blockedId], (err) => {
-        if (!err) {
-          io.to(socket.id).emit('user_blocked', blockedId);
-          const blockedSocketId = connectedUsers.get(String(blockedId));
-          if (blockedSocketId) io.to(blockedSocketId).emit('blocked_by_user', userId);
-        }
-      });
+        const sql = 'INSERT IGNORE INTO blocked_users (blocker_id, blocked_id) VALUES (?, ?)';
+        db.query(sql, [userId, blockedId], (err) => {
+            if (!err) {
+                io.to(socket.id).emit('user_blocked', blockedId);
+                const blockedSocketId = connectedUsers.get(String(blockedId));
+                if (blockedSocketId) io.to(blockedSocketId).emit('blocked_by_user', userId);
+            }
+        });
     });
-  
+
     socket.on('unblockUser', ({ blockedId }) => {
-      const sql = 'DELETE FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?';
-      db.query(sql, [userId, blockedId], (err) => {
-        if (!err) {
-          io.to(socket.id).emit('user_unblocked', blockedId);
-          const unblockedSocketId = connectedUsers.get(String(blockedId));
-          if (unblockedSocketId) io.to(unblockedSocketId).emit('unblocked_by_user', userId);
-        }
-      });
+        const sql = 'DELETE FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?';
+        db.query(sql, [userId, blockedId], (err) => {
+            if (!err) {
+                io.to(socket.id).emit('user_unblocked', blockedId);
+                const unblockedSocketId = connectedUsers.get(String(blockedId));
+                if (unblockedSocketId) io.to(unblockedSocketId).emit('unblocked_by_user', userId);
+            }
+        });
     });
-  
-    // --- Disconnect ---
+
     socket.on('disconnect', () => {
-      db.query('UPDATE users_online SET is_online = FALSE, last_seen = NOW() WHERE socket_id = ?', [socket.id]);
-  
-      if (userId) {
-        connectedUsers.delete(userId);
-        console.log(`User disconnected: ${userId}`);
-      }
+        db.query('UPDATE users_online SET is_online = FALSE, last_seen = NOW() WHERE socket_id = ?', [socket.id]);
+        if (userId) connectedUsers.delete(userId);
     });
+})
+app.get('/messages', (req, res) => {
+  const { senderId, receiverId } = req.query;
+  if (!senderId || !receiverId) return res.status(400).json({ error: 'senderId and receiverId required' });
+
+  const sql = `
+      SELECT
+          id, sender_id, receiver_id, type, text,
+          image_uri, audio_uri, reply_to_id,
+          created_at AS timestamp, is_read
+      FROM messages
+      WHERE (sender_id = ? AND receiver_id = ?)
+         OR (sender_id = ? AND receiver_id = ?)
+      ORDER BY created_at ASC
+  `;
+  db.query(sql, [senderId, receiverId, receiverId, senderId], (err, results) => {
+      if (err) return res.status(500).json({ error: 'Failed to fetch messages' });
+      res.json(results);
   });
-  
-
-
-app.get('/conversations', (req, res) => {
-    const { userId } = req.query; // This is the ID of the user requesting their inbox
-
-    if (!userId) {
-        return res.status(400).json({ error: 'User ID is required.' });
-    }
-
-    const sql = `
-        SELECT
-            p.ID AS other_user_id,
-            p.FULLNAME AS other_user_name,
-            p.image AS other_user_image_uri,
-            last_message.text AS last_message_text,
-            last_message.created_at AS last_message_timestamp,
-            last_message.sender_id AS last_message_sender_id,
-            COALESCE(unread_counts.count, 0) AS unread_count -- This is the new part
-        FROM (
-            SELECT
-                IF(sender_id = ?, receiver_id, sender_id) AS other_person_id,
-                MAX(created_at) AS last_message_time
-            FROM messages
-            WHERE sender_id = ? OR receiver_id = ?
-            GROUP BY other_person_id
-        ) AS latest_messages_per_conversation
-        JOIN messages AS last_message ON (
-            (last_message.sender_id = ? AND last_message.receiver_id = latest_messages_per_conversation.other_person_id)
-            OR
-            (last_message.receiver_id = ? AND last_message.sender_id = latest_messages_per_conversation.other_person_id)
-        ) AND last_message.created_at = latest_messages_per_conversation.last_message_time
-        JOIN projecttables AS p ON latest_messages_per_conversation.other_person_id = p.ID
-        LEFT JOIN ( -- Join to get unread counts for each conversation
-            SELECT
-                sender_id AS other_person_id_for_unread,
-                COUNT(*) AS count
-            FROM messages
-            WHERE receiver_id = ? AND is_read = FALSE
-            GROUP BY sender_id
-        ) AS unread_counts ON unread_counts.other_person_id_for_unread = latest_messages_per_conversation.other_person_id
-        ORDER BY last_message_timestamp DESC;
-    `;
-
-    // Note: There are 6 parameters now due to the added LEFT JOIN subquery
-    const params = [userId, userId, userId, userId, userId, userId];
-
-    db.query(sql, params, (err, results) => {
-        if (err) {
-            console.error('Error fetching conversations:', err);
-            return res.status(500).json({ error: 'Failed to fetch conversations.' });
-        }
-        res.status(200).json(results);
-    });
 });
 
+
+app.delete('/messages/:id', (req, res) => {
+  const { id } = req.params;
+  db.query('DELETE FROM messages WHERE id = ?', [id], (err) => {
+      if (err) return res.status(500).json({ error: 'Failed to delete message' });
+      io.emit('message_deleted', String(id));
+      res.json({ success: true });
+  });
+});
+
+app.get('/conversations', (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'User ID is required.' });
+
+  const sql = `
+      SELECT
+          p.ID AS other_user_id,
+          p.FULLNAME AS other_user_name,
+          p.image AS other_user_image_uri,
+          last_message.text AS last_message_text,
+          last_message.type AS last_message_type,
+          last_message.created_at AS last_message_timestamp,
+          last_message.sender_id AS last_message_sender_id,
+          COALESCE(unread_counts.count, 0) AS unread_count
+      FROM (
+          SELECT
+              IF(sender_id = ?, receiver_id, sender_id) AS other_person_id,
+              MAX(created_at) AS last_message_time
+          FROM messages
+          WHERE sender_id = ? OR receiver_id = ?
+          GROUP BY other_person_id
+      ) AS latest
+      JOIN messages AS last_message ON (
+          (last_message.sender_id = ? AND last_message.receiver_id = latest.other_person_id)
+          OR
+          (last_message.receiver_id = ? AND last_message.sender_id = latest.other_person_id)
+      ) AND last_message.created_at = latest.last_message_time
+      JOIN projecttables AS p ON latest.other_person_id = p.ID
+      LEFT JOIN (
+          SELECT sender_id AS other_person_id_for_unread, COUNT(*) AS count
+          FROM messages
+          WHERE receiver_id = ? AND is_read = FALSE
+          GROUP BY sender_id
+      ) AS unread_counts ON unread_counts.other_person_id_for_unread = latest.other_person_id
+      ORDER BY last_message_timestamp DESC
+  `;
+
+  db.query(sql, [userId, userId, userId, userId, userId, userId], (err, results) => {
+      if (err) return res.status(500).json({ error: 'Failed to fetch conversations.' });
+      res.json(results);
+  });
+});
+
+
+app.get('/isBlocked/:userId', (req, res) => {
+  const myId = req.session.user?.id;
+  const { userId } = req.params;
+  if (!myId) return res.status(401).json({ error: 'Not logged in' });
+
+  const sql = `
+      SELECT 1 FROM blocked_users
+      WHERE (blocker_id = ? AND blocked_id = ?)
+         OR (blocker_id = ? AND blocked_id = ?)
+      LIMIT 1
+  `;
+  db.query(sql, [myId, userId, userId, myId], (err, results) => {
+      if (err) return res.status(500).json({ error: 'Failed to fetch status' });
+      res.json({ blocked: results.length > 0 });
+  });
+});
+
+
+app.post('/messages/mark-as-read', (req, res) => {
+  const { senderId, receiverId } = req.body;
+  if (!senderId || !receiverId) return res.status(400).json({ error: 'senderId and receiverId required' });
+
+  db.query(
+      'UPDATE messages SET is_read = TRUE WHERE receiver_id = ? AND sender_id = ? AND is_read = FALSE',
+      [receiverId, senderId],
+      (err) => {
+          if (err) return res.status(500).json({ error: 'Failed to mark messages as read.' });
+          db.query(
+              'SELECT COUNT(*) AS unreadCount FROM messages WHERE receiver_id = ? AND is_read = FALSE',
+              [receiverId],
+              (countErr, countResult) => {
+                  if (countErr) return res.status(500).json({ error: 'Failed to fetch unread count.' });
+                  res.json({ message: 'Messages marked as read', newUnreadCount: countResult[0].unreadCount });
+              }
+          );
+      }
+  );
+});
+
+
+app.get('/unread-messages-count', (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'User ID required' });
+
+  db.query(
+      'SELECT COUNT(*) AS count FROM messages WHERE receiver_id = ? AND is_read = FALSE',
+      [userId],
+      (err, results) => {
+          if (err) return res.status(500).json({ error: 'Failed to fetch unread count.' });
+          res.json({ count: results[0].count });
+      }
+  );
+});
 
   
 app.get('/following', (req, res) => {
@@ -1023,85 +1456,9 @@ app.get('/users/:userId/followers', (req, res) => {
       res.status(200).json(results);
     });
 });
-  // New API endpoint to mark messages in a specific conversation as read
-app.post('/messages/mark-as-read', (req, res) => {
-    const { senderId, receiverId } = req.body; // senderId here is the person the logged-in user is chatting WITH
   
-    if (!senderId || !receiverId) {
-      return res.status(400).json({ error: 'Sender ID and Receiver ID are required.' });
-    }
-  
-    // Update messages where the logged-in user is the receiver and messages are from the specific sender
-    const updateSql = `
-      UPDATE messages
-      SET is_read = TRUE
-      WHERE receiver_id = ? AND sender_id = ? AND is_read = FALSE;
-    `;
-  
-    db.query(updateSql, [receiverId, senderId], (err, updateResult) => {
-      if (err) {
-        console.error('Error marking messages as read:', err);
-        return res.status(500).json({ error: 'Failed to mark messages as read.' });
-      }
-      console.log(`Marked ${updateResult.affectedRows} messages as read for receiver ${receiverId} from sender ${senderId}.`);
-  
-      // After updating, fetch the *total* unread count for the receiver
-      const countSql = `
-        SELECT COUNT(*) AS unreadCount
-        FROM messages
-        WHERE receiver_id = ? AND is_read = FALSE;
-      `;
-      db.query(countSql, [receiverId], (countErr, countResult) => {
-        if (countErr) {
-          console.error('Error fetching new unread count:', countErr);
-          return res.status(500).json({ error: 'Failed to fetch new unread count.' });
-        }
-  
-        const newUnreadCount = countResult[0].unreadCount;
-        res.status(200).json({ message: 'Messages marked as read', newUnreadCount });
-      });
-    });
-  });
-  
-  // New API endpoint to get the initial total unread count for a user
-  app.get('/unread-messages-count', (req, res) => {
-    const { userId } = req.query;
-  
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required.' });
-    }
-  
-    const sql = `
-      SELECT COUNT(*) AS count
-      FROM messages
-      WHERE receiver_id = ? AND is_read = FALSE;
-    `;
-  
-    db.query(sql, [userId], (err, results) => {
-      if (err) {
-        console.error('Error fetching unread messages count:', err);
-        return res.status(500).json({ error: 'Failed to fetch unread messages count.' });
-      }
-      res.status(200).json({ count: results[0].count });
-    });
-  });
 
-  app.delete('/messages/:id', async (req, res) => {
-    const { id } = req.params;
-    const sqlvalue = 'DELETE FROM messages WHERE id = ?';
   
-    db.query(sqlvalue, [id], (err) => {
-      if (err) {
-        console.error('Error deleting message:', err);
-        return res.status(500).json({ error: 'Failed to delete message' });
-      }
-  
-      // ✅ Only emit after a successful delete
-      io.emit('message_deleted', id);
-  
-      res.json({ success: true });
-    });
-  });
   
   // Block a user
 app.post('/block/:blockedId', (req, res) => {
@@ -1121,22 +1478,7 @@ app.post('/block/:blockedId', (req, res) => {
       res.json({ success: true });
     });
   });
-  app.get('/isBlocked/:userId', (req, res) => {
-    const myId = req.session.user?.id;
-    const userId = req.params.userId;
-    if (!myId) return res.status(401).json({ error: 'Not logged in' });
-  
-    const sql = `
-      SELECT * FROM blocked_users 
-      WHERE (blocker_id = ? AND blocked_id = ?) 
-         OR (blocker_id = ? AND blocked_id = ?) 
-      LIMIT 1
-    `;
-    db.query(sql, [myId, userId, userId, myId], (err, results) => {
-      if (err) return res.status(500).json({ error: 'Failed to fetch status' });
-      res.json({ blocked: results.length > 0 });
-    });
-  });
+ 
   
   
   // Unblock a user
@@ -1155,651 +1497,312 @@ app.post('/block/:blockedId', (req, res) => {
       res.json({ success: true });
     });
   });
-  app.post('/Createmeet', (req, res) => {
-    const host_id = req.session.user?.id;
-    const {
-      title,
-      vibe,
-      location,
-      size,
-      description,
-      selectedYear,
-      selectedMonth,
-      selectedDay,
-      selectedHour,
-      selectedMinute,
-      meetupcodeval,
-    } = req.body;
-  
-    const isaccepted = 0;
-  
-    const sql = `
-      INSERT INTO meetups (
-        host_id, title, vibe, location, size, description, isaccepted,
-        year, month, day, hour, minute,roomvalue
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)
-    `;
-  
-    db.query(
-      sql,
-      [
-        host_id,
-        title,
-        vibe,
-        location,
-        size,
-        description,
-        isaccepted,
-        selectedYear,
-        selectedMonth,
-        selectedDay,
-        selectedHour,
-        selectedMinute,
-        meetupcodeval,
-      ],
-      (err, result) => {
-        if (err) {
-          console.error('Error inserting meetup:', err);
-          return res.status(500).json({ error: 'Database error', details: err });
-        }
-        res
-          .status(201)
-          .json({ message: 'Meetup created successfully', id: result.insertId });
-      }
-    );
-  });
-  
-  app.get('/Createmeet', (req, res) => {
-    const sql = 'SELECT * FROM meetups ORDER BY created_at DESC';
-  
-    db.query(sql, (err, results) => {
-      if (err) {
-        console.error('Error fetching meetups:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      res.json(results); // send all meetups as JSON
-    });
-  });
-  app.get('/meetupusers',(req,res)=>{
-    const sql='SELECT * FROM meetup_participants ';
-    db.query(sql, (err, results) => {
-      if (err) {
-        console.error('Error fetching meetups users:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      res.json(results); // send all meetups as JSON
-    });
-  })
-  app.post('/joinRequest', (req, res) => {
-    const senderId = req.session.user?.id;
-    const { meetupId } = req.body;
-  
-    if (!senderId) return res.status(401).json({ error: 'Not logged in' });
-    if (!meetupId) return res.status(400).json({ error: 'meetupId required' });
-  
-    // Step 1: get sender info,
-    const userSql = 'SELECT image, FULLNAME FROM projecttables WHERE ID=?';
-    db.query(userSql, [senderId], (err, results) => {
-      if (err) return res.status(500).json({ error: 'DB error' });
-      if (results.length === 0) return res.status(404).json({ error: 'User not found' });
-  
-      const senderName = results[0].FULLNAME;
-      const senderImage = results[0].image;
-  
-      // Step 2: get meetup host
-      db.query('SELECT host_id, title FROM meetups WHERE id = ?', [meetupId], (err2, rows) => {
-        if (err2) return res.status(500).json({ error: 'DB error' });
-        if (rows.length === 0) return res.status(404).json({ error: 'Meetup not found' });
-  
-        const hostId = rows[0].host_id;
-  
-        // Step 3: prevent duplicate requests
-        db.query('SELECT id FROM join_requests WHERE meetup_id = ? AND sender_id = ?', [meetupId, senderId], (err3, exists) => {
-          if (err3) return res.status(500).json({ error: 'DB error' });
-          if (exists.length) return res.status(409).json({ error: 'Already requested' });
-  
-          // Step 4: insert join request
-          db.query('INSERT INTO join_requests (meetup_id, sender_id) VALUES (?, ?)', [meetupId, senderId], (err4, result) => {
-            if (err4) return res.status(500).json({ error: 'Failed to create request' });
-  
-            const message = `${senderName} wants to join your meetup "${rows[0].title}"`;
-  
-            // Step 5: insert notification
-            db.query(
-              'INSERT INTO notifications (sender_id, receiver_id, message, type) VALUES (?, ?, ?, ?)',
-              [senderId, hostId, message, 'JoinRoom'],
-              (notifErr) => {
-                if (notifErr) console.error('Notification insert failed:', notifErr);
-  
-                // Respond with useful info
-                res.json({
-                  success: true,
-                  message: 'Join request sent successfully',
-                  notification: {
-                    sender_id: senderId,
-                    receiver_id: hostId,
-                    sender_name: senderName,
-                    sender_image: senderImage,
-                    text: message,
-                    type: 'JoinRoom'
-                  }
-                });
-
-                const Sendnotifi = connectedUsers.get(String(hostId));
-if (Sendnotifi) {
-  io.to(Sendnotifi).emit("newNotification", {
-    text: message,
-    sender_id: senderId,
-    meetup_id: meetupId
-  });
-}
-
-              }
-            );
-          });
-        });
-      });
-    });
-  });
-  
-  
-  
-
-
-  app.post('/acceptJoinRequest', (req, res) => {
-
-    const hostId = req.session.user?.id;
-    const { requestId } = req.body;
-  
-    if (!hostId) return res.status(401).json({ error: 'Not logged in' });
-    if (!requestId) return res.status(400).json({ error: 'requestId required' });
-  
-    // Ensure request exists and that the logged-in user is the meetup host
-    const getSql = `
-      SELECT jr.id, jr.meetup_id, jr.sender_id, m.host_id
-      FROM join_requests jr
-      JOIN meetups m ON m.id = jr.meetup_id
-      WHERE jr.sender_id = ?
-    `;
-    db.query(getSql, [requestId], (err, rows) => {
-      if (err) return res.status(500).json({ error: 'DB error' });
-      if (rows.length === 0) return res.status(404).json({ error: 'Request not found' });
-  
-      const row = rows[0];
-      if (row.host_id !== hostId) return res.status(403).json({ error: 'Not authorized' });
-  
-      // update request status
-      db.query('UPDATE join_requests SET status = ?, responded_at = NOW() WHERE id = ?', ['accepted', row.id], (err2) => {
-        if (err2) return res.status(500).json({ error: 'Failed to update request' });
-  
-        // optionally add to participants
-        db.query('INSERT IGNORE INTO meetup_participants (meetup_id, user_id) VALUES (?, ?)', [row.meetup_id, row.sender_id], (err3) => {
-          if (err3) console.error('Failed to add participant:', err3);
-  
-          // notify the requester their request was accepted
-          const notifMsg = `Your request to join meetup "${row.meetup_id}" was accepted`;
-          db.query('INSERT INTO notifications (sender_id, receiver_id, message, type) VALUES (?, ?, ?, ?)', [hostId, row.sender_id, notifMsg, 'JoinAccepted'], (notifErr) => {
-            // ignore notifErr or handle
-            res.json({ success: true, message: 'Request accepted' });
-            const acceptvalue=connectedUsers.get(String(requestId))
-            if(acceptvalue){
-              io.to(acceptvalue).emit("newNotification", {
-                text: notifMsg,
-                sender_id: requestId,
-                meetup_id: hostId
-              });
-            }
-          });
-        });
-      });
-    });
-  });
-  
-  app.get('/accepted', (req, res) => {
-    const { meetupId } = req.query;
-    const userId = req.session.user?.id;
-  
-    if (!userId) return res.status(401).json({ error: 'Not logged in' });
-    if (!meetupId) return res.status(400).json({ error: 'meetupId required' });
-  
-    const sql = `
-      SELECT status 
-      FROM join_requests 
-      WHERE sender_id=? AND meetup_id=? 
-      ORDER BY responded_at DESC 
-      LIMIT 1
-    `;
-    db.query(sql, [userId, meetupId], (err, results) => {
-      if (err) return res.status(500).json({ error: 'An error occurred with the database' });
-      if (results.length === 0) return res.status(404).json({ error: 'No request found' });
-  
-      res.json(results[0]); // returns { status: "accepted" }
-    });
-  });
-  
-
  
-  app.get('/meetupsmembers', (req, res) => {
-    const { meetupid } = req.query;
   
-    const sqlmeet = `
-    SELECT 
-    m.id AS meetupid,
-    m.title AS meetuptitle,
-    hostuser.FULLNAME AS meetupname,
-hostuser.image AS meetupimage,
-    JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'senduserid', senduser.ID,
-        'sendusername', senduser.FULLNAME,
-        'senduserimage', senduser.image
-      )
-    ) AS attendees
-FROM meetups m
-JOIN projecttables hostuser ON m.host_id = hostuser.ID
-LEFT JOIN meetup_participants mu ON mu.meetup_id = m.id
-LEFT JOIN projecttables senduser ON mu.user_id = senduser.ID
-WHERE m.id = ?
-GROUP BY m.id, m.title, hostuser.FULLNAME, hostuser.image;
 
-    `;
-  
-    db.query(sqlmeet, [meetupid], (err, results) => {
-      if (err) {
-        return res.status(500).json({ error: `A database error occurred ${err}` });
-      }
-      res.json({ results });
-    });
-  });
-  
-app.get('/meetupchat',(req,res)=>{
-  const {meetupId}=req.query;
-  const sql='SELECT * FROM meetups WHERE id=?'
-   db.query(sql,[meetupId],(err,result)=>{
-    if(err){
-      console.error(err)
-      res.status(500).json({Error:'An error occured'})
-    }
-    if(result.length===0){
-      return res.status(400).json({message:'No meetups found'})
-    }
-    res.json(result[0]);
-   })
-})
-app.get('/searchmeetupusers', (req, res) => {
-  const { searchkey } = req.query;
-  if (!searchkey || searchkey.trim() === '') {
-    return res.json([]); // return empty array, not all meetups
-  }
 
-  const searchquery = `%${searchkey}%`;
-  const sql = 'SELECT * FROM meetups WHERE title LIKE ? ORDER BY created_at DESC LIMIT 5';
+//     app.post('/api/submit-answers', (req, res) => {
+//     // Extract the userId and answers object from the request body.
+//     const { userId, answers } = req.body;
 
-  db.query(sql, [searchquery], (err, result) => {
-    if (err) {
-      return res.status(500).json({ error: `An error occurred: ${err.message}` });
-    }
-    res.json(result);
-  });
-});
+//     if (!userId || !answers || Object.keys(answers).length === 0) {
+//         return res.status(400).json({ error: 'Invalid data provided.' });
+//     }
 
-    app.post('/api/submit-answers', (req, res) => {
-    // Extract the userId and answers object from the request body.
-    const { userId, answers } = req.body;
-
-    if (!userId || !answers || Object.keys(answers).length === 0) {
-        return res.status(400).json({ error: 'Invalid data provided.' });
-    }
-
-    // Step 1: Delete all previous answers for this user
-    const deleteSql = `
-        DELETE FROM user_answers
-        WHERE user_id = ?
-    `;
+//     // Step 1: Delete all previous answers for this user
+//     const deleteSql = `
+//         DELETE FROM user_answers
+//         WHERE user_id = ?
+//     `;
     
-    db.query(deleteSql, [userId], (err, result) => {
-        if (err) {
-            console.error('Error deleting old answers:', err);
-            return res.status(500).json({ error: 'Database error on delete' });
-        }
+//     db.query(deleteSql, [userId], (err, result) => {
+//         if (err) {
+//             console.error('Error deleting old answers:', err);
+//             return res.status(500).json({ error: 'Database error on delete' });
+//         }
 
-        // Step 2: Prepare a multi-row INSERT query for all new answers
-        // We'll dynamically build the query and the values array.
-        const values = [];
-        const placeholders = [];
+//         // Step 2: Prepare a multi-row INSERT query for all new answers
+//         // We'll dynamically build the query and the values array.
+//         const values = [];
+//         const placeholders = [];
 
-        for (const questionId in answers) {
-            const answer = answers[questionId];
-            if (answer) {
-                // Add values for each row: [userId, questionId, answer]
-                values.push(userId, parseInt(questionId), answer);
-                // Create a placeholder string for each row: (?, ?, ?)
-                placeholders.push('(?, ?, ?)');
-            }
-        }
+//         for (const questionId in answers) {
+//             const answer = answers[questionId];
+//             if (answer) {
+//                 // Add values for each row: [userId, questionId, answer]
+//                 values.push(userId, parseInt(questionId), answer);
+//                 // Create a placeholder string for each row: (?, ?, ?)
+//                 placeholders.push('(?, ?, ?)');
+//             }
+//         }
         
-        // Join the placeholders to create the final SQL string.
-        const insertSql = `
-            INSERT INTO user_answers (user_id, question_id, answer)
-            VALUES ${placeholders.join(', ')}
-        `;
+//         // Join the placeholders to create the final SQL string.
+//         const insertSql = `
+//             INSERT INTO user_answers (user_id, question_id, answer)
+//             VALUES ${placeholders.join(', ')}
+//         `;
 
-        // Execute the multi-row insert query
-        db.query(insertSql, values, (err, result) => {
-            if (err) {
-                console.error('Error inserting new answers:', err);
-                return res.status(500).json({ error: 'Database error on insert' });
-            }
+//         // Execute the multi-row insert query
+//         db.query(insertSql, values, (err, result) => {
+//             if (err) {
+//                 console.error('Error inserting new answers:', err);
+//                 return res.status(500).json({ error: 'Database error on insert' });
+//             }
             
-            res.status(201).json({ 
-                message: 'Answers submitted successfully!', 
-                affectedRows: result.affectedRows 
-            });
-        });
-    });
-});
-app.get('/api/matches',(req,res)=>{
-  const {userId}=req.query;
-  const sql = `
-  WITH shared_all AS (
-    SELECT
-      a1.user_id AS base_user,
-      a2.user_id AS other_user,
-      a1.question_id
-      from user_answers a1
-    JOIN user_answers a2
-      ON a1.question_id = a2.question_id
-     AND a1.answer = a2.answer
-     AND a1.user_id <> a2.user_id
-     LEFT JOIN skipped_users su ON
-     su.skipper_id=a1.user_id AND
-     su.skipped_id=a2.user_id
-    WHERE a1.user_id = ? and su.id is null
-  ),
+//             res.status(201).json({ 
+//                 message: 'Answers submitted successfully!', 
+//                 affectedRows: result.affectedRows 
+//             });
+//         });
+//     });
+// });
+// app.get('/api/matches',(req,res)=>{
+//   const {userId}=req.query;
+//   const sql = `
+//   WITH shared_all AS (
+//     SELECT
+//       a1.user_id AS base_user,
+//       a2.user_id AS other_user,
+//       a1.question_id
+//       from user_answers a1
+//     JOIN user_answers a2
+//       ON a1.question_id = a2.question_id
+//      AND a1.answer = a2.answer
+//      AND a1.user_id <> a2.user_id
+//      LEFT JOIN skipped_users su ON
+//      su.skipper_id=a1.user_id AND
+//      su.skipped_id=a2.user_id
+//     WHERE a1.user_id = ? and su.id is null
+//   ),
   
-  similarity AS (
-    SELECT
-      other_user,
-      COUNT(*) / 20 * 100 AS similarity_percent
-    FROM shared_all 
-    GROUP BY other_user
-  ),
+//   similarity AS (
+//     SELECT
+//       other_user,
+//       COUNT(*) / 20 * 100 AS similarity_percent
+//     FROM shared_all 
+//     GROUP BY other_user
+//   ),
   
-  shared_first_10 AS (
-    SELECT
-      a2.user_id AS other_user,
-      a1.answer,
-      ROW_NUMBER() OVER (
-        PARTITION BY a2.user_id
-        ORDER BY rand()
-      ) AS rn
-    FROM user_answers a1
-    JOIN user_answers a2
-      ON a1.question_id = a2.question_id
-     AND a1.answer = a2.answer
-     AND a1.user_id <> a2.user_id
-    WHERE a1.user_id = ?
-      AND a1.question_id <= 10
-  ),
+//   shared_first_10 AS (
+//     SELECT
+//       a2.user_id AS other_user,
+//       a1.answer,
+//       ROW_NUMBER() OVER (
+//         PARTITION BY a2.user_id
+//         ORDER BY rand()
+//       ) AS rn
+//     FROM user_answers a1
+//     JOIN user_answers a2
+//       ON a1.question_id = a2.question_id
+//      AND a1.answer = a2.answer
+//      AND a1.user_id <> a2.user_id
+//     WHERE a1.user_id = ?
+//       AND a1.question_id <= 10
+//   ),
   
-  picked_two AS (
-    SELECT *
-    FROM shared_first_10
-    WHERE rn <= 4
-  )
+//   picked_two AS (
+//     SELECT *
+//     FROM shared_first_10
+//     WHERE rn <= 4
+//   )
   
-  SELECT
-    s.other_user,
-    s.similarity_percent,
-    c.FULLNAME as thename,
-      c.image as theimage,
-    MAX(CASE WHEN p.rn = 1 THEN p.answer END) AS shared_answer_1,
-    MAX(CASE WHEN p.rn = 2 THEN p.answer END) AS shared_answer_2,
-    MAX(CASE WHEN p.rn = 3 THEN p.answer END) AS shared_answer_3,
-    MAX(CASE WHEN p.rn = 4 THEN p.answer END) AS shared_answer_4
-  FROM similarity s 
-  LEFT JOIN projecttables c ON s.other_user=c.ID
-  LEFT JOIN picked_two p
-    ON s.other_user = p.other_user
-  GROUP BY
-    s.other_user,
-    s.similarity_percent
-  ORDER BY s.similarity_percent DESC
-  LIMIT 100;
+//   SELECT
+//     s.other_user,
+//     s.similarity_percent,
+//     c.FULLNAME as thename,
+//       c.image as theimage,
+//     MAX(CASE WHEN p.rn = 1 THEN p.answer END) AS shared_answer_1,
+//     MAX(CASE WHEN p.rn = 2 THEN p.answer END) AS shared_answer_2,
+//     MAX(CASE WHEN p.rn = 3 THEN p.answer END) AS shared_answer_3,
+//     MAX(CASE WHEN p.rn = 4 THEN p.answer END) AS shared_answer_4
+//   FROM similarity s 
+//   LEFT JOIN projecttables c ON s.other_user=c.ID
+//   LEFT JOIN picked_two p
+//     ON s.other_user = p.other_user
+//   GROUP BY
+//     s.other_user,
+//     s.similarity_percent
+//   ORDER BY s.similarity_percent DESC
+//   LIMIT 100;
   
-    `;
-    db.query(sql,[userId,userId],(err,result)=>{
-      if(err){
-        res.status(500).json({error:'An error occured'})
-      }
-      res.json(result)
-    })
-})
+//     `;
+//     db.query(sql,[userId,userId],(err,result)=>{
+//       if(err){
+//         res.status(500).json({error:'An error occured'})
+//       }
+//       res.json(result)
+//     })
+// })
 
 
-app.post('/postscorevalue', (req, res) => {
-  const { username, score } = req.body;
 
-  const findUserSql = 'SELECT ID FROM projecttables WHERE USERNAME = ?';
-  db.query(findUserSql, [username], (err, userResult) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    if (userResult.length === 0) return res.status(404).json({ error: 'User not found' });
-
-    const userId = userResult[0].ID;
-
-    const upsertScoreSql = `
-      INSERT INTO user_scores (user_id, score) 
-      VALUES (?, ?)
-      ON DUPLICATE KEY UPDATE score = VALUES(score)
-    `;
-
-    db.query(upsertScoreSql, [userId, score], (upsertErr) => {
-      if (upsertErr) return res.status(500).json({ error: 'Database error' });
-
-      // ✅ after saving, fetch updated leaderboard
-      const sql = `
-        SELECT 
-            p.USERNAME AS name, 
-            s.score 
-        FROM 
-            user_scores s
-        JOIN 
-            projecttables p ON s.user_id = p.ID
-        ORDER BY 
-            s.score DESC
-      `;
-
-      db.query(sql, (err, results) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-
-        // ✅ broadcast leaderboard to all sockets
-        io.emit("leaderboardUpdate", results);
-
-        res.status(200).json({ message: 'Score posted successfully' });
-      });
-    });
-  });
-});
  
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
-
-  // send initial leaderboard when a client connects
-  const sql = `
-    SELECT 
-        p.USERNAME AS name, 
-        s.score 
-    FROM 
-        user_scores s
-    JOIN 
-        projecttables p ON s.user_id = p.ID
-    ORDER BY 
-        s.score DESC
-  `;
-  db.query(sql, (err, results) => {
-    if (!err) {
-      socket.emit("leaderboardUpdate", results);
-    }
-  });
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-  });
-});
 
 
 app.post('/newAnonroom', (req, res) => {
-  const { roomName, tags, duration, selectedHour,selectedMinute, roomRandomCode } = req.body;
-  
-  // The VALUES list should match the number of placeholders
-  const inputSql = 'INSERT INTO newAnongroup(roomName, tags, roomRandomCode, hour, minute) VALUES(?, ?, ?, ?, ?)';
+  const {
+    roomName, tags, selectedHour, selectedMinute,
+    roomRandomCode, starthours, startminutes,
+  } = req.body;
 
-  // The array of values should match the placeholders
-  db.query(inputSql, [roomName, tags, roomRandomCode,selectedHour,selectedMinute,], (error, value) => {
-    if (error) {
-      console.error('Error upserting score:', error);
+  const starttime = new Date();
+  starttime.setHours(starttime.getHours() + (Number(starthours) || 0));
+  starttime.setMinutes(starttime.getMinutes() + (Number(startminutes) || 0));
+
+  const endtime = new Date(starttime); 
+  endtime.setHours(endtime.getHours() + (Number(selectedHour) || 0));
+  endtime.setMinutes(endtime.getMinutes() + (Number(selectedMinute) || 0));
+
+  const sql = `
+    INSERT INTO newAnongroup(roomName, tags, roomRandomCode, hour, minute, starttime, stoptime, status)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  db.query(sql, [roomName, tags, roomRandomCode, selectedHour, selectedMinute, starttime, endtime, 'waiting'], (err) => {
+    if (err) {
+      console.error('Insert error:', err);
       return res.status(500).json({ error: 'Database error' });
     }
-    console.log(value);
-    // You should send the roomRandomCode back to the client here
     res.status(200).json({ message: 'Room created', roomCode: roomRandomCode });
   });
 });
-app.get('/getanonroom/:roomcode',(req,res)=>{
-  const sql='SELECT id ,roomName,roomRandomCode , duration  FROM newAnongroup WHERE roomRandomCode=?  ';
-db.query(sql,[req.params.roomcode],(err,result)=>{
-  if(err){
-    console.log(`${err} Detected`);
-  }
-  if(result.length===0){
-    return res.status(404).json({
-      error:'Room not found '
-    })
-  }
-  res.json(result[0]);
-})
-})
+app.get('/getanonroom/:roomcode', (req, res) => {
+  db.query(
+    'SELECT * FROM newAnongroup WHERE roomRandomCode = ?',
+    [req.params.roomcode],
+    (err, result) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (result.length === 0) return res.status(404).json({ error: 'Room not found' });
+      res.json(result[0]);
+    }
+  );
+});
+app.post('/deleteanonroom', (req, res) => {
+  const { roomName, roomCode } = req.body;
+
+  db.query(
+    'DELETE FROM newanongroup WHERE roomName = ? AND roomRandomCode = ?',
+    [roomName, roomCode],
+    (err) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+
+      db.query('DELETE FROM anontemp WHERE roomcode = ?', [roomCode], (err) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        res.status(200).json({ success: true });
+      });
+    }
+  );
+});
 
 
 io.on('connection', (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
-
-  // This listener for a socket's disconnection MUST be inside the connection block.
-  socket.on('disconnecting', () => {
-    socket.rooms.forEach(roomCode => {
-      if (roomCode !== socket.id) {
-        if (activeAnonymousRooms.has(roomCode)) {
-          activeAnonymousRooms.get(roomCode).members.delete(socket.id);
-          io.to(roomCode).emit('userLeft', `${socket.id} has left the chat.`);
-          if (activeAnonymousRooms.get(roomCode).members.size === 0) {
-            activeAnonymousRooms.delete(roomCode);
-            console.log(`Room ${roomCode} is now empty and has been deleted.`);
-          }
-        }
-      }
-    });
-    console.log(`Socket disconnected: ${socket.id}`);
-  });
   
+  socket.on('Addasmember', (data) => {
+    const { usersid, generatedCode } = data;
+
+    db.query(
+      'INSERT IGNORE INTO anontemp (userid, roomcode) VALUES (?, ?)',
+      [usersid, generatedCode],
+      (err) => {
+        if (err) {
+          console.error('Addasmember error:', err);
+          socket.emit('Error', 'Failed to subscribe to room');
+          return;
+        }
+        console.log(`User ${usersid} subscribed to room ${generatedCode}`);
+ 
+      }
+    );
+  });
+
+  // ── Anon room join ──
   socket.on('joinRoom', (roomCode) => {
     if (!activeAnonymousRooms.has(roomCode)) {
-      activeAnonymousRooms.set(roomCode, {
-        members: new Set()
-      });
-      console.log(`Created new room: ${roomCode}`); // Corrected variable
+      activeAnonymousRooms.set(roomCode, { members: new Set() });
     }
-
     socket.join(roomCode);
-    activeAnonymousRooms.get(roomCode).members.add(socket.id); // Corrected variable
-    console.log(`User ${socket.id} joined room: ${roomCode}`);
-
-    io.to(roomCode).emit('userJoined', `${socket.id} has joined the chat.`);
+    activeAnonymousRooms.get(roomCode).members.add(socket.id);
+    io.to(roomCode).emit('userJoined', socket.id);
   });
 
+  // ── Send message ──
   socket.on('sendMessages', (data) => {
     const { roomCode, text, senderId } = data;
-    // console.log(`Message received for room ${roomCode}: ${text}`);
-
-    if (activeAnonymousRooms.has(roomCode)) {
-      io.to(roomCode).emit('newMessages', {
-        id: Date.now().toString(),
-        text: text,
-        senderId: senderId,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  });
-  
-  
-});
-
-io.on("connection", (socket) => {
-  // console.log(`User connected: ${socket.id}`);
-
-  // 🟢 Join a meetup room
-  socket.on("JoinMeet", (roomPass) => {
-    if (!MeetupRoomUsers.has(roomPass)) {
-      MeetupRoomUsers.set(roomPass, { members: new Set() });
-    }
-
-    socket.join(roomPass);
-    MeetupRoomUsers.get(roomPass).members.add(socket.id);
-
-    io.to(roomPass).emit("UserIn", `${socket.id} has joined the chat.`);
-    // console.log(`${socket.id} joined room ${roomPass}`);
-  });
-
-  // 💬 Receive and broadcast messages
-  socket.on("Getmessage", (data) => {
-    const { id, senderId, sendername,type, text, roomPass , timeStamp} = data;
-    
-    if (!roomPass || !MeetupRoomUsers.has(roomPass)) return;
-
-    const message = {
-      id,
-      senderId,
-      sendername,
-      type,
+    if (!activeAnonymousRooms.has(roomCode)) return;
+    io.to(roomCode).emit('newMessages', {
+      id: Date.now().toString(),
       text,
-      roomPass,
-      timeStamp,
-    };
-    const sql='INSERT INTO meetupmessages(senderid,sendername,typeofmessage,textmessage,roompass,timevalue) VALUES(?,?,?,?,?,?)'
-    db.query(sql, [senderId, sendername, type, text, roomPass, timeStamp], (err, results) => {
-      if (err) {
-        console.error("❌ Database insert error:", err);
-      return;
-      } 
-      const idvalue=results.insertId;
-      const updatedmessage={
-        id:idvalue,...message
-      }
-      io.to(roomPass).emit("NewMessage", updatedmessage);
+      senderId,
+      timestamp: new Date().toISOString(),
     });
-   
-    // Broadcast to everyone in that room
-    
-    // console.log(`Message from ${senderId} in ${roomPass}: ${text}`);
   });
 
-  // 🔴 Handle disconnect
-  socket.on("disconnect", () => {
-    for (const [roomPass, room] of MeetupRoomUsers.entries()) {
-      if (room.members.has(socket.id)) {
-        room.members.delete(socket.id);
-        io.to(roomPass).emit("userLeft", `${socket.id} has left the chat.`);
-
-        if (room.members.size === 0) {
-          MeetupRoomUsers.delete(roomPass);
-          // console.log(`Room ${roomPass} deleted (empty).`);
+  // ── Disconnecting ──
+  socket.on('disconnecting', () => {
+    socket.rooms.forEach(roomCode => {
+      if (roomCode !== socket.id && activeAnonymousRooms.has(roomCode)) {
+        activeAnonymousRooms.get(roomCode).members.delete(socket.id);
+        io.to(roomCode).emit('userLeft', socket.id);
+        if (activeAnonymousRooms.get(roomCode).members.size === 0) {
+          activeAnonymousRooms.delete(roomCode);
         }
       }
-    }
-    console.log(`Socket disconnected: ${socket.id}`);
+    });
   });
+
 });
 
+ 
+// cron.schedule('*/5 * * * *', async () => {
+//   const userId=req.session.user.id
+//   try {
+//     const usersocket=connectedUsers.get(String(userId))
+//     const [rows] = await db.promise().query(`
+//       SELECT 
+//         k.userid,
+//         k.roomcode,
+//         a.roomName
+//       FROM anontemp k
+//       JOIN newanongroup a ON k.roomcode = a.roomRandomCode
+//       WHERE a.starttime <= NOW() + INTERVAL 30 MINUTE
+//         AND a.starttime >= NOW()
+//         AND a.status = 'waiting'
+//     `);
+
+//     if (rows.length === 0) return;
+
+//     for (const row of rows) {
+//       // Insert notification
+//       await db.promise().query(`
+//         INSERT INTO notifications (sender_id, receiver_id, message, type, is_read)
+//         VALUES (?, ?, ?, ?, ?)
+//       `, [null, row.userid, `Your anonymous room "${row.roomName}" starts in 30 minutes`, 'anon', 0]);
+
+
+
+//       // Emit real-time notification if user is online
+//       io.to(usersocket).emit('newNotification', {
+//         message: `Your anonymous room "${row.roomName}" starts in 30 minutes`,
+//         type: 'anon',
+//       });
+//     }
+
+    
+//     const roomCodes = [...new Set(rows.map(r => r.roomcode))];
+//     if (roomCodes.length > 0) {
+//       const placeholders = roomCodes.map(() => '?').join(',');
+//       await db.promise().query(
+//         `UPDATE newanongroup SET status = 'sent' WHERE roomRandomCode IN (${placeholders})`,
+//         roomCodes
+//       );
+//     }
+
+//     console.log(`Cron: notified ${rows.length} subscribers`);
+//   } catch (err) {
+//     // BUG FIX: never throw from cron — log and continue
+//     console.error('Cron error:', err.message);
+//   }
+// }, { timezone: 'Africa/Lagos' });
 app.post('/api/upload',
 upload.single('image'),(req,res)=>{
   if(!req.file){
@@ -1811,19 +1814,41 @@ upload.single('image'),(req,res)=>{
 }
 )
 
-app.get('/groupmessages',(req,res)=>{
-  const {roomvaue}=req.query;
-  const sql=`SELECT * FROM meetupmessages WHERE roompass=? ORDER BY ID ASC`;
-  db.query(sql,[roomvaue],(err,result)=>{
-if(err){
-  return res.status(500).json({error:'A database error occured'})
-}
-return res.json(result)
-  })
-})
+
 app.get('/pulsedata', (req, res) => {
-  const sql = 'SELECT * FROM campulsepulse'; // change 'id' as needed
-  db.query(sql, (err, result) => {
+  const {userid}=req.query
+  const sql = `SELECT cr.ID, cr.title, cr.author, cr.post, cr.image, cr.user, cr.posted_at,
+  IF(cl.userid IS NULL, 0, 1) AS pulselikestate,
+  COUNT(cl_all.pulseid) AS pulselikecount
+FROM campulsepulse cr
+LEFT JOIN campuslikes cl ON cl.pulseid = cr.ID AND cl.userid = ?
+LEFT JOIN campuslikes cl_all ON cl_all.pulseid = cr.ID
+GROUP BY cr.ID
+ORDER BY pulselikecount DESC
+LIMIT 15; `;
+  db.query(sql,[userid], (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: 'An error occurred' });
+    }
+    return res.json( result );
+  });
+});
+
+
+app.get('/olderstories', (req, res) => {
+  const {userid,lasttime}=req.query
+  const sql = `SELECT cr.ID, cr.title, cr.author, cr.post, cr.image, cr.user, cr.posted_at,
+  IF(cl.userid IS NULL, 0, 1) AS pulselikestate,
+  COUNT(cl_all.pulseid) AS pulselikecount
+FROM campulsepulse cr
+
+LEFT JOIN campuslikes cl ON cl.pulseid = cr.ID AND cl.userid = ?
+LEFT JOIN campuslikes cl_all ON cl_all.pulseid = cr.ID
+where cr.posted_at<?
+GROUP BY cr.ID
+ORDER BY pulselikecount DESC
+LIMIT 15; `;
+  db.query(sql,[userid,lasttime], (err, result) => {
     if (err) {
       return res.status(500).json({ error: 'An error occurred' });
     }
@@ -1854,47 +1879,7 @@ app.get('/getstoryuser', (req, res) => {
   });
 });
 
-io.on("connection", (socket) => {
-  // console.log("🟢 User connected:", socket.id);
 
-  // 🧠 Fetch all answers initially
-  db.query("SELECT * FROM questionanswers ORDER BY ID DESC", (err, results) => {
-    if (!err) {
-      socket.emit("Questionget", results); // send all existing answers to new client
-    }
-  });
-
-  // 📝 When a client posts a new answer
-  socket.on("SendAnswers", (data) => {
-    const { username, answer } = data;
-    if (!username || !answer) return;
-
-    // Insert into database
-    const sql = "INSERT INTO questionanswers (author, answer) VALUES (?, ?)";
-    db.query(sql, [username, answer], (err, result) => {
-      if (err) {
-        console.error("❌ Error inserting answer:", err);
-        return;
-      }
-
-      const newAnswer = {
-        ID: result.insertId,
-        author: username,
-        answer,
-      };
-
-      // console.log("✅ New answer saved:", newAnswer);
-
-      // 🟢 Emit to all connected clients
-      io.emit("Questionget", newAnswer);
-    });
-  });
-
-  // 🔴 When a client disconnects
-  socket.on("disconnect", () => {
-    // console.log("🔴 User disconnected:", socket.id);
-  });
-});
 
 app.post('/createinterestroom', (req, res) => {
   const { roomname, description,  roompasskey ,selectmode, selecttype,myUserId} = req.body;
@@ -2023,578 +2008,11 @@ return res.status(400).json({message:'No file uploaded'})
 })
 
 
-app.post('/postshowcases',(req,res)=>{
-  const {title,pickercategory,sendvideo,userId,describe}=req.body;
-  const sql='INSERT INTO showcases(sender_id,caption,video,showcase_category)VALUES(?,?,?,?)';
-  db.query(sql,[userId,describe,sendvideo,pickercategory],(err,result)=>{
-if(err){
- return res.status(500).json({error:`An error occured-${err.message}`})
-}
-res.status(200).json({success:true, message:'Posted Succesfully'})
-  })
-})
-app.get('/gettingvideo',(req,res)=>{
-  const {userId}=req.query;
-  const sql=`WITH base AS (
-    SELECT 
-        cr.id,
-        cr.sender_id,
-        cr.caption,
-        cr.video,
-        cr.time_joined,
-        cr.showcase_category,
-        cr.likes,
-        MAX(a.username) AS username,
-        MAX(a.image) AS userimage,
-        COUNT(v.actaul_comment) AS comment_count,
-        COALESCE(MAX(sa.score), 0) AS affinity_score,
-
-        CASE
-            WHEN MAX(sa.score) >= 20 THEN 'affinity'
-            WHEN MAX(sa.score) > 0 THEN 'recent'
-            ELSE 'random'
-        END AS bucket
-
-    FROM showcases cr
-    LEFT JOIN showcase_affinity sa
-        ON sa.creator_id = cr.sender_id
-       AND sa.viewerid = ?
-    LEFT JOIN battlearenacomment v
-        ON v.videoid = cr.id
-    LEFT JOIN projecttables a
-        ON a.ID = cr.sender_id
-    LEFT JOIN showcase_hide seen
-        ON seen.video_id = cr.id
-       AND seen.user_id = ?
-    WHERE seen.video_id IS NULL
-    GROUP BY cr.id, cr.sender_id, cr.caption, cr.video, cr.time_joined, cr.showcase_category, cr.likes
-),
-
-ranked AS (
-    SELECT *,
-        ROW_NUMBER() OVER (
-            PARTITION BY bucket
-            ORDER BY
-                CASE
-                    WHEN bucket = 'affinity' THEN affinity_score
-                    WHEN bucket = 'recent' THEN time_joined
-                    ELSE RAND()
-                END DESC
-        ) AS bucket_rank
-    FROM base
-),
-
-interleaved AS (
-    SELECT *,
-        ROW_NUMBER() OVER (
-            ORDER BY
-                CASE bucket
-                    WHEN 'affinity' THEN 1
-                    WHEN 'recent' THEN 2
-                    ELSE 3
-                END,
-                bucket_rank
-        ) AS global_rank
-    FROM ranked
-)
-
-SELECT
-    id,
-    sender_id,
-    caption,
-    video,
-    time_joined,
-    showcase_category,
-    likes,
-    username,
-    userimage,
-    comment_count,b
-    affinity_score
-FROM interleaved
-ORDER BY
-    (global_rank % 3),   -- shuffle pattern
-    global_rank
-LIMIT 100;
-
-  `;
-  db.query(sql,[userId,userId],(err,result)=>{
-if(err){
-  return res.status(500).json({error:message})
-}
-res.json(result)
-  })
-});
-app.get('/trending',(req,res)=>{
- 
-  const sql=`select cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image as userimage,
-  count(v.actaul_comment) as comment_count from showcases cr left join battlearenacomment v on cr.id=v.videoid left join projecttables a 
-  on a .ID=cr.sender_id where cr.time_joined>=now()-interval 1 week group by cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image
-  order by cr.likes desc limit 3;`;
-  db.query(sql,(err,resultvalue)=>{
-    if(err){
-return res.status(500).json({err:`this error occured ${err}`})
-    }
-    res.json(resultvalue)
-  })
-})
-
-app.post('/postlikesincrease', (req, res) => {
-  const { postId, userValue, posteruser } = req.body;
-
-  // 1. Check if already liked
-  const checkLikeSql =
-    'SELECT * FROM showcase_likes WHERE liker_id=? AND video_id=?';
-
-  db.query(checkLikeSql, [userValue, postId], (err, liked) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-
-    if (liked.length > 0) {
-      return res.status(400).json({ error: 'Already liked' });
-    }
-
-    // 2. Increase likes
-    const updateLikeSql =
-      'UPDATE showcases SET likes=likes+1 WHERE id=?';
-
-    db.query(updateLikeSql, [postId], (err) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-
-      // 3. Insert into likes table
-      const insertLikeSql =
-        'INSERT INTO showcase_likes(liker_id, video_id) VALUES(?,?)';
-
-      db.query(insertLikeSql, [userValue, postId], (err) => {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-
-        // 4. Affinity logic
-        const affinityCheckSql =
-          'SELECT * FROM showcase_affinity WHERE viewerid=? AND creator_id=?';
-
-        db.query(affinityCheckSql, [userValue, posteruser], (err, affinity) => {
-          if (err) {
-            return res.status(500).json({ error: err.message });
-          }
-
-          if (affinity.length > 0) {
-            db.query(
-              'UPDATE showcase_affinity SET score=score+5 WHERE viewerid=? AND creator_id=?',
-              [userValue, posteruser]
-            );
-          } else {
-            db.query(
-              'INSERT INTO showcase_affinity(viewerid, creator_id, score) VALUES(?,?,?)',
-              [userValue, posteruser, 5]
-            );
-          }
-
-          // 5. Optional hide
-          const hideSql =
-            'INSERT IGNORE INTO showcase_hide(user_id, video_id) VALUES(?,?)';
-
-          db.query(hideSql, [userValue, postId], (err) => {
-            if (err) {
-              return res.status(500).json({ error: err.message });
-            }
-
-            res.status(200).json({
-              success: true,
-              message: 'Post liked successfully'
-            });
-          });
-        });
-      });
-    });
-  });
-});
 
 
 
-app.post('/postlikesdecrease', (req, res) => {
-  const { postId, userValue } = req.body;
 
-  // 1. Check if like exists
-  const checkLikeSql =
-    'SELECT * FROM showcase_likes WHERE liker_id=? AND video_id=?';
-
-  db.query(checkLikeSql, [userValue, postId], (err, existing) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-
-    if (existing.length === 0) {
-      return res.status(400).json({ error: 'Like does not exist' });
-    }
-
-    // 2. Decrease likes (never below 0)
-    const decreaseLikeSql =
-      'UPDATE showcases SET likes = GREATEST(likes-1, 0) WHERE id=?';
-
-    db.query(decreaseLikeSql, [postId], (err) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-
-      // 3. Remove from likes table
-      const deleteLikeSql =
-        'DELETE FROM showcase_likes WHERE liker_id=? AND video_id=?';
-
-      db.query(deleteLikeSql, [userValue, postId], (err) => {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-
-        // 4. Remove from hide table
-        const deleteHideSql =
-          'DELETE FROM showcase_hide WHERE user_id=? AND video_id=?';
-
-        db.query(deleteHideSql, [userValue, postId], (err) => {
-          if (err) {
-            return res.status(500).json({ error: err.message });
-          }
-
-          res.status(200).json({
-            success: true,
-            message: 'Like removed successfully'
-          });
-        });
-      });
-    });
-  });
-});
-
-
-app.get('/getshowcase', (req, res) => {
-  const { showcase, userId } = req.query;
-
-  const sql = `
-  WITH base AS (
-    SELECT 
-      cr.id,
-      cr.sender_id,
-      cr.caption,
-      cr.video,
-      cr.time_joined,
-      cr.showcase_category,
-      cr.likes,
-      MAX(a.username) AS username,
-      MAX(a.image) AS userimage,
-      COUNT(v.actaul_comment) AS comment_count,
-      COALESCE(MAX(sa.score), 0) AS affinity_score,
-
-      -- Bucket assignment
-      CASE
-        WHEN MAX(sa.score) >= 20 THEN 'affinity'
-        WHEN MAX(sa.score) > 0 THEN 'recent'
-        ELSE 'random'
-      END AS bucket
-    FROM showcases cr
-    LEFT JOIN showcase_affinity sa 
-      ON sa.creator_id = cr.sender_id AND sa.viewerid = ?
-    LEFT JOIN battlearenacomment v 
-      ON v.videoid = cr.id
-    LEFT JOIN projecttables a 
-      ON a.ID = cr.sender_id
-    LEFT JOIN showcase_hide seen 
-      ON seen.video_id = cr.id AND seen.user_id = ?
-    WHERE cr.showcase_category = ? 
-      AND seen.video_id IS NULL
-    GROUP BY 
-      cr.id, cr.sender_id, cr.caption, cr.video, cr.time_joined, cr.showcase_category, cr.likes
-  ),
-
-  ranked AS (
-    SELECT *,
-      ROW_NUMBER() OVER (
-        PARTITION BY bucket
-        ORDER BY
-          CASE
-            WHEN bucket = 'affinity' THEN affinity_score
-            WHEN bucket = 'recent' THEN time_joined
-            ELSE RAND()
-          END DESC
-      ) AS bucket_rank
-    FROM base
-  ),
-
-  interleaved AS (
-    SELECT *,
-      ROW_NUMBER() OVER (
-        ORDER BY
-          CASE bucket
-            WHEN 'affinity' THEN 1
-            WHEN 'recent' THEN 2
-            ELSE 3
-          END,
-          bucket_rank
-      ) AS global_rank
-    FROM ranked
-  )
-
-  SELECT 
-    id,
-    sender_id,
-    caption,
-    video,
-    time_joined,
-    showcase_category,
-    likes,
-    username,
-    userimage,
-    comment_count,
-    affinity_score
-  FROM interleaved
-  ORDER BY (global_rank % 3), global_rank
-  LIMIT 100;
-  `;
-
-  db.query(sql, [userId, userId, showcase], (err, result) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(result);
-  });
-});
-
-app.get('/fetchsearchvideo',(req,res)=>{
-  const {searchparams}=req.query;
-  const searchval=`%${searchparams}%`
-  const sql=`select cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image as userimage,
-  count(v.actaul_comment) as comment_count from showcases cr left join battlearenacomment v on cr.id=v.videoid left join projecttables a 
-  on a .ID=cr.sender_id  where cr.caption like ? or a.username like ? group by cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image
-   order by cr.likes desc;`
-   db.query(sql,[searchval,searchval],(err,result)=>{
-    if(err){
-      return res.status(500).json({error:err.message})
-    }
-    res.json(result)
-   })
-});
-app.get('/fetchingcomment',(req,res)=>{
-  const {userId,videovalue}=req.query;
-  const sql=`SELECT 
-  cr.id,
-  cr.videoid,
-  cr.userid,
-  cr.actaul_comment,
-  a.USERNAME AS usersname,
-  a.image AS usersimage
-FROM battlearenacomment cr
-LEFT JOIN projecttables a 
-  ON cr.userid = a.id
-LEFT JOIN comment_likes cl
-  ON cr.id = cl.comment_id
-WHERE cr.videoid = ?
-GROUP BY cr.id;
-`;
-db.query(sql,[videovalue],(err,result)=>{
-  if(err){
-    return res.status(500).json({error:err.message});
-  }
-  res.json(result);
-})
-})
-io.on('connection', (socket) => {
-
-  socket.on('JoinComment', (videoId) => {
-    socket.join(videoId);
-  });
-
-  socket.on('SendVideoComment', (data) => {
-    const { videoo, user, comment, usersimage, usersname } = data;
-
-    const sql = `
-      INSERT INTO battlearenacomment(videoid, userid, actaul_comment)
-      VALUES (?, ?, ?)
-    `;
-
-    db.query(sql, [videoo, user, comment], (err, result) => {
-      if (err) console.log(err);
-        
-       
-     
-
-      db.query(sql, [videoo, user, comment], (err, result) => {
-        if (err) return console.log(err);
-      
-        const commentId = result.insertId;
-      
-        db.query(
-          `SELECT 
-            cr.id,
-            cr.videoid,
-            cr.userid,
-            cr.actaul_comment,
-            a.USERNAME AS usersname,
-            a.image AS usersimage
-           FROM battlearenacomment cr
-           LEFT JOIN projecttables a ON cr.userid = a.id
-           WHERE cr.id = ?`,
-          [commentId],
-          (err, rows) => {
-            if (err) return console.log(err);
-      
-            io.to(videoo).emit('NewComment', rows[0]);
-          }
-        );
-      });
-      
-      
-
-     
-    });
-  });
-
-  socket.on('updateaffinity', (data) => {
-    const { user, posterid } = data;
-
-    const check = `
-      SELECT * FROM showcase_affinity
-      WHERE viewerid=? AND creator_id=?
-    `;
-
-    db.query(check, [user, posterid], (err, result) => {
-      if (err) return console.log(err);
-
-      if (result.length > 0) {
-        db.query(
-          `UPDATE showcase_affinity SET score=score+5 WHERE viewerid=? AND creator_id=?`,
-          [user, posterid]
-        );
-      } else {
-        db.query(
-          `INSERT INTO showcase_affinity(viewerid, creator_id, score) VALUES(?,?,?)`,
-          [user, posterid, 5]
-        );
-      }
-    });
-  });
-  socket.on('LeaveComment',(videoId)=>{
-    socket.leave(videoId)
-  })
-});
-
-app.get('/getshowcaserank', (req, res) => {
-  const user = req.query.user;
-
-  const sql = `
-    SELECT sender_id,
-      SUM(likes) AS totallikes,
-      ROUND(SUM(likes)/100) AS totalvalue,
-      CASE 
-        WHEN ROUND(SUM(likes)/100) BETWEEN 0 AND 499 THEN 'Rising'
-        WHEN ROUND(SUM(likes)/100) BETWEEN 500 AND 999 THEN 'Challenger'
-        WHEN ROUND(SUM(likes)/100) > 999 THEN 'Specialist'
-      END AS category
-    FROM showcases 
-    WHERE sender_id = ? 
-    GROUP BY sender_id;
-  `;
-
-  db.query(sql, [user], (err, result) => {
-    if (err) return res.status(500).json({ error: err });
-    res.json(result[0] || null);  // return null cleanly
-  });
-});
-app.get('/showcasetopusers',(req,res)=>{
-  const sql=`select cr.sender_id,a.FULLNAME as username,a.image as usersimage,sum(cr.likes) as totallikes ,round(sum(cr.likes)/100) as totalvalue , 
-  case when round(sum(likes)/100) between 0 and 499 then 'Rising' when round(sum(likes)/100) between 500 and 999
-   then 'Challenger' when round(sum(likes)/100) >999 then
-   'Specialist' end as Category from showcases cr left join projecttables a on cr.sender_id=a.ID where cr.time_joined<=now()-interval 1 week group  by sender_id;`;
-   db.query(sql,(err,result)=>{
-    if(err){
-      return res.status(500).json({error:err.message});
-
-    }
-    res.json(result);
-   })
-})
-app.get('/Firstlikesearch',(req,res)=>{
-  const {user,video}=req.query;
-  const sql=`select * from showcase_likes cr where cr.liker_id=? and cr.video_id=?`;
-  db.query(sql,[user,video],(err,result)=>{
-    if(err){
-      return res.status(500).json({error:err.message});
-    }
-    res.json(result)
-  })
-})
-app.get('/gettrendingbyuser',(req,res)=>{
- 
-  const sql=`select cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image as userimage,
-  count(v.actaul_comment) as comment_count from showcases cr left join battlearenacomment v on cr.id=v.videoid left join projecttables a 
-  on a .ID=cr.sender_id where cr.time_joined>=now()-interval 1 week group by cr.id,cr.sender_id,cr.caption,cr.video,cr.time_joined,cr.showcase_category,cr.likes,a.username,a.image
-  order by cr.likes desc;;
-   `
-   db.query(sql,(err,result)=>{
-    if(err){
-   return res.status(500).json({error:err.message})
-    }
-    res.json(result)
-   })
-})
-app.post('/increasescore', (req, res) => {
-  const { user, posterid } = req.body;
-
-  const sql = `
-    INSERT INTO showcase_affinity (creator_id, viewerid, score)
-    VALUES (?, ?, 5)
-    ON DUPLICATE KEY UPDATE score = score + 5
-  `;
-
-  db.query(sql, [posterid, user], (err, result) => {
-    if (err) return res.status(500).json({ error: err });
-    res.status(200).json({ success: true, message: 'Score increased' });
-  });
-});
-
-app.post('/reducescore', (req, res) => {
-  const { user, posterid } = req.body;
-
-  const sql = `
-    INSERT INTO showcase_affinity (creator_id, viewerid, score)
-    VALUES (?, ?, 0)
-    ON DUPLICATE KEY UPDATE score = GREATEST(score - 5, 0)
-  `;
-
-  db.query(sql, [posterid, user], (err, result) => {
-    if (err) return res.status(500).json({ error: err });
-    res.status(200).json({ success: true, message: 'Score reduced' });
-  });
-});
-app.post('/postcompetitionscore',(req,res)=>{
-  const{usersid,score}=req.body;
-  const sql=`insert into showcaseleaderboard(user_id,score)values(?,?) on duplicate key update score=score+?
-  `
-  db.query(sql,[usersid,score,score],(err,result)=>{
-    if(err){
-      return res.status(500).json({error:`An error occured`})
-    }
-    res.status(200).json({success:true,message:'Posted succesfully'})
-  })
-})
-// io.on(connection,(socket)=>{
-
-//   socket.on('Up')
-// socket.on('disconnect',()=>{
-//   console.log('User cleared');
-// })
-// })
-app.get('/fetchleader',(req,res)=>{
-  const sql=`select cr.id,cr.user_id,cr.score,a.FULLNAME as usersname,a.image from showcaseleaderboard 
-  cr join projecttables a on cr.user_id=a.ID order by score desc limit 20;`
-  db.query(sql,(err,result)=>{
-    if(err){
-      return res.status(500).json({error:'An error occured'})
-    }
-    res.json(result)
-  })
-})
+  
 app.post(
   "/api/uploads/images",
   upload.array("images", 10), // up to 10 images
@@ -2722,7 +2140,7 @@ io.on('connection', (socket) => {
   socket.on('joingrouproom', ({ receiveroomid, usersValue }) => {
     roomid = receiveroomid;
     socket.userId = usersValue; 
-    socket.join(roomid);
+    socket.join(`room-${roomid}`);
   
     if (!roomOnlineUsers.has(receiveroomid)) {
       roomOnlineUsers.set(receiveroomid, new Set());
@@ -2730,7 +2148,7 @@ io.on('connection', (socket) => {
   
     roomOnlineUsers.get(receiveroomid).add(usersValue);
   
-    io.to(roomid).emit(
+    io.to(`room-${roomid}`).emit(
       'online-count',
       roomOnlineUsers.get(receiveroomid).size
     );
@@ -2753,7 +2171,7 @@ io.on('connection', (socket) => {
           (err, result) => {
             if (err) return console.log(err);
 
-            io.to(roomid).emit('getimage', result[0].room_image);
+            io.to(`room-${roomid}`).emit('getimage', result[0].room_image);
           }
         );
       }
@@ -2775,7 +2193,7 @@ io.on('connection', (socket) => {
           (err, result) => {
             if (err) return console.log(err);
 
-            io.to(roomid).emit('gottenbio', result[0].roombio);
+            io.to(`room-${roomid}`).emit('gottenbio', result[0].roombio);
           }
         );
       }
@@ -2799,7 +2217,7 @@ io.on('connection', (socket) => {
           console.log('A databse error occured while inserthing room comment');
           return;
         }
-        io.to(roomid).emit('ReleaseComment',{
+        io.to(`room-${roomid}`).emit('ReleaseComment',{
           postid,newComment:result[0]
         })
       })
@@ -2813,7 +2231,7 @@ io.on('connection', (socket) => {
   
     users.delete(socket.userId);
   
-    io.to(roomid).emit('online-count', users.size);
+    io.to(`room-${roomid}`).emit('online-count', users.size);
   
     if (users.size === 0) {
       roomOnlineUsers.delete(roomid);
@@ -2827,7 +2245,7 @@ io.on('connection', (socket) => {
   
     users.delete(socket.userId);
   
-    io.to(roomid).emit('online-count', users.size);
+    io.to(`room-${roomid}`).emit('online-count', users.size);
   
     if (users.size === 0) {
       roomOnlineUsers.delete(roomid);
@@ -3337,6 +2755,215 @@ app.post('/removeroomcomment',(req,res)=>{
     res.status(200).json({success:true})
   })
 })
+app.post('/increasecampuslikes',(req,res)=>{
+  const {campusid,myUserId}=req.body;
+  db.query(`insert ignore into campuslikes(userid,pulseid)values(?,?) `,[myUserId,campusid],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:'An error occured while increasing campuslikes'})
+    }
+    res.status(200).json({success:true})
+  })
+})
+app.post('/decreasecampuslikes',(req,res)=>{
+  const {campusid,myUserId}=req.body;
+  db.query(`delete from campuslikes where userid=? and pulseid=? `,[myUserId,campusid],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:'An error occured while increasing campuslikes'})
+    }
+    res.status(200).json({success:true})
+  })
+})
+
+app.post('/clearchat', (req, res) => {
+  const { myUserId, recipientId } = req.body;
+  if (!myUserId || !recipientId) return res.status(400).json({ error: 'Missing IDs' });
+
+  const sql = `
+      DELETE FROM messages
+      WHERE (sender_id = ? AND receiver_id = ?)
+         OR (sender_id = ? AND receiver_id = ?)
+  `;
+  db.query(sql, [myUserId, recipientId, recipientId, myUserId], (err) => {
+      if (err) return res.status(500).json({ error: 'Failed to clear chat' });
+      io.to(connectedUsers.get(String(recipientId)))?.emit('chat_cleared', { by: myUserId });
+      res.json({ success: true });
+  });
+});
+const isMod = (req, res, next) => {
+  const user = req.session.user;
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  if (user.role !== 'mod' && user.role !== 'admin') {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+  next();
+};
+
+// ── Submit a report ──
+app.post('/postreport', isMod,(req, res) => {
+  const { senderId, reporthead, reportedname, reason, details } = req.body;
+
+  if (!senderId || !reporthead || !reportedname || !reason) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // BUG FIX: ON DUPLICATE KEY only works if you have a UNIQUE constraint
+  // on (reportidentity, reportname, reason) — see note above
+  db.query(
+    `INSERT INTO reports
+      (reporterid, reportidentity, reportname, reason, alternatetext, reportstate, reportcount, reporttime)
+     VALUES (?, ?, ?, ?, ?, 'pending', 1, NOW())
+     ON DUPLICATE KEY UPDATE
+       reportcount = reportcount + 1,
+       reporttime  = NOW()`,
+    [senderId, reporthead, reportedname, reason, details ?? null],
+    (err) => {
+      if (err) {
+        console.error('Insert report error:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.status(200).json({ success: true });
+    }
+  );
+});
+
+// ── Fetch all reports — mod only ──
+// BUG FIX: added isMod middleware + reporttime in SELECT
+app.get('/modreports', isMod, (req, res) => {
+  db.query(
+    `SELECT 
+       n.*,
+       n.reporttime,
+       a.USERNAME AS reporter_name
+     FROM reports n
+     LEFT JOIN projecttables a ON a.ID = n.reporterid
+     WHERE n.reportstate = 'pending'
+     ORDER BY n.reportcount DESC, n.reporttime DESC`,
+    (err, result) => {
+      if (err) {
+        console.error('Fetch reports error:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.json(result);
+    }
+  );
+});
+
+// ── Fetch stats separately ──
+app.get('/modreports/stats', isMod, (req, res) => {
+  db.query(
+    `SELECT
+       SUM(reportstate = 'pending')  AS pending,
+       SUM(reportstate = 'inReview') AS inReview,
+       SUM(reportstate = 'resolved') AS resolved
+     FROM reports`,
+    (err, result) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(result[0]);
+    }
+  );
+});
+
+// ── Dismiss a report ──
+app.post('/modreports/:id/dismiss', isMod, (req, res) => {
+  db.query(
+    `UPDATE reports SET reportstate = 'resolved' WHERE id = ?`,
+    [req.params.id],
+    (err) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.status(200).json({ success: true });
+    }
+  );
+});
+
+// ── Warn — notify the reported user + mark inReview ──
+// BUG FIX: was reading req.query on a POST — changed to req.body
+// BUG FIX: socket emit moved inside DB callback so it only fires on success
+// BUG FIX: table name was 'notification' — corrected to 'notifications'
+app.post('/modreports/warn', isMod, (req, res) => {
+  const { theid, sender, message } = req.body;
+
+  if (!theid || !sender || !message) {
+    return res.status(400).json({ error: 'Missing fields' });
+  }
+
+  db.query(
+    `INSERT INTO notifications (sender_id, receiver_id, message, type, is_read)
+     VALUES (?, ?, ?, 'warning', 0)`,
+    [null, sender, message],
+    (err) => {
+      if (err) {
+        console.error('Warn notification error:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      db.query(
+        `UPDATE reports SET reportstate = 'inReview' WHERE id = ?`,
+        [theid],
+        (err) => {
+          if (err) {
+            console.error('Update report state error:', err);
+            return res.status(500).json({ error: 'Database error' });
+          }
+
+          // BUG FIX: emit AFTER both DB operations succeed
+          // BUG FIX: sender is the reported user's ID — emit to their socket
+          const userSocket = connectedUsers.get(String(sender));
+          if (userSocket) {
+            io.to(userSocket).emit('newNotification', {
+              message,
+              type: 'warning',
+            });
+          }
+
+          res.status(200).json({ success: true });
+        }
+      );
+    }
+  );
+});
+
+// ── Remove reported content ──
+// Removes the content itself + resolves the report
+app.post('/modreports/:id/remove', isMod, (req, res) => {
+  const { reportidentity, reportname, reporterid } = req.body;
+
+  let deleteQuery = '';
+  let deleteParams = [];
+
+  if (reportidentity === 'user') {
+    // Suspend/flag user rather than hard delete
+    deleteQuery = `UPDATE projecttables SET suspended = 1 WHERE id = ?`;
+    deleteParams = [reporterid];
+  } else if (reportidentity === 'room') {
+    deleteQuery = `DELETE FROM interestrooms WHERE id = ?`;
+    deleteParams = [reporterid];
+  } else if (reportidentity === 'story') {
+    deleteQuery = `DELETE FROM campuspulse WHERE ID = ?`;
+    deleteParams = [reporterid];
+  } else {
+    return res.status(400).json({ error: 'Unknown report type' });
+  }
+
+  db.query(deleteQuery, deleteParams, (err) => {
+    if (err) {
+      console.error('Remove content error:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    db.query(
+      `UPDATE reports SET reportstate = 'resolved' WHERE id = ?`,
+      [req.params.id],
+      (err) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        res.status(200).json({ success: true });
+      }
+    );
+  });
+});
+
+
+
+
 server.listen(3000, () => {
   console.log('Server running on http://localhost:3000');
 });

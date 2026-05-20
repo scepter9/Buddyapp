@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,517 +8,447 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  SafeAreaView
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
-
+import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import BottomNavigator from './BottomNavigator';
+import { colors, radius, spacing } from './Theme';
+
 const API_BASE_URL = "http://192.168.0.136:3000";
 
-function Profile({ navigation, route }) {
+// ── Stat pill ──
+function StatItem({ count, label }) {
+  return (
+    <View style={s.statItem}>
+      <Text style={s.statCount}>{count ?? 0}</Text>
+      <Text style={s.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+// ── Info row ──
+function InfoRow({ icon, label, value }) {
+  if (!value) return null;
+  return (
+    <View style={s.infoRow}>
+      <View style={s.infoIconWrap}>
+        <Feather name={icon} size={15} color={colors.accent.lavender} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={s.infoLabel}>{label}</Text>
+        <Text style={s.infoValue}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
+export default function Profile({ navigation, route }) {
   const [userProfile, setUserProfile] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [loggedInUserId, setLoggedInUserId] = useState(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isFollowActionLoading, setIsFollowActionLoading] = useState(false);
 
-  const isViewingOwnProfile = !route.params?.userId || route.params.userId === loggedInUserId;
+  const isViewingOwnProfile = userProfile?.id === loggedInUserId;
 
   const fetchProfileData = useCallback(async () => {
     setIsLoadingProfile(true);
     try {
-      const currentAuthRes = await fetch(`${API_BASE_URL}/profile`, {
+      const authRes = await fetch(`${API_BASE_URL}/profile`, {
         method: 'GET',
         credentials: 'include',
       });
 
-      if (!currentAuthRes.ok) {
-        console.warn('Not authenticated. Redirecting to login.');
+      if (!authRes.ok) {
         navigation.replace('Login');
         return;
       }
-      const currentAuthData = await currentAuthRes.json();
-      setLoggedInUserId(currentAuthData.id);
 
-      const profileToFetchId = route.params?.userId || currentAuthData.id;
+      const authData = await authRes.json();
+      setLoggedInUserId(authData.id);
 
-      const userProfileRes = await fetch(`${API_BASE_URL}/users/${profileToFetchId}`, {
+      const targetId = route.params?.userId || authData.id;
+
+      const profileRes = await fetch(`${API_BASE_URL}/users/${targetId}`, {
         method: 'GET',
         credentials: 'include',
       });
 
-      if (!userProfileRes.ok) {
-        throw new Error('Profile not found or server error.');
-      }
-      const userProfileData = await userProfileRes.json();
-      setUserProfile(userProfileData);
+      if (!profileRes.ok) throw new Error('Profile not found.');
+      const profileData = await profileRes.json();
+      setUserProfile(profileData);
 
-      if (profileToFetchId !== currentAuthData.id) {
-        const checkFollowRes = await fetch(`${API_BASE_URL}/check-follow/${profileToFetchId}`, {
+      if (targetId !== authData.id) {
+        const followRes = await fetch(`${API_BASE_URL}/check-follow/${targetId}`, {
           credentials: 'include',
         });
-        if (checkFollowRes.ok) {
-          const checkFollowData = await checkFollowRes.json();
-          setIsFollowing(checkFollowData.isFollowing);
-        } else {
-          console.warn('Could not check follow status.');
+        if (followRes.ok) {
+          const followData = await followRes.json();
+          setIsFollowing(followData.isFollowing);
         }
       }
-    } catch (error) {
-      console.error('Error fetching profile data:', error);
-      Alert.alert('Error', error.message || 'Failed to load profile.');
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to load profile.');
     } finally {
       setIsLoadingProfile(false);
     }
   }, [route.params?.userId, navigation]);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      fetchProfileData();
-    });
-    fetchProfileData();
-    return unsubscribe;
-  }, [navigation, fetchProfileData]);
+    const unsub = navigation.addListener('focus', fetchProfileData);
+    return unsub;
+  }, [fetchProfileData]);
 
   const handleFollowToggle = async () => {
     if (isViewingOwnProfile || isFollowActionLoading) return;
-
     setIsFollowActionLoading(true);
     const endpoint = isFollowing ? 'unfollow' : 'follow';
-
     try {
-      const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+      const res = await fetch(`${API_BASE_URL}/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ receiver_id: userProfile?.id }),
       });
-
-      const responseData = await response.json();
-
-      if (response.ok) {
+      const data = await res.json();
+      if (res.ok) {
         setIsFollowing(!isFollowing);
-        setUserProfile(prevProfile => {
-          const newProfile = { ...prevProfile };
-          newProfile.followers = isFollowing
-            ? Math.max(0, (prevProfile.followers ?? 0) - 1)
-            : ((prevProfile.followers ?? 0) + 1);
-          if (isViewingOwnProfile) {
-            newProfile.following = isFollowing
-              ? Math.max(0, (prevProfile.following ?? 0) - 1)
-              : ((prevProfile.following ?? 0) + 1);
-          }
-          return newProfile;
-        });
+        setUserProfile(prev => ({
+          ...prev,
+          followers: isFollowing
+            ? Math.max(0, (prev.followers ?? 0) - 1)
+            : (prev.followers ?? 0) + 1,
+        }));
       } else {
-        const errorMessage = responseData.error || `Failed to ${endpoint} user.`;
-        Alert.alert('Action Failed', errorMessage);
-        console.error(`Error ${endpoint}:`, responseData);
+        Alert.alert('Failed', data.error || `Could not ${endpoint}.`);
       }
-    } catch (error) {
-      console.error(`Request error during ${endpoint}:`, error);
-      Alert.alert('Network Error', `Could not reach server to ${endpoint}.`);
+    } catch {
+      Alert.alert('Network error', `Could not reach server.`);
     } finally {
       setIsFollowActionLoading(false);
     }
   };
 
-  const handleFindFriends = () => {
-    navigation.navigate('UserSearch');
-  };
+  const infoRows = useMemo(() => [
+    { icon: 'book', label: 'University', value: userProfile?.university },
+    { icon: 'info', label: 'Bio', value: userProfile?.about },
+  ], [userProfile]);
+
+  const interestColors = ['#9333ea', '#6366f1', '#0284c7', '#db2777', '#16a34a', '#d97706'];
+
+  const initials = userProfile?.name
+    ? userProfile.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+    : '?';
 
   if (isLoadingProfile || !userProfile) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#607D8B" />
-        <Text style={styles.loadingText}>Loading Profile...</Text>
+      <View style={s.loading}>
+        <StatusBar barStyle="light-content" />
+        <ActivityIndicator size="large" color={colors.accent.purple} />
+        <Text style={s.loadingText}>Loading profile...</Text>
       </View>
     );
   }
 
-  const imageSource = userProfile.image
-    ? { uri: `${API_BASE_URL}/uploads/${userProfile.image}` }
+  const imageUri = userProfile.image
+    ? { uri: `${API_BASE_URL}${userProfile.image}` }
     : null;
- 
-  return (
-    <SafeAreaView style={styles.wrapper}>
-    <View style={styles.fullScreenContainer}>
-      <ScrollView contentContainerStyle={styles.scrollViewContent}>
-        <View style={styles.mainContentCard}>
-          <View style={styles.profileHeader}>
-            <View style={styles.profileImageWrapper}>
-              {imageSource ? (
-                <Image source={imageSource} style={styles.profileImage} />
-              ) : (
-                <View style={[styles.profileImage, styles.noProfileImagePlaceholder]}>
-                  <Text style={styles.noProfileImageText}>No Photo</Text>
-                </View>
-              )}
-            </View>
 
+  const handle = userProfile.email?.split('@')[0] || 'user';
+
+  return (
+    <SafeAreaView style={s.safe}>
+      <StatusBar barStyle="light-content" />
+
+      {/* Ambient blob */}
+      <View style={s.blob} pointerEvents="none" />
+
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        showsVerticalScrollIndicator={false}
+      >
+
+        {/* ── Hero section ── */}
+        <View style={s.hero}>
+          {/* Back button if viewing someone else */}
+          {!isViewingOwnProfile && (
+            <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+              <Feather name="arrow-left" size={20} color={colors.text.primary} />
+            </TouchableOpacity>
+          )}
+
+          {/* Avatar */}
+          <View style={s.avatarWrap}>
+            <LinearGradient
+              colors={['#9333ea', '#6366f1']}
+              style={s.avatarRing}
+            >
+              <View style={s.avatarInner}>
+                {imageUri ? (
+                  <Image source={imageUri} style={s.avatarImg} />
+                ) : (
+                  <Text style={s.avatarInitials}>{initials}</Text>
+                )}
+              </View>
+            </LinearGradient>
             {isViewingOwnProfile && (
               <TouchableOpacity
-                style={styles.editProfileButton}
+                style={s.editAvatarBtn}
                 onPress={() => navigation.navigate('Editprofile', {
                   userId: userProfile.id,
                   currentProfile: userProfile,
                 })}
               >
-                <Text style={styles.editProfileButtonText}>✏️ Edit Profile</Text>
+                <Feather name="camera" size={13} color="#fff" />
               </TouchableOpacity>
             )}
           </View>
 
-          <View style={styles.profileDetails}>
-            <View style={styles.nameAndBadgeContainer}>
-              <Text style={styles.profileName}>{userProfile.name}</Text>
-              {userProfile.isPro && (
-                <View style={styles.proUserBadge}>
-                  <Text style={styles.proUserText}>PRO</Text>
-                </View>
-              )}
-            </View>
-            <Text style={styles.profileHandle}>@{userProfile.email.split('@')[0]}</Text>
-            <Text style={styles.joinDateText}>📅 Joined {userProfile.joinDate}</Text>
-            
-            <Text style={styles.bioText}>
-              {userProfile.about?.trim() || (isViewingOwnProfile
-                ? 'You have not added a bio yet.'
-                : 'This user has put the department.')}
-            </Text>
+          {/* Name + handle */}
+          <View style={s.nameRow}>
+            <Text style={s.name}>{userProfile.name}</Text>
+            {userProfile.isPro && (
+              <View style={s.proBadge}>
+                <Text style={s.proText}>PRO</Text>
+              </View>
+            )}
           </View>
-          
-          <TouchableOpacity onPress={() => navigation.navigate('FriendList', { userId: userProfile.id })}>
-            <View style={styles.statsContainer}>
-              <View style={styles.statItem}>
-                <Text style={styles.statCount}>{userProfile.following ?? 0}</Text>
-                <Text style={styles.statLabel}>Following</Text>
-              </View>
-              <View style={styles.statSeparator} />
-              <View style={styles.statItem}>
-                <Text style={styles.statCount}>{userProfile.followers ?? 0}</Text>
-                <Text style={styles.statLabel}>Followers</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-          
-          {isViewingOwnProfile ? (
-            <View style={styles.ownProfileActions}>
-              <TouchableOpacity
-                onPress={handleFindFriends}
-                style={styles.findFriendsButton}
-              >
-                <Text style={styles.findFriendsButtonText}>➕ Find Friends</Text>
-              </TouchableOpacity>
-              {/* Commented out Logout button as requested */}
-              {/*
-              <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-                <Text style={styles.logoutButtonText}>Logout</Text>
-              </TouchableOpacity>
-              */}
-            </View>
-          ) : (
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  isFollowing ? styles.unfollowButton : styles.followButton,
-                ]}
-                onPress={handleFollowToggle}
-                disabled={isFollowActionLoading}
-              >
-                <Text style={styles.buttonText}>
-                  {isFollowActionLoading ? 'Processing...' : isFollowing ? 'Unfollow' : 'Follow'}
-                </Text>b
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.actionButton, styles.messageButton]}
-                onPress={() => {
-                  navigation.navigate('MessageUser', { 
-                    recipientId: userProfile.id, 
-                    recipientName: userProfile.name, 
-                    recipientImage: `${API_BASE_URL}/uploads/${userProfile.image}` 
-                  });
-                }}
-              >
-                <Text style={styles.messageButtonText}>Message</Text>
-              </TouchableOpacity>
+          <Text style={s.handle}>@{handle}</Text>
+
+          {userProfile.joinDate && (
+            <View style={s.joinRow}>
+              <Feather name="calendar" size={11} color={colors.text.muted} />
+              <Text style={s.joinText}>Joined {userProfile.joinDate}</Text>
             </View>
           )}
         </View>
+
+        {/* ── Stats ── */}
+        <TouchableOpacity
+          style={s.statsRow}
+          onPress={() => navigation.navigate('FriendList', { userId: userProfile.id ,type:'profile'})}
+          activeOpacity={0.8}
+        >
+          <StatItem count={userProfile.following} label="Following" />
+          <View style={s.statDivider} />
+          <StatItem count={userProfile.followers} label="Followers" />
+          <Feather name="chevron-right" size={14} color={colors.text.muted} style={{ marginLeft: 'auto', paddingRight: 4 }} />
+        </TouchableOpacity>
+
+        {/* ── Info rows ── */}
+        <View style={s.card}>
+          {infoRows.map((row, i) => (
+            <React.Fragment key={row.label}>
+              <InfoRow {...row} />
+              {i < infoRows.length - 1 && <View style={s.rowDivider} />}
+            </React.Fragment>
+          ))}
+        </View>
+
+        {/* ── Interests ── */}
+        {userProfile.interests?.length > 0 && (
+          <View style={s.card}>
+            <Text style={s.cardTitle}>Interests</Text>
+            <View style={s.interestWrap}>
+              {userProfile.interests.map((interest, i) => (
+                <View
+                  key={i}
+                  style={[
+                    s.interestPill,
+                    { backgroundColor: `${interestColors[i % interestColors.length]}22`,
+                      borderColor: `${interestColors[i % interestColors.length]}55` }
+                  ]}
+                >
+                  <Text style={[s.interestText, { color: interestColors[i % interestColors.length] }]}>
+                    {interest}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* ── Actions ── */}
+        {isViewingOwnProfile ? (
+          <View style={s.actionsWrap}>
+            <TouchableOpacity
+              style={s.primaryBtn}
+              onPress={() => navigation.navigate('Editprofile', {
+                userId: userProfile.id,
+                currentProfile: userProfile,
+              })}
+              activeOpacity={0.85}
+            >
+              <Feather name="edit-2" size={15} color="#fff" />
+              <Text style={s.primaryBtnText}>Edit Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.secondaryBtn}
+              onPress={() => navigation.navigate('UserSearch')}
+              activeOpacity={0.85}
+            >
+              <Feather name="user-plus" size={15} color={colors.accent.lavender} />
+              <Text style={s.secondaryBtnText}>Find Friends</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={s.actionsWrap}>
+            <TouchableOpacity
+              style={[s.primaryBtn, isFollowing && s.unfollowBtn]}
+              onPress={handleFollowToggle}
+              disabled={isFollowActionLoading}
+              activeOpacity={0.85}
+            >
+              {isFollowActionLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Feather
+                    name={isFollowing ? 'user-minus' : 'user-plus'}
+                    size={15}
+                    color="#fff"
+                  />
+                  <Text style={s.primaryBtnText}>
+                    {isFollowing ? 'Unfollow' : 'Follow'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.secondaryBtn}
+              onPress={() => navigation.navigate('MessageUser', {
+                recipientId: userProfile.id,
+                recipientName: userProfile.name,
+                recipientImage: `${API_BASE_URL}${userProfile.image}`,
+              })}
+              activeOpacity={0.85}
+            >
+              <Feather name="mail" size={15} color={colors.accent.lavender} />
+              <Text style={s.secondaryBtnText}>Message</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={{ height: 100 }} />
       </ScrollView>
 
-    
-    </View>
-    <BottomNavigator navigation={navigation} />
-      </SafeAreaView>
+      <BottomNavigator navigation={navigation} />
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-    backgroundColor: "#f8faff",
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.bg.screen },
+  loading: {
+    flex: 1, backgroundColor: colors.bg.screen,
+    alignItems: 'center', justifyContent: 'center',
   },
-  fullScreenContainer: {
-    flex: 1,
-    backgroundColor: '#F7F9FC',
+  loadingText: { marginTop: 12, fontSize: 15, color: colors.text.muted },
+  blob: {
+    position: 'absolute', width: 260, height: 260, borderRadius: 130,
+    backgroundColor: 'rgba(147,51,234,0.08)', top: -80, right: -80,
   },
-  scrollViewContent: {
-    paddingBottom: 80,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F7F9FC',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 17,
-    color: '#607D8B',
-    fontWeight: '500',
-  },
+  scroll: { paddingHorizontal: spacing.lg, paddingTop: 20 },
 
-  mainContentCard: {
-    margin: 15,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingVertical: 30,
-    alignItems: 'center',
-    shadowColor: '#34495e',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 15,
-    elevation: 8,
+  // ── Hero ──
+  hero: { alignItems: 'center', marginBottom: 20 },
+  backBtn: {
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.border.subtle,
+    alignItems: 'center', justifyContent: 'center',
   },
-  
-  // Profile Header with new full-width profile picture
-  profileHeader: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 20,
+  avatarWrap: { position: 'relative', marginBottom: 14 },
+  avatarRing: {
+    width: 96, height: 96, borderRadius: 48,
+    padding: 2.5, alignItems: 'center', justifyContent: 'center',
   },
-  // New profile image shape: full-width, rounded top corners
-  profileImageWrapper: {
-    width: 150,
-    height: 150,
-    borderRadius: 75, // This is all you need for a circle
-    backgroundColor: '#E0F2F1',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    overflow: 'hidden',
-    marginBottom: -100, // Pull up the content below the image
-},
-  profileImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+  avatarInner: {
+    width: '100%', height: '100%', borderRadius: 44,
+    backgroundColor: colors.bg.screen,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  noProfileImagePlaceholder: {
-    backgroundColor: '#B0BEC5',
-    justifyContent: 'center',
-    alignItems: 'center',
+  avatarImg: { width: '100%', height: '100%' },
+  avatarInitials: { color: '#fff', fontSize: 30, fontWeight: '700' },
+  editAvatarBtn: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: colors.accent.purple,
+    borderWidth: 2, borderColor: colors.bg.screen,
+    alignItems: 'center', justifyContent: 'center',
   },
-  noProfileImageText: {
-    color: '#607D8B',
-    fontWeight: '700',
-    fontSize: 14,
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  name: { fontSize: 22, fontWeight: '800', color: colors.text.primary },
+  proBadge: {
+    backgroundColor: 'rgba(251,191,36,0.15)',
+    borderWidth: 1, borderColor: 'rgba(251,191,36,0.35)',
+    borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2,
   },
-  editProfileButton: {
-    position: 'absolute',
-    right: 15,
-    bottom: 15, // Align button to the bottom right of the image
-    backgroundColor: '#AAB7B8',
-    borderRadius: 20,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    shadowColor: '#495057',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+  proText: { color: '#fbbf24', fontSize: 9, fontWeight: '800', letterSpacing: 1 },
+  handle: { fontSize: 13, color: colors.text.muted, marginBottom: 8 },
+  joinRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  joinText: { fontSize: 11, color: colors.text.muted },
+
+  // ── Stats ──
+  statsRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.border.subtle,
+    borderRadius: radius.lg, padding: 16, marginBottom: 14,
   },
-  editProfileButtonText: {
-    fontSize: 13,
-    color: 'white',
-    fontWeight: '600',
+  statItem: { flex: 1, alignItems: 'center' },
+  statCount: { fontSize: 20, fontWeight: '800', color: colors.text.primary },
+  statLabel: { fontSize: 11, color: colors.text.muted, marginTop: 2, fontWeight: '500' },
+  statDivider: { width: 1, height: 30, backgroundColor: colors.border.subtle },
+
+  // ── Card ──
+  card: {
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.border.subtle,
+    borderRadius: radius.lg, padding: 16, marginBottom: 14,
   },
-  profileDetails: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 25,
-    marginTop: 100, // Push content down to avoid overlapping the full-width image
+  cardTitle: {
+    fontSize: 11, fontWeight: '700', letterSpacing: 1.5,
+    color: colors.text.secondary, marginBottom: 12,
   },
-  nameAndBadgeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  rowDivider: { height: 1, backgroundColor: colors.border.subtle, marginVertical: 10 },
+
+  // ── Info rows ──
+  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  infoIconWrap: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: 'rgba(147,51,234,0.12)',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  profileName: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#2C3E50',
-    letterSpacing: 0.5,
-    marginBottom: 5,
+  infoLabel: { fontSize: 10, color: colors.text.muted, fontWeight: '600', marginBottom: 2 },
+  infoValue: { fontSize: 13, color: colors.text.primary, fontWeight: '500', lineHeight: 18 },
+
+  // ── Interests ──
+  interestWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  interestPill: {
+    paddingVertical: 6, paddingHorizontal: 12,
+    borderRadius: radius.full, borderWidth: 1,
   },
-  profileHandle: {
-    fontSize: 16,
-    color: '#7F8C8D',
-    fontWeight: '500',
-    marginBottom: 10,
+  interestText: { fontSize: 12, fontWeight: '600' },
+
+  // ── Actions ──
+  actionsWrap: { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  primaryBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 7, backgroundColor: colors.accent.purple,
+    borderRadius: radius.lg, paddingVertical: 13,
   },
-  proUserBadge: {
-    backgroundColor: '#F39C12',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    shadowColor: '#F39C12',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 5,
-    elevation: 4,
+  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  unfollowBtn: { backgroundColor: 'rgba(239,68,68,0.8)' },
+  secondaryBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 7, backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: 'rgba(147,51,234,0.25)',
+    borderRadius: radius.lg, paddingVertical: 13,
   },
-  proUserText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
-  },
-  joinDateText: {
-    fontSize: 14,
-    color: '#95A5A6',
-    marginTop: 6,
-    fontWeight: '600',
-  },
-  bioText: {
-    marginTop: 20,
-    color: '#495057',
-    fontWeight: '400',
-    textAlign: 'center',
-    lineHeight: 22,
-    maxWidth: 300,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '80%',
-    backgroundColor: '#ECF0F1',
-    borderRadius: 15,
-    paddingVertical: 12,
-    marginBottom: 25,
-    shadowColor: '#BDC3C7',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statCount: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#2C3E50',
-  },
-  statLabel: {
-    fontSize: 13,
-    color: '#495057',
-    marginTop: 3,
-    fontWeight: '600',
-  },
-  statSeparator: {
-    height: 25,
-    width: 1,
-    backgroundColor: '#BDC3C7',
-  },
-  ownProfileActions: {
-    alignItems: 'center',
-    marginTop: 20,
-    width: '100%',
-  },
-  findFriendsButton: {
-    backgroundColor: '#1A5252',
-    borderRadius: 30,
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    width: '80%',
-    alignItems: 'center',
-    shadowColor: '#1A5252',
-    shadowOffset: { width: 0, height: 7 },
-    shadowOpacity: 0.6,
-    shadowRadius: 14,
-    elevation: 9,
-  },
-  findFriendsButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 16,
-    letterSpacing: 0.7,
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '85%',
-  },
-  actionButton: {
-    flex: 1,
-    borderRadius: 30,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginHorizontal: 8,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  followButton: {
-    backgroundColor: '#3498DB',
-    shadowColor: '#3498DB',
-  },
-  unfollowButton: {
-    backgroundColor: '#E74C3C',
-    shadowColor: '#E74C3C',
-  },
-  buttonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  messageButton: {
-    backgroundColor: '#ECF0F1',
-    borderWidth: 1,
-    borderColor: '#BDC3C7',
-    shadowColor: '#BDC3C7',
-  },
-  messageButtonText: {
-    color: '#2C3E50',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  logoutButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    backgroundColor: '#E74C3C',
-    borderRadius: 30,
-    alignItems: 'center',
-    width: '80%',
-    marginTop: 20,
-    shadowColor: '#E74C3C',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  logoutButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 16,
-    letterSpacing: 0.6,
-  },
+  secondaryBtnText: { color: colors.accent.lavender, fontWeight: '700', fontSize: 14 },
 });
-
-export default Profile;

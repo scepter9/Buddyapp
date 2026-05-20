@@ -1,4 +1,4 @@
- import React,{useEffect,useState,useContext} from "react";
+import React, { useState, useEffect, useContext } from "react";
 import {
   View,
   Text,
@@ -7,183 +7,331 @@ import {
   ImageBackground,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
+  StatusBar,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Feather } from "@expo/vector-icons";
-import { AuthorContext } from '../AuthorContext';
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { AuthorContext } from "../AuthorContext";
+import { colors, radius, spacing } from "../Theme";
+
 const API_BASE_URL = "http://192.168.0.136:3000";
 
+// BUG FIX: clean fallback — no watermark stock photo site
+const FALLBACK_IMAGE = {
+  uri: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80",
+};
 
-export default function FullStory({ navigation ,route}) {
-  const {StoryID}=route.params;
-  const [story,setstory]=useState({})
+export default function FullStory({ navigation, route }) {
+  const { StoryID } = route.params;
   const { user } = useContext(AuthorContext);
   const myUserId = user?.id;
-  useEffect(()=>{
-    const getFinalstory=async()=>{
-      try{
-        const response=await fetch(`${API_BASE_URL}/getstoryuser?StoryID=${StoryID}`);
-        const data=await response.json()
-        if(!response.ok)(
-         console.log('An error occured')
-        )
-        setstory(data[0]);
 
+  // BUG FIX: null initial state so we can show a proper loading screen
+  const [story, setStory] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-      } catch(e){
-        throw new Error('An error occured',e)
+  // Like state — initialised after story loads
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [isPosting, setIsPosting] = useState(false);
+
+  useEffect(() => {
+    const fetchStory = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/getstoryuser?StoryID=${StoryID}`);
+
+        // BUG FIX: check ok BEFORE calling .json()
+        if (!res.ok) {
+          setError(true);
+          return;
+        }
+
+        const data = await res.json();
+        const fetched = data[0];
+        setStory(fetched);
+        setLiked(Boolean(fetched?.pulselikestate));
+        setLikeCount(fetched?.pulselikecount ?? 0);
+      } catch (e) {
+        // BUG FIX: don't re-throw inside useEffect — it becomes an unhandled rejection
+        console.warn("FullStory fetch error:", e.message);
+        setError(true);
+      } finally {
+        setLoading(false);
       }
+    };
+    fetchStory();
+  }, [StoryID]);
+
+  const handleLike = async () => {
+    if (isPosting) return;
+    const nextLiked = !liked;
+    setLiked(nextLiked);
+    setLikeCount(prev => nextLiked ? prev + 1 : Math.max(0, prev - 1));
+    setIsPosting(true);
+    const endpoint = nextLiked ? "increasecampuslikes" : "decreasecampuslikes";
+    try {
+      const res = await fetch(`${API_BASE_URL}/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campusid: StoryID, myUserId }),
+      });
+      if (!res.ok) {
+        setLiked(!nextLiked);
+        setLikeCount(prev => nextLiked ? Math.max(0, prev - 1) : prev + 1);
+      }
+    } catch {
+      setLiked(!nextLiked);
+      setLikeCount(prev => nextLiked ? Math.max(0, prev - 1) : prev + 1);
+    } finally {
+      setIsPosting(false);
     }
-    getFinalstory()
-  },[])
-//   
-  return (
-    <SafeAreaView style={styles.wrapper}>
-      {/* Header */}
-      <LinearGradient
-        colors={["#6366f1", "#a855f7"]}
-        style={styles.header}
-      >
-        <Text style={styles.headerText}>Campus Pulse ⚡</Text>
-      </LinearGradient>
+  };
 
-      {/* Story Body */}
-      <ScrollView contentContainerStyle={styles.main}>
-        <View style={styles.storyContainer}>
-        <ImageBackground
-  source={
-    story?.image
-      ? { uri: `${API_BASE_URL}${story.image}` } // notice: no slash before uploads
-      : null // fallback image
+  // ── Loading ──
+  if (loading) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <StatusBar barStyle="light-content" />
+        <View style={s.centered}>
+          <ActivityIndicator size="large" color={colors.accent.purple} />
+          <Text style={s.loadingText}>Loading story...</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
-  style={styles.storyImage}
-  imageStyle={{ borderRadius: 20 }}
->
-  <View style={styles.overlay} />
-</ImageBackground>
 
-
-          <Text style={styles.storyTitle}>{story.title}</Text>
-          <Text style={styles.storyMeta}>by {story.author}</Text>
-
-          <Text style={styles.storyText}>{story.post}</Text>
-
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.btn}
-          >
-            <Feather name="arrow-left" size={16} color="#fff" />
-            <Text style={styles.btnText}>Back</Text>
+  // ── Error ──
+  if (error || !story) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <StatusBar barStyle="light-content" />
+        <View style={s.centered}>
+          <Text style={s.errorEmoji}>😕</Text>
+          <Text style={s.errorTitle}>Story not found</Text>
+          <Text style={s.errorDesc}>This story may have been removed.</Text>
+          <TouchableOpacity style={s.backBtnFull} onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={15} color="#fff" />
+            <Text style={s.backBtnText}>Go back</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          © 2025 Campus Pulse. All Rights Reserved.
-        </Text>
+  const imageSource = story.image
+    ? { uri: `${API_BASE_URL}${story.image}` }
+    : FALLBACK_IMAGE;
+
+  const initials = story.author?.[0]?.toUpperCase() ?? "A";
+
+  return (
+    <SafeAreaView style={s.safe}>
+      <StatusBar barStyle="light-content" />
+
+      {/* Ambient blobs */}
+      <View style={s.blobTR} pointerEvents="none" />
+
+      {/* ── Top nav bar ── */}
+      <View style={s.topBar}>
+        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+          <Feather name="arrow-left" size={18} color={colors.text.primary} />
+        </TouchableOpacity>
+        <Text style={s.topBarTitle} numberOfLines={1}>Campus Pulse</Text>
+        <View style={{ width: 38 }} />
       </View>
+
+      <LinearGradient
+        colors={["transparent", "#9333ea", "transparent"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={s.headerDivider}
+      />
+
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        showsVerticalScrollIndicator={false}
+      >
+
+        {/* ── Hero image ── */}
+        <ImageBackground
+          source={imageSource}
+          style={s.hero}
+          imageStyle={s.heroImg}
+        >
+          <LinearGradient
+            colors={["transparent", "rgba(8,8,18,0.95)"]}
+            style={s.heroOverlay}
+          />
+          <View style={s.heroBadge}>
+            <View style={s.heroBadgeDot} />
+            <Text style={s.heroBadgeText}>STORY</Text>
+          </View>
+          <Text style={s.heroTitle}>{story.title}</Text>
+        </ImageBackground>
+
+        {/* ── Author row ── */}
+        <View style={s.authorRow}>
+          <View style={s.authorAvatar}>
+            <Text style={s.authorAvatarText}>{initials}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.authorName}>{story.author}</Text>
+            <Text style={s.authorTime}>{story.posted_at ?? "Recently"}</Text>
+          </View>
+          {/* Like button */}
+          <TouchableOpacity
+            style={s.likeBtn}
+            onPress={handleLike}
+            disabled={isPosting}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={liked ? "heart" : "heart-outline"}
+              size={20}
+              color={liked ? "#f43f5e" : "rgba(255,255,255,0.35)"}
+            />
+            <Text style={[s.likeCount, liked && s.likeCountActive]}>
+              {likeCount}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={s.divider} />
+
+        {/* ── Story body ── */}
+        <Text style={s.bodyText}>{story.post}</Text>
+
+        {/* ── End card ── */}
+        <View style={s.endCard}>
+          <Text style={s.endEmoji}>✨</Text>
+          <Text style={s.endText}>End of story</Text>
+          <TouchableOpacity
+            style={s.backBtnFull}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+          >
+            <Feather name="arrow-left" size={15} color="#fff" />
+            <Text style={s.backBtnText}>Back to Pulse</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-    backgroundColor: "#1b1b2f",
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.bg.screen },
+  centered: {
+    flex: 1, alignItems: "center", justifyContent: "center", gap: 10,
+    paddingHorizontal: spacing.lg,
   },
-  header: {
-    paddingVertical: 20,
-    alignItems: "center",
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    elevation: 8,
+  loadingText: { fontSize: 14, color: colors.text.muted },
+  errorEmoji: { fontSize: 44, marginBottom: 4 },
+  errorTitle: { fontSize: 18, fontWeight: "700", color: colors.text.primary },
+  errorDesc: { fontSize: 13, color: colors.text.muted },
+
+  blobTR: {
+    position: "absolute", width: 240, height: 240, borderRadius: 120,
+    backgroundColor: "rgba(147,51,234,0.07)", top: -60, right: -60,
   },
-  headerText: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#fff",
-    letterSpacing: 0.5,
+
+  // ── Top bar ──
+  topBar: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: spacing.lg, paddingVertical: 14,
   },
-  main: {
-    padding: 20,
-    alignItems: "center",
+  backBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.border.subtle,
+    alignItems: "center", justifyContent: "center",
   },
-  storyContainer: {
-    backgroundColor: "#24243d",
-    borderRadius: 25,
-    padding: 20,
-    width: "100%",
-    elevation: 8,
+  topBarTitle: {
+    fontSize: 15, fontWeight: "700", color: colors.text.primary,
   },
-  storyImage: {
-    width: "100%",
-    height: 250,
-    marginBottom: 20,
-    justifyContent: "flex-end",
+  headerDivider: { height: 1, marginBottom: 0 },
+
+  scroll: { paddingBottom: 40 },
+
+  // ── Hero ──
+  hero: {
+    height: 260, justifyContent: "flex-end",
+    marginHorizontal: spacing.lg, borderRadius: radius.xl,
+    overflow: "hidden", marginBottom: 16, marginTop: 12,
   },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    borderRadius: 20,
+  heroImg: { borderRadius: radius.xl },
+  heroOverlay: { ...StyleSheet.absoluteFillObject },
+  heroBadge: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    position: "absolute", top: 14, left: 14,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
   },
-  storyTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#c084fc",
-    marginBottom: 6,
+  heroBadgeDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#f87171" },
+  heroBadgeText: { fontSize: 8, fontWeight: "800", color: "#f87171", letterSpacing: 1.5 },
+  heroTitle: {
+    fontSize: 20, fontWeight: "800", color: "#fff",
+    paddingHorizontal: 16, paddingBottom: 16,
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
-  storyMeta: {
-    fontSize: 13,
-    color: "#a5b4fc",
-    marginBottom: 15,
+
+  // ── Author ──
+  authorRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: spacing.lg, marginBottom: 14,
   },
-  storyText: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#e5e7eb",
-    marginBottom: 25,
+  authorAvatar: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: "rgba(147,51,234,0.3)",
+    alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
-  btn: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: "#6366f1",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 30,
+  authorAvatarText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  authorName: { fontSize: 14, fontWeight: "700", color: colors.text.primary },
+  authorTime: { fontSize: 11, color: colors.text.muted, marginTop: 1 },
+  likeBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.border.subtle,
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
   },
-  btnText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 15,
-    marginLeft: 8,
+  likeCount: { fontSize: 13, color: "rgba(255,255,255,0.35)", fontWeight: "600" },
+  likeCountActive: { color: "#f43f5e" },
+
+  divider: {
+    height: 1, backgroundColor: colors.border.subtle,
+    marginHorizontal: spacing.lg, marginBottom: 20,
   },
-  footer: {
-    backgroundColor: "#151527",
-    padding: 15,
-    alignItems: "center",
-    borderTopLeftRadius: 15,
-    borderTopRightRadius: 15,
+
+  // ── Body ──
+  bodyText: {
+    fontSize: 15, lineHeight: 26,
+    color: "rgba(255,255,255,0.7)",
+    paddingHorizontal: spacing.lg, 
+    marginBottom: 32,
   },
-  footerText: {
-    fontSize: 12,
-    color: "#9ca3af",
+
+  // ── End card ──
+  endCard: {
+    marginHorizontal: spacing.lg,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.border.subtle,
+    borderRadius: radius.lg, padding: 20,
+    alignItems: "center", gap: 8,
   },
-  reactionContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
+  endEmoji: { fontSize: 28, marginBottom: 4 },
+  endText: { fontSize: 13, color: colors.text.muted, marginBottom: 8 },
+  backBtnFull: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+    backgroundColor: colors.accent.purple,
+    paddingHorizontal: 20, paddingVertical: 11,
+    borderRadius: radius.full, marginTop: 4,
   },
-  countText: {
-    color: "#f3f4f6",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  
+  backBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 });

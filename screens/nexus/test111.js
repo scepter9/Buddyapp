@@ -1,64 +1,59 @@
-// WITH users_not_followed AS (
-//     SELECT DISTINCT f.receiver_id
-//     FROM follows f
-//     WHERE f.receiver_id != 3
-//     AND NOT EXISTS (
-//         SELECT 1
-//         FROM follows x
-//         WHERE x.sender_id = 3
-//         AND x.receiver_id = f.receiver_id
-//     )
-// ),
+import React, { useState } from 'react';
+import {View,Text, TextInput, TouchableOpacity} from 'react-native'
+import { Ionicons } from '@expo/vector-icons';
+function test111(props) {
+    const [isFocused,setisFocused]=useState(false)
+    const [isFocusedpass,setisFocusedpass]=useState(false)
+    const [issecure,setisSecure]=useState(false)
+    return (
+       <View style={{flex:1,alignItems:'center',justifyContent:'center',backgroundColor:'#0D1B2A',padding:15}}>
+        <View style={{alignItems:'center',justifyContent:'center',gap:8}}>
+<View style={{alignItems:'center',overflow:'hidden',justifyContent:'center',backgroundColor:'#1A936F'}}>
+  <Ionicons name='qr-code-outline' size={24} color='#ffffff'/>
+</View>
+<Text style={{fontSize:30,color:'#ffffff',fontWeight:'800'}}>VerifyQR Admin</Text>
+<Text style={{fontSize:18,color:'#94A3B8',fontWeight:'400'}}>Authorized access only</Text>
+        </View>
 
-// user_suggestions AS (
-//     SELECT 
-//         u.receiver_id AS id,
-//         p.username,
-//         p.fullname,
-//         p.image,
-//         'user' AS type,
-//         NULL AS members_count
-//     FROM users_not_followed u
-//     JOIN projecttables p 
-//         ON p.id = u.receiver_id
-// ),
+        <Text style={{fontSize:18,color:'#94A3B8',fontWeight:'400',marginBottom:5}}>Email address</Text>
+        <TextInput
+        value={email}
+        onChangeText={setemail}
+        placeholder='admin@company.com'
+        placeholderTextColor='#F7F8FC'
+        style={{width:'100%',height:50,padding:12,fontSize:12,borderRadius:14,borderColor:'#E2E8F0',backgroundColor:'#0D1B2A',borderWidth:1,paddingHorizontal:14,paddingVertical
+    :12,maxHeight:70,marginBottom:15
+    }}
+        multiline
+        maxLength={300}
+        onFocus={()=>setisFocused(true)}
+        onBlur={()=>setisFocused(false)}
+        />
+<View style={{flexDirection:'row',alignItems:'center',position:'relative'}}>
+<Text style={{fontSize:18,color:'#94A3B8',fontWeight:'400',marginBottom:5}}>Password</Text>
+        <TextInput
+        value={pass}
+        onChangeText={setpass}
+        placeholder='Enter you password'
+        placeholderTextColor='#F7F8FC'
+        style={{width:'100%',height:50,padding:12,fontSize:12,borderRadius:14,borderColor:'#E2E8F0',backgroundColor:'#0D1B2A',borderWidth:1,paddingHorizontal:14,paddingVertical
+    :12,maxHeight:70,marginBottom:15,}}
+        multiline
+        maxLength={300}
+        onFocus={()=>setisFocused(true)}
+        onBlur={()=>setisFocused(false)}
+        secureTextEntry={!issecure}
+        />
+        <TouchableOpacity onPress={()=>setisSecure(!issecure)} style={{position:'absolute',right:6}}>
+            <Ionicons name={!issecure ?'eye-off' :'eye'} size={20} color='#ffffff'/>
+        </TouchableOpacity>
+        </View>
+<View style={{paddingVertical:14,width:'100%',borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:'#1A936F',marginBottom:5}}>
+    <Text style={{fontSize:30,color:'#ffffff',fontWeight:'800'}}>Sign in </Text>
+</View>
 
-// room_suggestions AS (
-//     SELECT 
-//         r.id AS id,
-//         r.roomname AS username,
-//         r.roomdescription AS fullname,
-//         r.room_image AS image,
-//         'room' AS type,
-//         COUNT(rp.userid) AS members_count
-//     FROM createinterestroom r
-    
-//     LEFT JOIN roomparticipants rp
-//         ON rp.roomid = r.id
-    
-//     WHERE NOT EXISTS (
-//         SELECT 1
-//         FROM roomparticipants x
-//         WHERE x.roomid = r.id
-//         AND x.userid = 3
-//     )
-    
-//     GROUP BY r.id
-// )
+       </View>
+    );
+}
 
-// SELECT *
-// FROM (
-//     SELECT * FROM user_suggestions
-//     UNION ALL
-//     SELECT * FROM room_suggestions
-// ) AS combined_suggestions
-// ORDER BY RAND()
-// LIMIT 1;
-
-
-
-
-
-
-
-
+export default test111;

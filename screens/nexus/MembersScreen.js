@@ -128,7 +128,7 @@ try{
 return(
     <View style={styles.rowContainer}>
         <TouchableOpacity onPress={()=>navigation.navigate('Profile', { userId:item.userid })} style={styles.avatar}>
-            <Image source={{uri:`${API_BASE_URL}/uploads/${item.image}`}} style={StyleSheet.absoluteFill} resizeMode="cover"/>
+            <Image source={{uri:`${API_BASE_URL}${item.image}`}} style={StyleSheet.absoluteFill} resizeMode="cover"/>
         </TouchableOpacity>
         <View style={styles.textContainer}>
             <View style={styles.nameRow}>

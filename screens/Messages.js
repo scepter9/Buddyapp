@@ -19,6 +19,7 @@ import BottomNavigator from './BottomNavigator';
 import { AuthorContext } from './AuthorContext';
 import { io } from 'socket.io-client';
 import { useFocusEffect } from '@react-navigation/native';
+import socket from './Socket';
 
 const API_BASE_URL = "http://192.168.0.136:3000";
 
@@ -35,7 +36,7 @@ const MessageScreen = ({ navigation }) => {
   const [isSearching, setIsSearching] = useState(false);
 
   const fetchConversations = useCallback(async () => {
-    if (!myUserId) {
+    if (!myUserId ) {
       setIsLoadingConversations(false);
       Alert.alert('Error', 'User not logged in.');
       return;
@@ -83,7 +84,7 @@ const MessageScreen = ({ navigation }) => {
     navigation.navigate('MessageUser', {
       recipientId: recipient.id,
       recipientName: recipient.name,
-      recipientImage: recipient.image ? `${API_BASE_URL}/uploads/${recipient.image}` : null,
+      recipientImage: recipient.image ? `${API_BASE_URL}${recipient.image}` : null,
     });
   };
   useFocusEffect(
@@ -94,7 +95,6 @@ const MessageScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (!myUserId) return;
-    const newSocket = io(API_BASE_URL, { query: { userId: myUserId } });
 
     const handleNewMessage = async (message) => {
       const otherPersonId = message.senderId === myUserId ? message.receiverId : message.senderId;
@@ -152,14 +152,14 @@ const MessageScreen = ({ navigation }) => {
         return updatedConversations;
       });
     };
-    newSocket.on('newMessage', handleNewMessage);
-    return () => newSocket.disconnect();
+    socket.on('newMessage', handleNewMessage);
+    return () => socket.disconnect();
   }, [myUserId]);
 
   const handleConversationPress = (conversation) => {
    
     const imageUrl = conversation.other_user_image_uri
-    ? `${API_BASE_URL}/uploads/${conversation.other_user_image_uri}`
+    ? `${API_BASE_URL}${conversation.other_user_image_uri}`
     : null;
     navigation.navigate('MessageUser', {
       recipientId: conversation.other_user_id,
@@ -180,7 +180,7 @@ const MessageScreen = ({ navigation }) => {
       >
         <Image
           source={item.other_user_image_uri
-            ? { uri: `${API_BASE_URL}/uploads/${item.other_user_image_uri}` }
+            ? { uri: `${API_BASE_URL}${item.other_user_image_uri}` }
             : require('../assets/image16.jpeg')}
           style={styles.conversationAvatar}
         />
@@ -216,7 +216,7 @@ const MessageScreen = ({ navigation }) => {
       <Image
   source={
     item.image
-      ? { uri: `${API_BASE_URL}/uploads/${item.image}` }
+      ? { uri: `${API_BASE_URL}${item.image}` }
       : require('../assets/image16.jpeg')
   }
   style={styles.friendImage}
@@ -239,7 +239,7 @@ const MessageScreen = ({ navigation }) => {
       >
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>Messages</Text>
-          <TouchableOpacity style={styles.headerButton} onPress={openModal}>
+          <TouchableOpacity style={styles.headerButton}  onPress={() => navigation.navigate('FriendList', { userId: userProfile.id ,type:'message'})}>
             <Feather name="edit-3" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -273,47 +273,7 @@ const MessageScreen = ({ navigation }) => {
       </View>
       <BottomNavigator navigation={navigation} />
 
-      <Modal
-        visible={visible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={closeModal}
-      >
-        <View style={styles.modalWrapper}>
-          <View style={styles.modal}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={closeModal}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>New Chat</Text>
-              <View style={styles.spacer} />
-            </View>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Search name or username"
-              placeholderTextColor="#999"
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-            />
-
-            {isSearching ? (
-              <ActivityIndicator size="large" color="#1E3A8A" />
-            ) : friends.length > 0 ? (
-              <FlatList
-                data={friends}
-                renderItem={renderFriendItem}
-                keyExtractor={(item) => item.id.toString()}
-                contentContainerStyle={{ flexGrow: 1 }}
-              />
-            ) : (
-              <Text style={styles.noResultsText}>
-                {searchQuery ? 'No users found.' : 'Search for friends to start a new chat.'}
-              </Text>
-            )}
-          </View>
-        </View>
-      </Modal>
+     
     </SafeAreaView>
   );
 };

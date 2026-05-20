@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useContext,createContext, useCallback} from 'react';
+import React, {
+  useState,
+  useContext,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import {
   View,
   Text,
@@ -10,787 +16,692 @@ import {
   FlatList,
   Alert,
   Modal,
-  Image
+  Image,
+  ActivityIndicator,
+  StatusBar,
+  Animated,
 } from 'react-native';
-import BottomNavigator from '../BottomNavigator';
-import { useFocusEffect } from "@react-navigation/native";
-import { LinearGradient } from 'expo-linear-gradient';
-import { AuthorContext } from '../AuthorContext';
-import AsyncStorage from "@react-native-async-storage/async-storage";
-const API_BASE_URL = "http://192.168.0.136:3000";
 import { Feather } from '@expo/vector-icons';
-import { FontAwesome } from "@expo/vector-icons";
+import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
+import { AuthorContext } from '../AuthorContext';
+import BottomNavigator from '../BottomNavigator';
+import { colors, radius, spacing } from '../Theme';
+
+const API_BASE_URL = 'http://192.168.0.136:3000';
 
 
-function ActiveRooms({ item, navigation,variant ,isjoined}) {
+function PasscodeModal({ visible, onClose, onSubmit, error }) {
+  const [passcode, setPasscode] = useState('');
+
+  const handleSubmit = () => {
+    onSubmit(passcode);
+    setPasscode('');
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={m.overlay}>
+        <View style={m.box}>
+          <LinearGradient
+            colors={['rgba(147,51,234,0.15)', 'rgba(99,102,241,0.08)']}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <View style={m.iconWrap}>
+            <Feather name="lock" size={22} color="#c084fc" />
+          </View>
+          <Text style={m.title}>Private Room</Text>
+          <Text style={m.sub}>Enter the passcode to join</Text>
+
+          <TextInput
+            style={[m.input, error && m.inputError]}
+            value={passcode}
+            onChangeText={setPasscode}
+            placeholder="Passcode"
+            placeholderTextColor="rgba(255,255,255,0.2)"
+            secureTextEntry
+            autoFocus
+          />
+          {error && (
+            <Text style={m.errorText}>Incorrect passcode. Try again.</Text>
+          )}
+
+          <View style={m.actions}>
+            <TouchableOpacity style={m.cancelBtn} onPress={onClose}>
+              <Text style={m.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={m.submitBtn}
+              onPress={handleSubmit}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={['#9333ea', '#6366f1']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={m.submitGrad}
+              >
+                <Text style={m.submitText}>Join</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const m = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  box: {
+    width: '100%',
+    backgroundColor: '#13111f',
+    borderRadius: radius.xl,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(147,51,234,0.25)',
+    overflow: 'hidden',
+  },
+  iconWrap: {
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: 'rgba(147,51,234,0.15)',
+    borderWidth: 1, borderColor: 'rgba(147,51,234,0.3)',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+  },
+  title: { fontSize: 18, fontWeight: '800', color: colors.text.primary, marginBottom: 4 },
+  sub: { fontSize: 12, color: colors.text.muted, marginBottom: 18 },
+  input: {
+    width: '100%',
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.border.subtle,
+    borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 12,
+    color: colors.text.primary, fontSize: 15, marginBottom: 8,
+    letterSpacing: 2,
+  },
+  inputError: { borderColor: 'rgba(239,68,68,0.5)' },
+  errorText: { fontSize: 12, color: '#f87171', marginBottom: 8, alignSelf: 'flex-start' },
+  actions: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 8 },
+  cancelBtn: {
+    flex: 1, paddingVertical: 13, borderRadius: radius.md,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.border.subtle,
+    alignItems: 'center',
+  },
+  cancelText: { color: 'rgba(255,255,255,0.4)', fontWeight: '600' },
+  submitBtn: { flex: 1, borderRadius: radius.md, overflow: 'hidden' },
+  submitGrad: { paddingVertical: 13, alignItems: 'center' },
+  submitText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+});
+
+
+const RoomCard = React.memo(function RoomCard({ item, navigation, isJoined }) {
   const { user } = useContext(AuthorContext);
-
   const sender = user?.id;
 
-  
- 
-  const [openmodal, setopenmodal] = useState(false);
-  const [joined,setjoined]=useState(false)
-  const [title, setTitle] = useState('');
-  const [checkvalue, setcheckvalue] = useState(false);
-const [roomusers,setRoomusers]=useState([])
-  
-  useEffect(()=>{
-    const thefetched=async()=>{
-        try{
-      const res=await fetch(`${API_BASE_URL}/imagefromusers?roomidforimage=${item.id}`)
-      if(!res.ok){
-        console.log('something is wrong');
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const [modalVisible, setModalVisible] = useState(false);
+  const [passcodeError, setPasscodeError] = useState(false);
+  const [roomUsers, setRoomUsers] = useState([]);
+
+  // Fetch member avatars
+  React.useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/imagefromusers?roomidforimage=${item.id}`
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        setRoomUsers(data);
+      } catch (err) {
+        // BUG FIX: don't throw inside useEffect — silent fail is fine here
+        console.warn('RoomCard avatar fetch:', err.message);
       }
-      const data=await res.json()
-      setRoomusers(data)
-    }catch(err){
-      throw new Error(err)
-    }
-  }
-  thefetched()
-  },[item.id])
-  const checkPassword = async () => {
-    if (title.trim().length === 0) {
-      Alert.alert('Please input a value');
+    };
+    fetchUsers();
+  }, [item.id]);
+
+  const onPressIn = () =>
+    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, tension: 120, friction: 8 }).start();
+  const onPressOut = () =>
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 120, friction: 8 }).start();
+
+  const navigateToRoom = () => {
+    navigation.navigate('DesignersHubScreen', {
+      roomid: item.id,
+      roomname: item.roomname,
+      roomcreator: item.creatorid,
+    });
+  };
+
+  const checkPassword = async (passcode) => {
+    if (!passcode.trim()) {
+      Alert.alert('Enter passcode', 'Please type the passcode first.');
       return;
     }
-  
     try {
       const res = await fetch(`${API_BASE_URL}/join-private-room`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          roomId: item.id,
-          userId: sender,
-          passcode: title,
-        }),
+        body: JSON.stringify({ roomId: item.id, userId: sender, passcode }),
       });
-  
-      const data = await res.json();
-  
       if (!res.ok) {
-        // wrong passcode or server error
-        setcheckvalue(true);
-        setTitle('');
+        setPasscodeError(true);
         return;
       }
-  
-      // ✅ success
-      setcheckvalue(false);
-      setopenmodal(false);
-      setjoined(true);
-      navigation.navigate('DesignersHubScreen',{ roomid:item.id ,roomname:item.roomname,roomcreator:item.creatorid});
-  
+      setPasscodeError(false);
+      setModalVisible(false);
+      navigateToRoom();
     } catch (err) {
-      console.log('Failed to join private room', err);
+      console.warn('Private room join error:', err.message);
     }
   };
-  
-  
-  
 
-  const handlemodes = async () => {
-    const roomid = item.id;
-  
+  const handlePress = async () => {
     try {
       const res = await fetch(
-        `${API_BASE_URL}/checkroommembers?userid=${sender}&room_id=${roomid}`
+        `${API_BASE_URL}/checkroommembers?userid=${sender}&room_id=${item.id}`
       );
-  
-      if (!res.ok) return console.log('Check failed');
-  
-      const data = await res.json();
-  
-      // Already joined
-      if (data) {
-        navigation.navigate('DesignersHubScreen', {
-          roomid,
-          roomname: item.roomname,
-          roomcreator: item.creatorid,
-        });
+      if (!res.ok) return;
+      const alreadyJoined = await res.json();
+
+      if (alreadyJoined) {
+        navigateToRoom();
         return;
       }
-  
-      // Public room → join directly
+
       if (item.selectmode === 'public') {
-        const res2 = await fetch(`${API_BASE_URL}/postroommembers`, {
+        const joinRes = await fetch(`${API_BASE_URL}/postroommembers`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            roomid,
-            userid: sender,
-          }),
+          body: JSON.stringify({ roomid: item.id, userid: sender }),
         });
-  
-        if (!res2.ok) {
-          console.log('Failed to join room');
-          return;
-        }
-  
-        navigation.navigate('DesignersHubScreen', {
-          roomid,
-          roomname: item.roomname,
-          roomcreator: item.creatorid,
-        });
+        if (!joinRes.ok) return;
+        navigateToRoom();
         return;
       }
-  
-      // Private room → show modal
+
       if (item.selectmode === 'private') {
-        setopenmodal(true);
+        setPasscodeError(false);
+        setModalVisible(true);
       }
     } catch (err) {
-      console.log('Something went wrong:', err);
+      console.warn('handlePress error:', err.message);
     }
   };
-  
+
+  const isPrivate = item.selectmode === 'private';
+
   return (
-    <View
-    style={[
-      styles.spaceCard,
-      variant === 'search' && styles.searchCard,
-      variant === 'joined' && styles.joinedCard,
-    ]}
-  >
-  
-      {/* Styled Modal */}
-      <Modal
-        visible={openmodal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setopenmodal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>🔐 Enter Room Passcode</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Enter passcode"
-              placeholderTextColor="#999"
-              secureTextEntry
-            />
-            {checkvalue && (
-              <Text style={styles.errorText}>Incorrect passcode. Try again.</Text>
-            )}
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#00d9ff' }]}
-                onPress={checkPassword}
-              >
-                <Text style={styles.modalBtnText}>Check</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: 'rgba(255,255,255,0.1)' }]}
-                onPress={() => setopenmodal(false)}
-              >
-                <Text style={[styles.modalBtnText, { color: '#ccc' }]}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Room Card */}
-      <View style={styles.spaceTop}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-  {item.icon ? (
-    <Text style={{ fontSize: 20 }}>{item.icon}</Text>
-  ) : (
-    <FontAwesome name="comments" size={20} color="#fff" />
-  )}
-</View>
-
-          <View>
-            <Text style={styles.roomName}># {item.roomname}</Text>
-            <View style={{ flexDirection: 'row', marginTop: 6 }}>
-  {roomusers.map((uri, index) => (
-    <View
-      key={index}
-      style={[
-        styles.image,
-        { marginLeft: index === 0 ? 0 : -12 }
-      ]}
-    >
-      <Image
-        source={{ uri: `${API_BASE_URL}/uploads/${uri.image}` }}
-        style={StyleSheet.absoluteFillObject}
+    <>
+      <PasscodeModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        onSubmit={checkPassword}
+        error={passcodeError}
       />
-    </View>
-  ))}
-</View>
 
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <TouchableOpacity
+          onPress={handlePress}
+          onPressIn={onPressIn}
+          onPressOut={onPressOut}
+          activeOpacity={1}
+          style={[s.roomCard, isJoined && s.roomCardJoined]}
+        >
+          {/* Room type accent line */}
+          <LinearGradient
+            colors={isJoined ? ['#34d399', 'transparent'] : ['#9333ea', 'transparent']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={s.roomAccent}
+          />
 
-            <Text style={styles.roomMeta}>{item.members_count || 'No'} members</Text>
+          {/* Top row */}
+          <View style={s.roomTop}>
+            <View style={s.roomIconWrap}>
+              {item.icon ? (
+                <Text style={{ fontSize: 22 }}>{item.icon}</Text>
+              ) : (
+                <Feather name="hash" size={20} color={colors.accent.lavender} />
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={s.roomNameRow}>
+                <Text style={s.roomName} numberOfLines={1}>
+                  {item.roomname}
+                </Text>
+                {isPrivate && (
+                  <View style={s.privateBadge}>
+                    <Feather name="lock" size={9} color="#fbbf24" />
+                    <Text style={s.privateBadgeText}>PRIVATE</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={s.roomType}>{item.selecttype}</Text>
+            </View>
+
+            {/* Join / View button */}
+            <TouchableOpacity
+              style={[s.joinBtn, isJoined && s.viewBtn]}
+              onPress={handlePress}
+              activeOpacity={0.85}
+            >
+              <Text style={[s.joinText, isJoined && s.viewText]}>
+                {isJoined ? 'View' : 'Join'}
+              </Text>
+            </TouchableOpacity>
           </View>
-        </View>
-        <Text style={styles.mutedSmall}>{item.selecttype}</Text>
-      </View>
 
-      <Text style={styles.roomDesc}>{item.roomdescription}</Text>
+          {/* Description */}
+          {item.roomdescription ? (
+            <Text style={s.roomDesc} numberOfLines={2}>
+              {item.roomdescription}
+            </Text>
+          ) : null}
 
-      <TouchableOpacity
-        onPress={handlemodes}
-        style={[styles.joinBtn, isjoined && styles.joinedBtn]}
-      >
-        <Text style={[styles.joinText, isjoined && styles.joinedText]}>
-          {isjoined ? 'View' : 'Join'}
-        </Text>
-      </TouchableOpacity>
-   
+          {/* Footer — member avatars + count */}
+          <View style={s.roomFooter}>
+            {/* Stacked avatars */}
+            <View style={s.avatarStack}>
+              {roomUsers.slice(0, 4).map((u, i) => (
+                <View
+                  key={i}
+                  style={[s.avatarItem, { marginLeft: i === 0 ? 0 : -10 }]}
+                >
+                  <Image
+                    source={{ uri: `${API_BASE_URL}${u.image}` }}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                </View>
+              ))}
+            </View>
+            <Text style={s.memberCount}>
+              {item.members_count ?? 0} member{item.members_count !== 1 ? 's' : ''}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    </>
+  );
+});
+
+// ─────────────────────────────────────────
+// Section header
+// ─────────────────────────────────────────
+function SectionHeader({ label, sub }) {
+  return (
+    <View style={s.sectionHeader}>
+      <View style={s.sectionDot} />
+      <Text style={s.sectionLabel}>{label}</Text>
+      {sub && <Text style={s.sectionSub}>{sub}</Text>}
     </View>
   );
 }
 
-function HappeningNow({item}){
-return(
-  <View style={styles.liveCard}>
-              <Text style={styles.meta}>🎯 {item.tag}</Text>
-              <Text style={styles.liveDesc}>{item.desc}</Text>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{item.badge}</Text>
-              </View>
-            </View>
-)
-}
-const InterestRoom = ({navigation}) => {
-  
+// ─────────────────────────────────────────
+// Main screen
+// ─────────────────────────────────────────
+export default function InterestRoom({ navigation }) {
   const { user } = useContext(AuthorContext);
   const sender = user?.id;
-  const [activeroom,Setactiveroom]=useState([])
-  const [IsHappeningNow,SetHappeningNow]=useState([])
-  const [yourroom,setyourroom]=useState([])
-  const [searchQuery,setSearchQuery]=useState('')
-   const [search,setSearch]=useState([])
-  const [loading,setloading]=useState(false)
 
-  useEffect(()=>{
-    if(searchQuery.trim().length===0){
-      setSearch([])
-      
+  const [activeRooms, setActiveRooms] = useState([]);
+  const [joinedRooms, setJoinedRooms] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // BUG FIX: precompute joined room IDs as a Set — O(1) lookup per card
+  const joinedRoomIds = useMemo(
+    () => new Set(joinedRooms.map(r => r.id)),
+    [joinedRooms]
+  );
+
+  // BUG FIX: merged both useFocusEffect calls into one
+  useFocusEffect(
+    useCallback(() => {
+      const fetchAll = async () => {
+        setLoading(true);
+        try {
+          const [activeRes, joinedRes] = await Promise.all([
+            fetch(`${API_BASE_URL}/getactiverooms`),
+            fetch(`${API_BASE_URL}/getjoinroom?yourid=${sender}`),
+          ]);
+
+          if (activeRes.ok) {
+            const data = await activeRes.json();
+            setActiveRooms(data);
+          }
+          if (joinedRes.ok) {
+            const data = await joinedRes.json();
+            setJoinedRooms(data);
+          }
+        } catch (err) {
+          console.warn('InterestRoom fetch error:', err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchAll();
+    }, [sender])
+  );
+
+  // Search with debounce
+  React.useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
       return;
     }
-    const searchInterestroom=setTimeout(async()=>{
-      setloading(true)
-      try{
-        const res=await fetch(`${API_BASE_URL}/searchinterestroom?search=${searchQuery}`);
-        if(!res.ok){
-          console.log('something went wrong');
-          return;
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/searchinterestroom?search=${searchQuery.trim()}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data);
         }
-        const val=await res.json();
-setSearch(val)
-      }catch(err){
-        console.log('something went wrong');
+      } catch (err) {
+        console.warn('Search error:', err.message);
+      } finally {
+        setSearching(false);
       }
-      setloading(false)
-    },300)
-    return()=>clearTimeout(searchInterestroom);
-  },[searchQuery])
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-// useEffect(()=>{
-//   const FetchHappeningnow=async()=>{
-//     try{
-//       const res=await fetch(`${API_BASE_URL}/fetchhappening`)
-//       if(!res.ok){
-//         console.log('Something went wrong');
-//         return;
-//       }
-//   const answer=await res.json()
-//   SetHappeningNow(answer)
-//     }catch(err){
-//       console.log('An error occured');
-//     }
-//   }
-//   FetchHappeningnow()
-// },[])
-useFocusEffect(
-  useCallback(()=>{
+  const isSearching = searchQuery.trim().length > 0;
 
-    const FetchActiveRooms=async()=>{
-      try{
-        const response=await fetch(`${API_BASE_URL}/getactiverooms`);
-        if(!response.ok){
-          console.log('An error occured');
-          return;
-        }
-const data=await response.json();
-Setactiveroom(data)
-      }catch(err){
-        console.log('An error occured');
-      }
-      
-    }
-    FetchActiveRooms()
-  },[])
-)
-useFocusEffect(
-  useCallback(()=>{
-    const fetchjoinedrooms=async()=>{
-      try{
-        const response=await fetch(`${API_BASE_URL}/getjoinroom?yourid=${sender}`)
-        if(!response.ok){
-          console.log('something happened that caused the issue');
-        }
-        const data=await response.json();
-        setyourroom(data)
-      }catch(err){
-      console.log('An error occured');
-      }
-    }
-    fetchjoinedrooms()
-  },[])
-)
   return (
-    <SafeAreaView style={styles.safeview}>
-    <ScrollView style={styles.container}
-    contentContainerStyle={{ paddingBottom: 100 }}
-    >
-      {/* TOPBAR */}
-      <View style={styles.topbar}>
-        <View style={styles.brand}>
-          <View style={styles.logo}>
-            <Text style={styles.logoText}>MC</Text>
-          </View>
+    <SafeAreaView style={s.safe}>
+      <StatusBar barStyle="light-content" />
+
+      <View style={s.blobTR} pointerEvents="none" />
+      <View style={s.blobBL} pointerEvents="none" />
+
+      {/* ── Header ── */}
+      <View style={s.header}>
+        <View style={s.headerLeft}>
+          <LinearGradient colors={['#9333ea', '#6366f1']} style={s.headerIcon}>
+            <Feather name="radio" size={16} color="#fff" />
+          </LinearGradient>
           <View>
-            <Text style={styles.brandTitle}>Mission Control</Text>
-            <Text style={styles.brandSubtitle}>
-              Interest Rooms • Collaboration Hub
-            </Text>
+            <Text style={s.headerTitle}>Mission Control</Text>
+            <Text style={s.headerSub}>Interest Rooms</Text>
           </View>
         </View>
-
-        <TouchableOpacity onPress={() => navigation.navigate("CreateRoomScreen")}>
-          <Text style={styles.icon}>Create</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* HERO */}
-      <View style={styles.hero}>
-        <View style={styles.heroTop}>
-          <View style={styles.heroIcon}>
-            <Text style={{ fontSize: 20 }}>🚀</Text>
-          </View>
-          <View>
-            <Text style={styles.heroLabel}>YOUR COLLABORATION HUB</Text>
-            <Text style={styles.heroTitle}>Explore Your Interests</Text>
-            <Text style={styles.heroSubtitle}>
-              Find your tribe, build the future.
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.searchBar}>
-          <Text style={{ fontSize: 18 }}>🔍</Text>
-          <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-            style={styles.input}
-            placeholder="Find rooms..."
-            placeholderTextColor="rgba(234,246,255,0.6)"
-          />
-          <Text style={styles.kbd}>⌘K</Text>
-        </View>
-        {loading && (
-          <Text>loading rooms....</Text>
-         
-        )}
-         <FlatList
-         scrollEnabled={false}
-         data={search}
-         keyExtractor={(item)=>`search-${item.id}`}
-         renderItem={({item})=>(
-         <ActiveRooms item={item} navigation={navigation} variant="search"/>
-         )}
-          contentContainerStyle={{gap:16}}
-         
-         />
-      </View>
-
-      {/* LIVE ACTIVITY */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitle}>
-            <Text>🔥</Text>
-            <Text style={styles.sectionTitleText}>Happening Now</Text>
-          </View>
-          <Text style={styles.muted}>Live • real-time</Text>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.live}
+        <TouchableOpacity
+          style={s.createBtn}
+          onPress={() => navigation.navigate('CreateRoomScreen')}
+          activeOpacity={0.85}
         >
-          <FlatList
-           scrollEnabled={false}
-          data={IsHappeningNow}
-          keyExtractor={(item)=>item.id?.toString()}
-          renderItem={({item})=>(
-            <HappeningNow item={item}/>
-          )}
-          />
-          
-        </ScrollView>
-        
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitleText}> Joined Rooms</Text>
-          <Text style={styles.muted}>Quick access</Text>
-        </View>
-<FlatList
- scrollEnabled={false}
-data={yourroom}
-keyExtractor={(item)=>`joined-${item.id}`}
-renderItem={({item})=>(
-  <ActiveRooms item={item} navigation={navigation} variant="joined" isjoined={true}/>
-)}
-ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-/>
-       
-      </View>
-
-
-
-
-      {/* YOUR SPACES */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitleText}> Active Communities</Text>
-          <Text style={styles.muted}>Quick access</Text>
-        </View>
-<FlatList
- scrollEnabled={false}
-data={activeroom}
-keyExtractor={(item)=>`active-${item.id}`}
-renderItem={({item})=>(
-  <ActiveRooms item={item} navigation={navigation}  variant="active" isjoined={yourroom.some((r)=>r.id===item.id)}/>
-)}
-ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-/>
-       
-      </View>
-
-      {/* PITCH BUTTON SECTION */}
-      {/* <View style={styles.pitchSection}>
-        <Text style={styles.pitchCatch}>
-          💡 Got an idea worth sharing? Turn your thoughts into action with a pitch.
-        </Text>
-        <TouchableOpacity style={styles.pitchBtn} onPress={()=>navigation.navigate('PitchDeck')}>
-          <Text style={styles.pitchBtnText}>View Pitches</Text>
+          <Feather name="plus" size={16} color="#c084fc" />
+          <Text style={s.createBtnText}>Create</Text>
         </TouchableOpacity>
-      </View> */}
-    
+      </View>
 
-    </ScrollView>
-    <BottomNavigator navigation={navigation}/>
+      <LinearGradient
+        colors={['transparent', '#9333ea', 'transparent']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={s.headerDivider}
+      />
+
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={s.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+
+        {/* ── Search bar ── */}
+        <View style={s.searchWrap}>
+          <Feather name="search" size={16} color="rgba(255,255,255,0.3)" />
+          <TextInput
+            style={s.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Find rooms..."
+            placeholderTextColor="rgba(255,255,255,0.2)"
+            returnKeyType="search"
+          />
+          {/* BUG FIX: replaced Text 'loading rooms....' with ActivityIndicator */}
+          {searching ? (
+            <ActivityIndicator size="small" color={colors.accent.lavender} />
+          ) : searchQuery.length > 0 ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Feather name="x" size={15} color="rgba(255,255,255,0.3)" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {/* ── Search results ── */}
+        {isSearching && (
+          <View style={s.section}>
+            {searchResults.length === 0 && !searching ? (
+              <View style={s.emptyState}>
+                <Text style={s.emptyEmoji}>🔍</Text>
+                <Text style={s.emptyText}>No rooms found for "{searchQuery}"</Text>
+              </View>
+            ) : (
+              // BUG FIX: replaced FlatList inside ScrollView with .map()
+              searchResults.map(item => (
+                <RoomCard
+                  key={`search-${item.id}`}
+                  item={item}
+                  navigation={navigation}
+                  isJoined={joinedRoomIds.has(item.id)}
+                />
+              ))
+            )}
+          </View>
+        )}
+
+        {!isSearching && (
+          <>
+            {/* ── Joined rooms ── */}
+            {joinedRooms.length > 0 && (
+              <View style={s.section}>
+                <SectionHeader label="YOUR ROOMS" sub="Quick access" />
+                {/* BUG FIX: .map() instead of FlatList inside ScrollView */}
+                {joinedRooms.map(item => (
+                  <RoomCard
+                    key={`joined-${item.id}`}
+                    item={item}
+                    navigation={navigation}
+                    isJoined
+                  />
+                ))}
+              </View>
+            )}
+
+            {/* ── Active communities ── */}
+            <View style={s.section}>
+              <SectionHeader label="ACTIVE COMMUNITIES" sub="Discover" />
+              {loading ? (
+                <View style={s.loadingWrap}>
+                  <ActivityIndicator color={colors.accent.purple} />
+                  <Text style={s.loadingText}>Loading rooms...</Text>
+                </View>
+              ) : activeRooms.length === 0 ? (
+                <View style={s.emptyState}>
+                  <Text style={s.emptyEmoji}>🏠</Text>
+                  <Text style={s.emptyText}>No active rooms yet</Text>
+                  <TouchableOpacity
+                    style={s.emptyAction}
+                    onPress={() => navigation.navigate('CreateRoomScreen')}
+                  >
+                    <Text style={s.emptyActionText}>Create the first one</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                activeRooms.map(item => (
+                  <RoomCard
+                    key={`active-${item.id}`}
+                    item={item}
+                    navigation={navigation}
+                    isJoined={joinedRoomIds.has(item.id)}
+                  />
+                ))
+              )}
+            </View>
+          </>
+        )}
+
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      <BottomNavigator navigation={navigation} />
     </SafeAreaView>
   );
-};
+}
 
-export default InterestRoom;
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.bg.screen },
 
-const styles = StyleSheet.create({
- 
-  safeview:{
-    flex:1,
-    backgroundColor: '#0f1a2c',
+  blobTR: {
+    position: 'absolute', width: 260, height: 260, borderRadius: 130,
+    backgroundColor: 'rgba(147,51,234,0.08)', top: -80, right: -80,
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#0f1a2c',
-    padding: 20,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  modalBox: {
-    width: '100%',
-    backgroundColor: '#0f1a2c',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#00d9ff',
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  modalTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 14,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    color: '#fff',
-    borderRadius: 10,
-    padding: 10,
-    fontSize: 15,
-    marginBottom: 10,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 10,
-  },
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  modalBtnText: {
-    color: '#031426',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  errorText: {
-    color: '#ff6b6b',
-    textAlign: 'center',
-    fontSize: 13,
+  blobBL: {
+    position: 'absolute', width: 200, height: 200, borderRadius: 100,
+    backgroundColor: 'rgba(99,102,241,0.06)', bottom: 100, left: -80,
   },
 
-  topbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  // ── Header ──
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg, paddingVertical: 14,
   },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  logo: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#00d9ff',
-    alignItems: 'center',
-    justifyContent: 'center',
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerIcon: {
+    width: 38, height: 38, borderRadius: 11,
+    alignItems: 'center', justifyContent: 'center',
   },
-  logoText: { fontWeight: '800', color: '#031426' },
-  brandTitle: { color: '#eaf6ff', fontWeight: '700', fontSize: 14 },
-  brandSubtitle: { color: 'rgba(234,246,255,0.6)', fontSize: 11 },
-  icon: { fontSize: 18, color: 'rgba(234,246,255,0.6)' },
+  headerTitle: { fontSize: 16, fontWeight: '800', color: colors.text.primary },
+  headerSub: { fontSize: 11, color: colors.text.muted, marginTop: 1 },
+  headerDivider: { height: 1, marginBottom: 10 },
+  createBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(147,51,234,0.12)',
+    borderWidth: 1, borderColor: 'rgba(147,51,234,0.25)',
+    borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8,
+  },
+  createBtnText: { fontSize: 13, fontWeight: '700', color: '#c084fc' },
 
-  hero: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 18,
-    padding: 16,
-    marginTop: 16,
-  },
-  heroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  heroIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#00d9ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroLabel: { color: '#00d9ff', fontWeight: '700', fontSize: 13 },
-  heroTitle: { color: '#fff', fontWeight: '800', fontSize: 22 },
-  heroSubtitle: { color: 'rgba(234,246,255,0.6)', fontSize: 13 },
+  // ── Scroll ──
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: spacing.lg },
 
-  spaceCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 20,
-    padding: 16,
-    marginVertical: 6,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    shadowColor: '#00d9ff',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 8,
+  // ── Search ──
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.border.subtle,
+    borderRadius: radius.lg, paddingHorizontal: 14, paddingVertical: 11,
+    marginBottom: 20,
   },
-  spaceTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  roomIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,217,255,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,217,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#00d9ff',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  roomName: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 17,
-    letterSpacing: 0.3,
-  },
-  roomMeta: {
-    color: 'rgba(234,246,255,0.65)',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  roomDesc: {
-    color: 'rgba(234,246,255,0.75)',
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 6,
-  },
-  
-  joinBtn: {
-    marginTop: 14,
-    paddingVertical: 11,
-    paddingHorizontal: 20,
-    borderRadius: 14,
-    alignSelf: 'flex-start',
-    backgroundColor:'white',
-    // backgroundColor: 'linear-gradient(90deg, #00d9ff, #0077ff)',
-    shadowColor: '#00d9ff',
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  joinText: {
-    color: '#031426',
-    fontWeight: '800',
-    fontSize: 15,
-    letterSpacing: 0.5,
-  },
-  joinedBtn: {
-    backgroundColor: 'rgba(0,217,255,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,217,255,0.4)',
-    shadowColor: '#00d9ff',
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  joinedText: {
-    color: '#00d9ff',
-    fontWeight: '700',
-  },
-  searchCard: {
-    borderWidth: 1,
-    borderColor: 'rgba(0,217,255,0.5)',
-    backgroundColor: 'rgba(0,217,255,0.07)',
-    shadowColor: '#00d9ff',
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 7,
-  },
-  joinedCard: {
-    backgroundColor: 'rgba(0,255,128,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,255,128,0.4)',
-    shadowColor: '#00ff80',
-    shadowOpacity: 0.35,
-    shadowRadius: 9,
-    elevation: 6,
-  },
-  
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  input: {
-    flex: 1,
-    color: '#fff',
-    marginLeft: 8,
-    fontSize: 15,
-  },
-  kbd: {
-    fontSize: 11,
-    color: 'rgba(234,246,255,0.6)',
-  },
+  searchInput: { flex: 1, color: colors.text.primary, fontSize: 14 },
 
-  section: { marginTop: 28 },
+  // ── Section ──
+  section: { marginBottom: 24 },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 12,
   },
-  sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sectionTitleText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  muted: { color: 'rgba(234,246,255,0.6)', fontSize: 13 },
-  mutedSmall: { color: 'rgba(234,246,255,0.6)', fontSize: 12 },
+  sectionDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.accent.purple },
+  sectionLabel: {
+    fontSize: 10, fontWeight: '800', letterSpacing: 1.8, color: colors.text.secondary,
+    flex: 1,
+  },
+  sectionSub: { fontSize: 11, color: colors.text.muted },
 
-  live: { marginTop: 10 },
-  liveCard: {
-    minWidth: 200,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 14,
-    padding: 12,
-    marginRight: 12,
+  // ── Room card ──
+  roomCard: {
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.border.subtle,
+    borderRadius: radius.lg, padding: 14,
+    marginBottom: 10, overflow: 'hidden',
   },
-  meta: { color: 'rgba(234,246,255,0.6)', fontSize: 12, marginBottom: 6 },
-  liveDesc: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  badge: {
-    marginTop: 8,
-    backgroundColor: 'rgba(0,217,255,0.08)',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 12,
+  roomCardJoined: {
+    borderColor: 'rgba(52,211,153,0.2)',
+    backgroundColor: 'rgba(52,211,153,0.04)',
   },
-  badgeText: { color: '#eaf6ff', fontWeight: '700', fontSize: 13 },
+  roomAccent: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+  },
+  roomTop: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8,
+  },
+  roomIconWrap: {
+    width: 40, height: 40, borderRadius: 11,
+    backgroundColor: 'rgba(147,51,234,0.12)',
+    borderWidth: 1, borderColor: 'rgba(147,51,234,0.2)',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  roomNameRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 2 },
+  roomName: { fontSize: 14, fontWeight: '800', color: colors.text.primary, flex: 1 },
+  privateBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: 'rgba(251,191,36,0.1)',
+    borderWidth: 1, borderColor: 'rgba(251,191,36,0.25)',
+    borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2,
+  },
+  privateBadgeText: { fontSize: 7, fontWeight: '800', color: '#fbbf24', letterSpacing: 1 },
+  roomType: { fontSize: 10, color: colors.text.muted, fontWeight: '500' },
+  roomDesc: {
+    fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 17, marginBottom: 10,
+  },
 
-  spaces: { marginTop: 14, gap: 12 },
+  // Join / View
+  joinBtn: {
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.full,
+    backgroundColor: colors.accent.purple,
+    flexShrink: 0,
+  },
+  joinText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  viewBtn: {
+    backgroundColor: 'rgba(52,211,153,0.12)',
+    borderWidth: 1, borderColor: 'rgba(52,211,153,0.3)',
+  },
+  viewText: { color: '#34d399', fontWeight: '700', fontSize: 12 },
 
+  // Footer
+  roomFooter: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatarStack: { flexDirection: 'row' },
+  avatarItem: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: 'rgba(147,51,234,0.2)',
+    borderWidth: 1.5, borderColor: colors.bg.screen,
+    overflow: 'hidden',
+  },
+  memberCount: { fontSize: 11, color: colors.text.muted, fontWeight: '500' },
 
-  pitchSection: {
-    marginTop: 40,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 18,
-    padding: 18,
-    alignItems: 'center',
+  // ── States ──
+  loadingWrap: { alignItems: 'center', gap: 10, paddingVertical: 30 },
+  loadingText: { fontSize: 13, color: colors.text.muted },
+  emptyState: { alignItems: 'center', paddingVertical: 30, gap: 8 },
+  emptyEmoji: { fontSize: 36, marginBottom: 4 },
+  emptyText: { fontSize: 14, color: colors.text.muted, textAlign: 'center' },
+  emptyAction: {
+    marginTop: 8, backgroundColor: 'rgba(147,51,234,0.15)',
+    borderWidth: 1, borderColor: 'rgba(147,51,234,0.25)',
+    borderRadius: radius.full, paddingHorizontal: 16, paddingVertical: 8,
   },
-  pitchCatch: {
-    color: 'rgba(234,246,255,0.8)',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  pitchBtn: {
-    backgroundColor: '#00d9ff',
-    paddingVertical: 12,
-    paddingHorizontal: 22,
-    borderRadius: 12,
-  },
-  pitchBtnText: {
-    color: '#031426',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  image:{
-    width:40,
-    height:
-    40,
-    borderRadius:20,
-    borderColor:'transparent',
-    overflow:'hidden',
-    alignItems:'center',
-    justifyContent:'center',
-    position:'relative'
-
-  }
+  emptyActionText: { fontSize: 13, fontWeight: '700', color: '#c084fc' },
 });

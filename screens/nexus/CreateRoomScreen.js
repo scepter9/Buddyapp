@@ -50,7 +50,7 @@ export default function CreateRoomScreen({ navigation }) {
     setroompasskey(key);
   
     if (selectmode === "private") {
-      setopenmodal(true); // show modal only for private rooms
+      setopenmodal(true); 
     }
   
     try {

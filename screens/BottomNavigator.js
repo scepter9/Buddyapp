@@ -8,149 +8,177 @@ import {
   Platform,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
+import { useNavigationState } from "@react-navigation/native";
 import { UnreadMessagesContext } from "./UnreadMessagesContext";
 
-function BottomNavigator({ navigation }) {
-  const { unreadCount } = useContext(UnreadMessagesContext);
 
-  // Animated pulse for badge
+const TABS = [
+  { name: "About",    icon: "home",    label: "Home"     },
+  { name: "Messages", icon: "mail",    label: "Messages" },
+  { name: "Profile",  icon: "user",    label: "Profile"  },
+];
+
+function TabButton({ tab, isActive, onPress, badge, pulseAnim }) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () =>
+    Animated.spring(scaleAnim, { toValue: 0.88, useNativeDriver: true, tension: 200, friction: 10 }).start();
+  const onPressOut = () =>
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 200, friction: 10 }).start();
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      activeOpacity={1}
+      style={styles.tabBtn}
+    >
+      <Animated.View style={[styles.tabInner, { transform: [{ scale: scaleAnim }] }]}>
+        {/* Active pill behind icon */}
+        {isActive && <View style={styles.activePill} />}
+
+        <View style={{ position: "relative" }}>
+          <Feather
+            name={tab.icon}
+            size={20}
+            color={isActive ? "#c084fc" : "rgba(255,255,255,0.3)"}
+          />
+          {/* Unread badge */}
+          {badge > 0 && (
+            <Animated.View style={[styles.badge, { transform: [{ scale: pulseAnim }] }]}>
+              <Text style={styles.badgeText}>
+                {badge > 99 ? "99+" : badge < 1000 ? badge : (badge / 1000).toFixed(1) + "k"}
+              </Text>
+            </Animated.View>
+          )}
+        </View>
+
+        <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+          {tab.label}
+        </Text>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
+export default function BottomNavigator({ navigation }) {
+  const { unreadCount } = useContext(UnreadMessagesContext);
   const pulseAnim = useRef(new Animated.Value(1)).current;
- 
+
+  // Get current route name for active state
+  const currentRoute = useNavigationState((state) => {
+    const route = state?.routes?.[state.index];
+    return route?.name;
+  });
+
   useEffect(() => {
     if (unreadCount > 0) {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.15,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-          }),
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
         ])
       ).start();
+    } else {
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
     }
   }, [unreadCount]);
 
-  const formatNumber = (val) => {
-    if (!val) return "0";
-    if (val < 1000) return val.toString();
-    if (val < 1000000) return (val / 1000).toFixed(1) + "k";
-    return (val / 1000000).toFixed(1) + "m";
-  };
   return (
-  //   <LinearGradient
-  //   colors={["#2E1065", "#4338CA", "#1E293B"]}
-  //   start={{ x: 0, y: 0 }}
-  //   end={{ x: 1, y: 1 }}
-  //   style={styles.bottomNav}
-  // >
-//   <LinearGradient
-//   colors={["#1E293B", "#334155", "#475569"]}
-//   start={{ x: 0, y: 0 }}
-//   end={{ x: 1, y: 1 }}
-//   style={styles.bottomNav}
-// >
-<LinearGradient
-  colors={["#0F172A", "#1E293B", "#64748B"]}
-  start={{ x: 0, y: 0 }}
-  end={{ x: 1, y: 1 }}
-  style={styles.bottomNav}
->
-
-
-  
-      {/* Home */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate("About")}
-        style={styles.navButton}
-      >
-        <Feather name="home" size={26} color="#9CA3AF" />
-      </TouchableOpacity>
-
-      {/* Compass */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate("CampusNexus")}
-        style={styles.navButton}
-      >
-        <Feather name="compass" size={26} color="#9CA3AF" />
-      </TouchableOpacity>
-
-      {/* Settings */}
-      <TouchableOpacity style={styles.navButton}>
-        <Feather name="settings" size={26} color="#9CA3AF" />
-      </TouchableOpacity>
-
-      {/* Messages */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate("Messages")}
-        style={styles.navButton}
-      >
-        <View style={{ position: "relative" }}>
-          <Feather name="mail" size={26} color="#9CA3AF" />
-          {unreadCount > 0 && (
-            <Animated.View
-              style={[
-                styles.badgeContainer,
-                { transform: [{ scale: pulseAnim }] },
-              ]}
-            >
-              <Text style={styles.badgeText}>{formatNumber(unreadCount)}</Text>
-            </Animated.View>
-          )}
-        </View>
-      </TouchableOpacity>
-    </LinearGradient>
+    <View style={styles.wrapper}>
+      <View style={styles.pill}>
+        {TABS.map((tab) => (
+          <TabButton
+            key={tab.name}
+            tab={tab}
+            isActive={currentRoute === tab.name}
+            onPress={() => navigation.navigate(tab.name)}
+            badge={tab.name === "Messages" ? unreadCount : 0}
+            pulseAnim={pulseAnim}
+          />
+        ))}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bottomNav: {
+  wrapper: {
     position: "absolute",
     bottom: 20,
     left: 20,
     right: 20,
-    height: 70,
-    borderRadius: 24,
+    alignItems: "center",
+  },
+  pill: {
+    width: "100%",
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#13111f",       // slightly lighter than screen bg
+    borderWidth: 1,
+    borderColor: "rgba(147,51,234,0.2)",
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -3 },
+    paddingHorizontal: 8,
+    paddingBottom: Platform.OS === "ios" ? 0 : 0,
+    // Shadow — purple tint to match theme
+    shadowColor: "#9333ea",
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
-    paddingBottom: Platform.OS === "ios" ? 20 : 0,
+    shadowRadius: 20,
+    elevation: 12,
   },
-  navButton: {
-    justifyContent: "center",
+  tabBtn: {
+    flex: 1,
     alignItems: "center",
+    justifyContent: "center",
+    height: "100%",
   },
-  badgeContainer: {
+  tabInner: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    position: "relative",
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  activePill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(147,51,234,0.15)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(147,51,234,0.25)",
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.28)",
+    letterSpacing: 0.3,
+  },
+  tabLabelActive: {
+    color: "#c084fc",
+  },
+  badge: {
     position: "absolute",
-    top: -6,
+    top: -5,
     right: -8,
-    backgroundColor: "#DC2626", // deeper red (not neon)
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    justifyContent: "center",
+    backgroundColor: "#ef4444",
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
     alignItems: "center",
-    paddingHorizontal: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 4,
+    justifyContent: "center",
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: "#13111f",
   },
   badgeText: {
-    color: "white",
-    fontSize: 11,
-    fontWeight: "600",
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "800",
   },
 });
-
-export default BottomNavigator;

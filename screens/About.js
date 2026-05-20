@@ -1,62 +1,108 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   Image,
-  Platform,
   ScrollView,
   Animated,
   SafeAreaView,
-  Pressable,
   StyleSheet,
   ActivityIndicator,
+  StatusBar,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
-import io from "socket.io-client";
 import { useFocusEffect } from "@react-navigation/native";
 import BottomNavigator from "./BottomNavigator";
+import socket from "./Socket";
+import { colors, radius, spacing } from "./Theme";
 
 const API_BASE_URL = "http://192.168.0.136:3000";
+
+function FeatureCard({ onPress, gradColors, borderColor, icon, eyebrow, title, description, stat, statIcon }) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () =>
+    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, tension: 120, friction: 8 }).start();
+  const onPressOut = () =>
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 120, friction: 8 }).start();
+
+  return (
+    <TouchableOpacity onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} activeOpacity={1}>
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <LinearGradient
+          colors={gradColors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[s.featureCard, { borderColor }]}
+        >
+          <View style={s.ring1} />
+          <View style={s.ring2} />
+
+          <View style={s.eyebrowRow}>
+            <View style={[s.eyebrowDot, { backgroundColor: borderColor }]} />
+            <Text style={s.eyebrow}>{eyebrow}</Text>
+          </View>
+
+          <View style={s.cardBody}>
+            <View style={s.cardIconWrap}>
+              <Feather name={icon} size={22} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.cardTitle}>{title}</Text>
+              <Text style={s.cardDesc}>{description}</Text>
+            </View>
+          </View>
+
+          <View style={s.cardFooter}>
+            <View style={s.statPill}>
+              <Feather name={statIcon} size={11} color="rgba(255,255,255,0.5)" />
+              <Text style={s.statText}>{stat}</Text>
+            </View>
+            <View style={s.cardArrow}>
+              <Feather name="arrow-right" size={14} color="rgba(255,255,255,0.7)" />
+            </View>
+          </View>
+        </LinearGradient>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
 
 export default function About({ navigation }) {
   const [user, setUser] = useState(null);
   const [notificationCount, setNotificationCount] = useState(0);
-  const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const heroOpacity = useRef(new Animated.Value(0)).current;
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
   const fetchUserData = useCallback(async () => {
-    setIsLoadingUser(true);
+    setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/About`, {
-        method: "GET",
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("Failed to fetch user data");
-      const data = await response.json();
+      const res = await fetch(`${API_BASE_URL}/About`, { method: "GET", credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
       setUser(data);
     } catch (err) {
       console.error("Error fetching user:", err);
     } finally {
-      setIsLoadingUser(false);
+      setIsLoading(false);
     }
-  }, []); 
+  }, []);
 
   const fetchNotificationCount = useCallback(async () => {
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/notifications/unread/count`,
-        {
-          method: "GET",
-          credentials: "include",
-        }
-      );
-      if (!response.ok) throw new Error("Failed to fetch notifications");
-      const data = await response.json();
-      setNotificationCount(data.unreadCount || 0); // 
+      const res = await fetch(`${API_BASE_URL}/notifications/unread/count`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      setNotificationCount(data.unreadCount || 0);
     } catch (err) {
-      console.error("Error fetching notification count:", err);
+      console.error("Error fetching notifications:", err);
     }
   }, []);
 
@@ -64,306 +110,235 @@ export default function About({ navigation }) {
     useCallback(() => {
       fetchUserData();
       fetchNotificationCount();
-      Animated.timing(heroOpacity, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }).start();
-    }, [fetchUserData, fetchNotificationCount])
+
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+      ]).start();
+
+      if (user?.id) socket.emit("registerUser", user.id);
+
+      const onNewNotif = () => setNotificationCount((p) => p + 1);
+      const onNotifRead = () => setNotificationCount((p) => Math.max(0, p - 1));
+
+      socket.on("newNotification", onNewNotif);
+      socket.on("notificationRead", onNotifRead);
+
+      return () => {
+        socket.off("newNotification", onNewNotif);
+        socket.off("notificationRead", onNotifRead);
+      };
+    }, [fetchUserData, fetchNotificationCount, user?.id])
   );
 
-  useEffect(() => {
-    let socket;
-    if (user && user.id) {
-      socket = io(API_BASE_URL, { withCredentials: true });
-      socket.on("connect", () => {
-        socket.emit("registerUser", user.id);
-      });
-      socket.on("newNotification", () => {
-        setNotificationCount((prev) => prev + 1);
-      });
-      socket.on("notificationRead", () => {
-        setNotificationCount((prev) => Math.max(0, prev - 1));
-      });
-    }
-    return () => socket && socket.disconnect();
-  }, [user]);
-
-  const Card = ({ item }) => {
-    const scaleAnim = useRef(new Animated.Value(1)).current;
-
+  if (isLoading) {
     return (
-      <Pressable
-        onPressIn={() =>
-          Animated.spring(scaleAnim, {
-            toValue: 0.95,
-            useNativeDriver: true,
-          }).start()
-        }
-        onPressOut={() =>
-          Animated.spring(scaleAnim, {
-            toValue: 1,
-            useNativeDriver: true,
-          }).start()
-        }
-        onPress={item.onPress}
-      >
-        <Animated.View
-          style={[styles.card, { transform: [{ scale: scaleAnim }] }]}
-        >
-          <Image source={item.image} style={styles.cardImage} />
-          <LinearGradient
-            colors={["transparent", "rgba(0,0,0,0.85)"]}
-            style={styles.gradientOverlay}
-          />
-          <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>{item.label}</Text>
-            <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
-          </View>
-        </Animated.View>
-      </Pressable>
-    );
-  };
-
-  if (isLoadingUser) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#60A5FA" />
-        <Text style={styles.loadingText}>Loading your vibe...</Text>
+      <View style={s.loading}>
+        <StatusBar barStyle="light-content" />
+        <ActivityIndicator size="large" color={colors.accent.purple} />
+        <Text style={s.loadingText}>Loading your vibe...</Text>
       </View>
     );
   }
 
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.headerContent}>
-        <Text style={styles.headerTitle}>Buddy</Text>
+  const firstName = user?.name?.split(" ")[0] || "there";
+  const initials = user?.name
+    ? user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+    : "?";
 
-        <TouchableOpacity
-          onPress={() => navigation.navigate("Profile")}
-          style={styles.profileImageContainer}
-        >
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+  return (
+    <SafeAreaView style={s.safe}>
+      <StatusBar barStyle="light-content" />
+
+      <View style={s.blobTR} pointerEvents="none" />
+      <View style={s.blobBL} pointerEvents="none" />
+
+      {/* ── Top bar ── */}
+      <View style={s.topBar}>
+        <TouchableOpacity onPress={() => navigation.navigate("Profile")} style={s.avatarWrap} activeOpacity={0.85}>
           {user?.image ? (
-            <Image
-              source={{ uri: `${API_BASE_URL}/uploads/${user.image}` }}
-              style={styles.profileImage}
-            />
+            <Image source={{ uri: `${API_BASE_URL}${user.image}` }} style={s.avatar} />
           ) : (
-            <View
-              style={[styles.profileImage, styles.profileImagePlaceholder]}
-            />
+            <LinearGradient colors={["#9333ea", "#6366f1"]} style={s.avatar}>
+              <Text style={s.avatarInitials}>{initials}</Text>
+            </LinearGradient>
           )}
+          <View style={s.onlineDot} />
         </TouchableOpacity>
 
+        <View style={s.topMid}>
+          <Text style={s.topGreeting}>{greeting}</Text>
+          <Text style={s.topName}>{firstName} 👋</Text>
+        </View>
+
         <TouchableOpacity
-          style={styles.notificationButton}
+          style={s.bellBtn}
           onPress={() => navigation.navigate("NotificationsScreen")}
+          activeOpacity={0.85}
         >
-          <Feather name="bell" size={24} color="white" />
+          <Feather name="bell" size={19} color={colors.accent.lavender} />
           {notificationCount > 0 && (
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>
-                {notificationCount > 99 ? "99+" : notificationCount}
-              </Text>
+            <View style={s.badge}>
+              <Text style={s.badgeText}>{notificationCount > 99 ? "99+" : notificationCount}</Text>
             </View>
           )}
         </TouchableOpacity>
       </View>
 
-      {/* Hero Section */}
-      <Animated.View style={[styles.heroSection, { opacity: heroOpacity }]}>
-        <LinearGradient
-          colors={["#1F2937", "#111827"]}
-          style={styles.heroBackground}
-        >
-          <Text style={styles.welcomeTitle}>
-            Hey {user?.name || "Buddy"} 👋
-          </Text>
-          <Text style={styles.welcomeDesc}>
-            Ready to learn, connect, and battle? Your campus journey starts
-            here. 🚀
-          </Text>
-        </LinearGradient>
-      </Animated.View>
+      {/* ── Cards ── */}
+      <Animated.ScrollView
+        style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
+        contentContainerStyle={s.scroll}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={s.tagline}>What do you want to do today?</Text>
 
-      {/* Cards */}
-      <ScrollView contentContainerStyle={styles.cardContainer}>
-        {[
-          {
-            image:
-              Platform.OS === "ios"
-                ? require("../assets/image312.jpeg")
-                : require("../assets/image1.jpeg"),
-            label: "🎮 Battle Arena",
-            subtitle: "Challenge your friends. Prove your skills.",
-            onPress: () => navigation.navigate("ShowcaseMain"),
-          },
-          {
-            image:
-              Platform.OS === "ios"
-                ? require("../assets/image311.jpeg")
-                : require("../assets/image4.jpeg"),
-            label: "📚 CrashCourse",
-            subtitle: "Quick, fun lessons. Learn smarter.",
-            onPress: () => navigation.navigate("CrashCourse"),
-          },
-          {
-            image:
-              Platform.OS === "ios"
-                ? require("../assets/image310.jpeg")
-                : require("../assets/image0.jpeg"),
-            label: "🌐 Nexus",
-            subtitle: "Meet new people. Build your tribe.",
-            onPress: () =>navigation.navigate('QuickPlayScreen'),
-          },
-        ].map((item, index) => (
-          <Card item={item} key={index} />
-        ))}
-      </ScrollView>
+        <FeatureCard
+          onPress={() => navigation.navigate("CampusPulse")}
+          gradColors={["#1a0533", "#3b0764", "#1e1040"]}
+          borderColor="rgba(147,51,234,0.4)"
+          icon="radio"
+          eyebrow="CAMPUS PULSE"
+          title="Real stories, right now"
+          description="Anonymous confessions, hot takes, and campus moments — unfiltered."
+          stat="Updated daily"
+          statIcon="clock"
+        />
+
+        <FeatureCard
+          onPress={() => navigation.navigate("InterestRoom")}
+          gradColors={["#0c1a3a", "#0e3a6e", "#0c2340"]}
+          borderColor="rgba(0,217,255,0.3)"
+          icon="hash"
+          eyebrow="INTEREST ROOMS"
+          title="Find your people"
+          description="Live group spaces built around what you love — join or create your own."
+          stat="24+ rooms live"
+          statIcon="users"
+        />
+
+        <FeatureCard
+          onPress={() => navigation.navigate("MainRoom")}
+          gradColors={["#1a1040", "#2d1069", "#1a0a40"]}
+          borderColor="rgba(99,102,241,0.4)"
+          icon="shield-off"
+          eyebrow="ANONYMOUS ZONE"
+          title="No name. No trace."
+          description="Create or join timed anonymous chat rooms. They vanish when time runs out."
+          stat="Rooms auto-delete"
+          statIcon="trash-2"
+        />
+
+        <View style={{ height: 100 }} />
+      </Animated.ScrollView>
 
       <BottomNavigator navigation={navigation} />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f0f" },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#0f0f0f",
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.bg.screen },
+  loading: {
+    flex: 1, backgroundColor: colors.bg.screen,
+    alignItems: "center", justifyContent: "center",
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#9CA3AF",
+  loadingText: { marginTop: 12, fontSize: 15, color: colors.text.muted },
+
+  blobTR: {
+    position: "absolute", width: 280, height: 280, borderRadius: 140,
+    backgroundColor: "rgba(147,51,234,0.09)", top: -100, right: -80,
   },
-  headerContent: {
-    height: 70,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    backgroundColor: "#111827",
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#374151",
-    position: "relative",
+  blobBL: {
+    position: "absolute", width: 220, height: 220, borderRadius: 110,
+    backgroundColor: "rgba(99,102,241,0.06)", bottom: 80, left: -80,
   },
-  profileImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#fff",
+
+  // ── Top bar ──
+  topBar: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: spacing.lg, paddingVertical: 14, gap: 12,
   },
-  profileImagePlaceholder: {
-    backgroundColor: "#4B5563",
+  avatarWrap: { position: "relative" },
+  avatar: {
+    width: 46, height: 46, borderRadius: 23,
+    alignItems: "center", justifyContent: "center",
   },
-  headerTitle: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    textAlign: "center",
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
+  avatarInitials: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  onlineDot: {
+    position: "absolute", bottom: 1, right: 1,
+    width: 12, height: 12, borderRadius: 6,
+    backgroundColor: "#34d399", borderWidth: 2, borderColor: colors.bg.screen,
   },
-  notificationButton: {
-    padding: 5,
+  topMid: { flex: 1 },
+  topGreeting: { fontSize: 11, color: colors.text.muted, fontWeight: "500" },
+  topName: { fontSize: 19, fontWeight: "800", color: colors.text.primary, letterSpacing: 0.2 },
+  bellBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.bg.card, borderWidth: 1,
+    borderColor: colors.border.subtle, alignItems: "center", justifyContent: "center",
   },
-  notificationBadge: {
-    position: "absolute",
-    top: -5,
-    right: -5,
-    backgroundColor: "#DC2626",
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    justifyContent: "center",
-    alignItems: "center",
+  badge: {
+    position: "absolute", top: -1, right: -1,
+    backgroundColor: "#ef4444", borderRadius: 8,
+    minWidth: 17, height: 17, alignItems: "center",
+    justifyContent: "center", paddingHorizontal: 3,
+    borderWidth: 1.5, borderColor: colors.bg.screen,
   },
-  notificationBadgeText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "bold",
+  badgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
+
+  scroll: { paddingHorizontal: spacing.lg, paddingTop: 8 },
+  tagline: {
+    fontSize: 13, color: colors.text.muted, fontWeight: "500",
+    marginBottom: 20, letterSpacing: 0.2,
   },
-  heroSection: {
-    paddingHorizontal: 20,
-    marginVertical: 15,
-    alignItems: "center",
+
+  // ── Feature card ──
+  featureCard: {
+    borderRadius: radius.xl, borderWidth: 1,
+    padding: 22, marginBottom: 16, overflow: "hidden", position: "relative",
   },
-  heroBackground: {
-    width: "100%",
-    paddingVertical: 35,
-    borderRadius: 16,
-    alignItems: "center",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 10,
+  ring1: {
+    position: "absolute", width: 200, height: 200, borderRadius: 100,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.05)", right: -70, top: -70,
   },
-  welcomeTitle: {
-    fontSize: 26,
-    fontWeight: "700",
-    marginBottom: 6,
-    color: "#fff",
+  ring2: {
+    position: "absolute", width: 120, height: 120, borderRadius: 60,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.04)", right: -20, top: -20,
   },
-  welcomeDesc: {
-    fontSize: 15,
-    textAlign: "center",
-    color: "#9CA3AF",
-    paddingHorizontal: 10,
+  eyebrowRow: {
+    flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 16,
   },
-  cardContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 20,
-    paddingBottom: 80,
+  eyebrowDot: { width: 5, height: 5, borderRadius: 3 },
+  eyebrow: {
+    fontSize: 9, fontWeight: "800", letterSpacing: 2,
+    color: "rgba(255,255,255,0.4)",
   },
-  card: {
-    width: 300,
-    height: 220,
-    margin: 10,
-    borderRadius: 18,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
-    backgroundColor: "#1F2937",
+  cardBody: {
+    flexDirection: "row", alignItems: "flex-start", gap: 14, marginBottom: 20,
   },
-  cardImage: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
-  gradientOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "flex-end",
-  },
-  cardContent: {
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
-    padding: 16,
+  cardIconWrap: {
+    width: 50, height: 50, borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
   cardTitle: {
-    fontSize: 21,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 4,
+    fontSize: 18, fontWeight: "800", color: "#f0ecff",
+    letterSpacing: 0.2, marginBottom: 6, marginTop: 2,
   },
-  cardSubtitle: {
-    fontSize: 14,
-    color: "#d1d5db",
+  cardDesc: { fontSize: 12, color: "rgba(255,255,255,0.45)", lineHeight: 18 },
+  cardFooter: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.07)", paddingTop: 14,
   },
-  dark: {
-    text: { color: "#E5E7EB" },
+  statPill: { flexDirection: "row", alignItems: "center", gap: 5 },
+  statText: { fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: "600" },
+  cardArrow: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center", justifyContent: "center",
   },
 });

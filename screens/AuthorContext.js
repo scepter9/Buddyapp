@@ -1,14 +1,13 @@
 import React, { createContext, useState, useEffect } from 'react';
+import socket from './Socket'; // ← add this
 
-// Create the Context
 export const AuthorContext = createContext(null);
 const API_BASE_URL = "http://192.168.0.136:3000";
-// Create the Provider component
+
 export const AuthorProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  
-  // This is where you would do your initial session check
+
   const checkSession = () => {
     fetch(`${API_BASE_URL}/check-session`, {
       method: 'GET',
@@ -17,31 +16,49 @@ export const AuthorProvider = ({ children }) => {
       .then(res => res.json())
       .then(data => {
         if (data.loggedIn) {
-          setUser(data.user); // Set the user in the global state
+          setUser(data.user);
         } else {
-          setUser(null); // Explicitly set to null if not logged in
+          setUser(null);
         }
         setLoading(false);
       })
       .catch(err => {
         console.error('Session check failed:', err);
-        setUser(null); // Ensure user is null on error
+        setUser(null);
         setLoading(false);
       });
   };
-  
-  // This function can be used by any component to log a user out
+
   const signOut = () => {
+    fetch(`${API_BASE_URL}/logout`).then(() => {
+      setUser(null);
     
-     fetch(`${API_BASE_URL}/logout`).then(() => setUser(null));
-    
+    });
   };
-  
+
   useEffect(() => {
     checkSession();
   }, []);
 
-  // Expose user, setUser, loading, and signOut for all children
+  // ← ADD THIS — registers socket whenever user changes
+  useEffect(() => {
+    if (!user) return;
+
+    // Register on login or session restore
+    socket.emit('register', String(user.id));
+
+    // Re-register if socket reconnects (phone lost internet etc)
+    const handleReconnect = () => {
+      socket.emit('register', String(user.id));
+    };
+
+    socket.on('connect', handleReconnect);
+
+    return () => {
+      socket.off('connect', handleReconnect);
+    };
+  }, [user]);
+
   return (
     <AuthorContext.Provider value={{ user, setUser, loading, signOut }}>
       {children}
