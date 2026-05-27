@@ -31,6 +31,7 @@ import RequestToWrite from './screens/nexus/RequestToWrite';
 import CreateRoomScreen from './screens/nexus/CreateRoomScreen'
 import DesignersHubScreen   from './screens/nexus/DesignersHubScreen'  
 import NewPostScreen from './screens/nexus/NewPostScreen'
+import Moderator from './screens/nexus/Moderator'
 import { UnreadMessagesProvider } from './screens/UnreadMessagesContext';
 import { AuthorProvider } from './screens/AuthorContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -59,7 +60,7 @@ export default function App() {
     <Stack.Screen name="About" component={About} options={{ headerShown: false }} />
     <Stack.Screen name="Profile" component={Profile} options={{ headerShown: false }} />
     <Stack.Screen name="Register" component={Register} options={{ headerShown: false }} />
-    <Stack.Screen name="Editprofile" component={Editprofile} options={{ headerShown: true }} />
+    <Stack.Screen name="Editprofile" component={Editprofile} options={{ headerShown: false}} />
     <Stack.Screen name="ForgotPassword" component={ForgotPassword} options={{ headerShown: false }} />
     <Stack.Screen name="UserSearch" component={UserSearch} options={{ headerShown: false }} />
     <Stack.Screen name="NotificationsScreen" component={NotificationsScreen} options={{ headerShown: false }} />
@@ -79,7 +80,7 @@ export default function App() {
     <Stack.Screen name="DesignersHubScreen" component={DesignersHubScreen} options={{ headerShown: false }} />
     <Stack.Screen name="NewPostScreen" component={NewPostScreen} options={{ headerShown: false }} />
     <Stack.Screen name="MembersScreen" component={MembersScreen} options={{ headerShown: false }} />
-    
+    {/* <Stack.Screen name="Moderator" component={Moderator} options={{ headerShown: false }} /> */}
     <Stack.Screen name="Slideupbar" component={Slideupbar} options={{ headerShown: false }} />
    
   </Stack.Navigator> 

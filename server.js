@@ -371,7 +371,7 @@ app.post('/Login', (req, res) => {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
-  const sql = `SELECT * FROM projecttables WHERE USERNAME = ?`;
+  const sql = `SELECT * FROM projecttables WHERE trim(USERNAME) = ?`;
 
   db.query(sql, [username], async (err, results) => {
     if (err) return res.status(500).json({ error: 'Database error' });
@@ -401,7 +401,7 @@ app.post('/Login', (req, res) => {
       email: user.EMAIL,
       phone: user.PHONE,
       image:user.image,
-    
+    role:user.userrole
     };
 
     return res.status(200).json({
@@ -409,7 +409,7 @@ app.post('/Login', (req, res) => {
       user: req.session.user
     });
   });
-});
+}); 
  
 
 app.get('/Profile', (req, res) => {
@@ -451,7 +451,7 @@ app.get('/users/:id', (req, res) => {
     const sql = `
     SELECT ID as id, FULLNAME as name, EMAIL as email, BIO as about,
            IS_PRO as isPro, DATE_FORMAT(join_date, '%M %Y') as joinDate, IMAGE as image, FOLLOWERS AS followers, FOLLOWING AS following,
-           university,department,interests
+           university,interests
     FROM projecttables
     WHERE ID = ?`;
 
@@ -1078,27 +1078,7 @@ app.get('/check-follow/:userId', (req, res) => {
   );
 });
 
-app.get('/messages', (req, res) => {
-    const { senderId, receiverId } = req.query;
-  
-    // SQL query to get all messages between two users, ordered by timestamp.
-    const sql = `
-      SELECT id, sender_id, receiver_id, type, text, image_uri, created_at AS timestamp
-      FROM messages
-      WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
-      ORDER BY created_at ASC
-    `;
-  
-    // Use senderId and receiverId as parameters to prevent SQL injection.
-    db.query(sql, [senderId, receiverId, receiverId, senderId], (err, results) => {
-      if (err) {
-        console.error('Error fetching messages:', err);
-        return res.status(500).json({ error: 'Failed to fetch historical messages.' });
-      }
-      // Return the fetched messages to the frontend.
-      res.status(200).json(results);
-    });
-  });
+
   
   io.on('connection', (socket) => {
     const userId = socket.handshake.query.userId;
@@ -1165,6 +1145,22 @@ app.get('/messages', (req, res) => {
                 }
             });
         });
+    });
+    socket.on('mark-read', ({ themessages, sender, receiver }) => {
+      if (!themessages?.length) return;
+      db.query(
+        `UPDATE messages SET is_read=1 WHERE id IN (?) AND sender_id=? AND receiver_id=?`,
+        [themessages, sender, receiver],
+        (err) => {
+          if (err) return console.log('mark-read error:', err);
+    
+        
+          const senderSocketId = connectedUsers.get(String(sender));
+          if (senderSocketId) {
+            io.to(senderSocketId).emit('messages_read', { messageIds: themessages });
+          }
+        }
+      );
     });
 
     socket.on('blockUser', ({ blockedId }) => {
@@ -2371,6 +2367,7 @@ app.post('/addroomlikes',(req,res)=>{
       return  res.status(500).json({error:err.message})
       }    
       res.status(200).json({success:true})
+      console.log('yes');
   })
 
 })

@@ -2,13 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   View,
+  Modal,
   PanResponder,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   Image,
   Alert,
-  Text,        
+  Text,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
@@ -24,10 +25,10 @@ const DEFAULT_REASONS = [
 
 export default function Slideupbar({
   senderId,
-  reporthead,       
+  reporthead,
   reportedname,
   stuffimage,
-  onClose,         
+  onClose,
   reasons = DEFAULT_REASONS,
 }) {
   const positionAnim = useRef(new Animated.Value(300)).current;
@@ -52,21 +53,15 @@ export default function Slideupbar({
       tension: 65,
       friction: 11,
     }).start(() => {
-      // Only unmount after animation finishes
       if (onClose) onClose();
     });
   };
 
-  
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gesture) => {
-        return Math.abs(gesture.dy) > 5; 
-      },
+      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 5,
       onPanResponderMove: (_, gesture) => {
-        if (gesture.dy > 0) {
-          positionAnim.setValue(gesture.dy);
-        }
+        if (gesture.dy > 0) positionAnim.setValue(gesture.dy);
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dy > 120) {
@@ -82,10 +77,11 @@ export default function Slideupbar({
       },
     })
   ).current;
+
   const submitReport = async () => {
     if (!selectedReason) {
       Alert.alert('Select a reason', 'Please pick a reason before submitting.');
-      return; 
+      return;
     }
 
     setLoading(true);
@@ -103,7 +99,6 @@ export default function Slideupbar({
       });
 
       if (!res.ok) {
-        // BUG FIX: Alert.alert not Alert()
         Alert.alert('Something went wrong 😪', 'Please try again.');
         return;
       }
@@ -119,135 +114,140 @@ export default function Slideupbar({
     }
   };
 
-  const canSubmit = !selectedReason && !loading;
+  const canSubmit = !!selectedReason && !loading;
 
   return (
-    // Dim overlay — tap outside to close
-    <TouchableOpacity
-      style={styles.overlay}
-      activeOpacity={1}
-      onPress={hideAnim}
+    <Modal
+      visible={true}
+      transparent={true}
+      animationType="none"
+      onRequestClose={hideAnim}
+      statusBarTranslucent={true}
     >
-      <Animated.View
-        {...panResponder.panHandlers}
-        style={[styles.sheet, { transform: [{ translateY: positionAnim }] }]}
-        onStartShouldSetResponder={() => true}
+      <TouchableOpacity
+        style={styles.overlay}
+        activeOpacity={1}
+        onPress={hideAnim}
       >
-        {/* Handle */}
-        <View style={styles.handle} />
-
-        <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-
-          {/* ── Target header ── */}
-          <View style={styles.targetRow}>
-            <View style={styles.avatarWrap}>
-              {stuffimage ? (
-                <Image
-                  source={{ uri: `${API_BASE_URL}${stuffimage}` }}
-                  style={styles.avatar}
-                />
-              ) : (
-                <View style={[styles.avatar, styles.avatarFallback]}>
-                  <Text style={styles.avatarInitial}>
-                    {reportedname?.[0]?.toUpperCase() ?? '?'}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.targetText}>
-          
-              <Text style={styles.reportingLabel}>Reporting {reporthead}</Text>
-              <Text style={styles.reportedName}>{reportedname}</Text>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* ── Title ── */}
-          <Text style={styles.title}>Why are you reporting?</Text>
-          <Text style={styles.subtitle}>Select the most relevant reason</Text>
-
-          {/* ── Reasons ── */}
-          <View style={styles.reasonsWrap}>
-            {reasons.map((reason, index) => {
-              const isSelected = selectedReason === reason;
-              return (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.reasonRow,
-                    isSelected && styles.reasonRowSelected,
-                  ]}
-                  onPress={() => setSelectedReason(isSelected ? null : reason)}
-                  activeOpacity={0.75}
-                >
-                  <View style={[styles.radio, isSelected && styles.radioFilled]}>
-                    {isSelected && <View style={styles.radioDot} />}
-                  </View>
-                  <Text style={[styles.reasonText, isSelected && styles.reasonTextSelected]}>
-                    {reason}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-    
-          <TextInput
-            ref={textInputRef}
-            value={userText}
-            onChangeText={setUserText}
-            placeholder="Add more details (optional)..."
-            placeholderTextColor="rgba(255,255,255,0.25)"
-            style={styles.textInput}
-            multiline
-            maxLength={300}
-            returnKeyType="done"
-            blurOnSubmit
-          />
-
-        </ScrollView>
-
-        {/* ── Submit button ── */}
-        <TouchableOpacity
-          style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
-          onPress={submitReport}
-          disabled={!canSubmit}
-          activeOpacity={0.85}
+        <Animated.View
+          {...panResponder.panHandlers}
+          style={[styles.sheet, { transform: [{ translateY: positionAnim }] }]}
+          onStartShouldSetResponder={() => true}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.submitText}>Submit Report</Text>
-          )}
-        </TouchableOpacity>
+          {/* Handle bar */}
+          <View style={styles.handle} />
 
-      </Animated.View>
-    </TouchableOpacity>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Target header */}
+            <View style={styles.targetRow}>
+              <View style={styles.avatarWrap}>
+                {stuffimage ? (
+                  <Image
+                    source={{ uri: `${API_BASE_URL}/uploads/${stuffimage}` }}
+                    style={styles.avatar}
+                  />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarFallback]}>
+                    <Text style={styles.avatarInitial}>
+                      {reportedname?.[0]?.toUpperCase() ?? '?'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.targetText}>
+                <Text style={styles.reportingLabel}>Reporting {reporthead}</Text>
+                <Text style={styles.reportedName}>{reportedname}</Text>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* Title */}
+            <Text style={styles.title}>Why are you reporting?</Text>
+            <Text style={styles.subtitle}>Select the most relevant reason</Text>
+
+            {/* Reasons */}
+            <View style={styles.reasonsWrap}>
+              {reasons.map((reason, index) => {
+                const isSelected = selectedReason === reason;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[styles.reasonRow, isSelected && styles.reasonRowSelected]}
+                    onPress={() => setSelectedReason(isSelected ? null : reason)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.radio, isSelected && styles.radioFilled]}>
+                      {isSelected && <View style={styles.radioDot} />}
+                    </View>
+                    <Text style={[styles.reasonText, isSelected && styles.reasonTextSelected]}>
+                      {reason}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Extra details input */}
+            <TextInput
+              ref={textInputRef}
+              value={userText}
+              onChangeText={setUserText}
+              placeholder="Add more details (optional)..."
+              placeholderTextColor="rgba(255,255,255,0.25)"
+              style={styles.textInput}
+              multiline
+              maxLength={300}
+              returnKeyType="done"
+              blurOnSubmit
+            />
+          </ScrollView>
+
+          {/* Submit button */}
+          <TouchableOpacity
+            style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
+            onPress={submitReport}
+            disabled={!canSubmit}
+            activeOpacity={0.85}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.submitText}>Submit Report</Text>
+            )}
+          </TouchableOpacity>
+
+        </Animated.View>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  // Dim background
   overlay: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
+    flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
-
-  // Sheet
   sheet: {
-    backgroundColor: '#0e0c1a',
+    backgroundColor: '#151122',
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     borderTopWidth: 1,
     borderColor: 'rgba(147,51,234,0.2)',
     paddingHorizontal: 18,
-    paddingBottom: 28,
+    paddingBottom: 34,
     maxHeight: '88%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 24,
   },
-
   handle: {
     width: 40,
     height: 4,
@@ -257,8 +257,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 18,
   },
-
-  // ── Target ──
   targetRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -295,16 +293,13 @@ const styles = StyleSheet.create({
   reportedName: {
     fontSize: 16,
     color: '#f0ecff',
-    fontWeight: '700', // BUG FIX: string not number
+    fontWeight: '700',
   },
-
   divider: {
     height: 1,
     backgroundColor: 'rgba(255,255,255,0.07)',
     marginBottom: 18,
   },
-
-  // ── Title ──
   title: {
     fontSize: 20,
     fontWeight: '700',
@@ -313,11 +308,9 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.35)',
+    color: 'rgba(255,255,255,0.55)',
     marginBottom: 16,
   },
-
-  // ── Reasons ──
   reasonsWrap: {
     gap: 8,
     marginBottom: 18,
@@ -366,8 +359,6 @@ const styles = StyleSheet.create({
     color: '#f0ecff',
     fontWeight: '600',
   },
-
-  // ── Text input ──
   textInput: {
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
@@ -375,14 +366,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    color: '#f0ecff',             // BUG FIX: was #0E0C1A (near black — invisible)
+    color: '#f0ecff',
     fontSize: 13,
     minHeight: 70,
     textAlignVertical: 'top',
     marginBottom: 20,
   },
-
-  // ── Submit ──
   submitBtn: {
     width: '100%',
     paddingVertical: 16,

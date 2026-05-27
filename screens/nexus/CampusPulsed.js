@@ -34,10 +34,23 @@ const FALLBACK_IMAGE = {
   uri: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80",
 };
 
-
+const formatTimestamp = (time) => {
+  if (!time) return "Just now";
+  const seconds = Math.floor((Date.now() - new Date(time)) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+};
 function MyStoryCard({ item, onDelete, onPress }) {
   const imageSource = item.image
-    ? { uri: `${API_BASE_URL}${item.image}` }
+    ? { uri: `${API_BASE_URL}/uploads/${item.image}` }
     : FALLBACK_IMAGE;
 
   const confirmDelete = () => {
@@ -197,7 +210,7 @@ const StoryCard = React.memo(function StoryCard({ item, myUserId, navigation, on
             </View>
             <View>
               <Text style={s.authorName}>{item.author}</Text>
-              <Text style={s.authorTime}>{item.posted_at ?? "Recently"}</Text>
+              <Text style={s.authorTime}>{formatTimestamp(item.posted_at) ?? "Recently"}</Text>
             </View>
           </View>
 

@@ -70,6 +70,7 @@ export default function Profile({ navigation, route }) {
       setLoggedInUserId(authData.id);
 
       const targetId = route.params?.userId || authData.id;
+      console.log(targetId);
 
       const profileRes = await fetch(`${API_BASE_URL}/users/${targetId}`, {
         method: 'GET',
@@ -153,11 +154,11 @@ export default function Profile({ navigation, route }) {
   }
 
   const imageUri = userProfile.image
-    ? { uri: `${API_BASE_URL}${userProfile.image}` }
+    ? { uri: `${API_BASE_URL}/uploads/${userProfile.image}` }
     : null;
 
   const handle = userProfile.email?.split('@')[0] || 'user';
-
+ 
   return (
     <SafeAreaView style={s.safe}>
       <StatusBar barStyle="light-content" />
@@ -180,6 +181,7 @@ export default function Profile({ navigation, route }) {
           )}
 
           {/* Avatar */}
+          <TouchableOpacity onPress={!isViewingOwnProfile ?() => navigation.navigate('ViewImage', { imagevalue: `${API_BASE_URL}/uploads/${userProfile.image}`, mediatype: 'image' }):null}>
           <View style={s.avatarWrap}>
             <LinearGradient
               colors={['#9333ea', '#6366f1']}
@@ -205,6 +207,8 @@ export default function Profile({ navigation, route }) {
               </TouchableOpacity>
             )}
           </View>
+          </TouchableOpacity>
+         
 
           {/* Name + handle */}
           <View style={s.nameRow}>
@@ -226,16 +230,17 @@ export default function Profile({ navigation, route }) {
         </View>
 
         {/* ── Stats ── */}
-        <TouchableOpacity
-          style={s.statsRow}
-          onPress={() => navigation.navigate('FriendList', { userId: userProfile.id ,type:'profile'})}
-          activeOpacity={0.8}
-        >
-          <StatItem count={userProfile.following} label="Following" />
-          <View style={s.statDivider} />
-          <StatItem count={userProfile.followers} label="Followers" />
-          <Feather name="chevron-right" size={14} color={colors.text.muted} style={{ marginLeft: 'auto', paddingRight: 4 }} />
-        </TouchableOpacity>
+    {/* ── Stats ── */}
+<TouchableOpacity
+  style={s.statsRow}
+  onPress={() => navigation.navigate('FriendList', { userId: userProfile.id, type: 'profile' })}
+  activeOpacity={0.8}
+>
+  <StatItem count={userProfile.following} label="Following" />
+  <View style={s.statDivider} />
+  <StatItem count={userProfile.followers} label="Followers" />
+  <Feather name="chevron-right" size={14} color={colors.text.muted} style={{ marginLeft: 'auto', paddingRight: 4 }} />
+</TouchableOpacity>
 
         {/* ── Info rows ── */}
         <View style={s.card}>
@@ -321,7 +326,7 @@ export default function Profile({ navigation, route }) {
               onPress={() => navigation.navigate('MessageUser', {
                 recipientId: userProfile.id,
                 recipientName: userProfile.name,
-                recipientImage: `${API_BASE_URL}${userProfile.image}`,
+                recipientImage: `${API_BASE_URL}/uploads/${userProfile.image}`,
               })}
               activeOpacity={0.85}
             >
@@ -364,7 +369,7 @@ const s = StyleSheet.create({
   },
   avatarWrap: { position: 'relative', marginBottom: 14 },
   avatarRing: {
-    width: 96, height: 96, borderRadius: 48,
+    width: 96, height:96, borderRadius: 48,
     padding: 2.5, alignItems: 'center', justifyContent: 'center',
   },
   avatarInner: {

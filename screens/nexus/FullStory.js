@@ -21,7 +21,20 @@ const API_BASE_URL = "http://192.168.0.136:3000";
 const FALLBACK_IMAGE = {
   uri: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80",
 };
-
+const formatTimestamp = (time) => {
+  if (!time) return "Just now";
+  const seconds = Math.floor((Date.now() - new Date(time)) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+};
 export default function FullStory({ navigation, route }) {
   const { StoryID } = route.params;
   const { user } = useContext(AuthorContext);
@@ -179,10 +192,10 @@ export default function FullStory({ navigation, route }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={s.authorName}>{story.author}</Text>
-            <Text style={s.authorTime}>{story.posted_at ?? "Recently"}</Text>
+            <Text style={s.authorTime}>{formatTimestamp(story.posted_at)?? "Recently"}</Text>
           </View>
           {/* Like button */}
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={s.likeBtn}
             onPress={handleLike}
             disabled={isPosting}
@@ -196,7 +209,7 @@ export default function FullStory({ navigation, route }) {
             <Text style={[s.likeCount, liked && s.likeCountActive]}>
               {likeCount}
             </Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
 
         <View style={s.divider} />

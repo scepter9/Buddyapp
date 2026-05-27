@@ -11,7 +11,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-  Platform,
+  Platform,StatusBar
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
@@ -84,7 +84,7 @@ const MessageScreen = ({ navigation }) => {
     navigation.navigate('MessageUser', {
       recipientId: recipient.id,
       recipientName: recipient.name,
-      recipientImage: recipient.image ? `${API_BASE_URL}${recipient.image}` : null,
+      recipientImage: recipient.image ? `${API_BASE_URL}/uploads/${recipient.image}` : null,
     });
   };
   useFocusEffect(
@@ -159,7 +159,7 @@ const MessageScreen = ({ navigation }) => {
   const handleConversationPress = (conversation) => {
    
     const imageUrl = conversation.other_user_image_uri
-    ? `${API_BASE_URL}${conversation.other_user_image_uri}`
+    ? `${API_BASE_URL}/uploads/${conversation.other_user_image_uri}`
     : null;
     navigation.navigate('MessageUser', {
       recipientId: conversation.other_user_id,
@@ -170,7 +170,8 @@ const MessageScreen = ({ navigation }) => {
 
   const renderConversationItem = ({ item }) => {
     const isMyLastMessage = item.last_message_sender_id === myUserId;
-    const isImageMessage = item.last_message_text === 'Image';
+    const isImageMessage = item.last_message_type === 'image';
+    const isAudioMessage = item.last_message_type === 'audio';
     const hasUnread = item.unread_count > 0;
   
     return (
@@ -180,7 +181,7 @@ const MessageScreen = ({ navigation }) => {
       >
         <Image
           source={item.other_user_image_uri
-            ? { uri: `${API_BASE_URL}${item.other_user_image_uri}` }
+            ? { uri: `${API_BASE_URL}/uploads/${item.other_user_image_uri}` }
             : require('../assets/image16.jpeg')}
           style={styles.conversationAvatar}
         />
@@ -192,8 +193,10 @@ const MessageScreen = ({ navigation }) => {
             </Text>
             {isImageMessage ? (
               <Feather name="image" size={14} color="#888" style={{ marginRight: 5 }} />
-            ) : null}
-            {isImageMessage ? ' Photo' : item.last_message_text || 'No messages yet.'}
+            ) : isAudioMessage ?(
+              <Feather name="mic" size={14} color="#888" style={{ marginRight: 5 }} />
+            ):null}
+            {isImageMessage ? ' Photo' : isAudioMessage? 'Audio': item.last_message_text || 'No messages yet.'}
           </Text>
         </View>
         <View style={styles.timestampContainer}>
@@ -216,7 +219,7 @@ const MessageScreen = ({ navigation }) => {
       <Image
   source={
     item.image
-      ? { uri: `${API_BASE_URL}${item.image}` }
+      ? { uri: `${API_BASE_URL}/uploads/${item.image}` }
       : require('../assets/image16.jpeg')
   }
   style={styles.friendImage}
@@ -231,6 +234,7 @@ const MessageScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle='dark-content' backgroundColor='#2B4DA0' translucent/>
       <LinearGradient
         colors={['#1E3A8A', '#2B4DA0']}
         style={styles.header}
@@ -239,15 +243,15 @@ const MessageScreen = ({ navigation }) => {
       >
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>Messages</Text>
-          <TouchableOpacity style={styles.headerButton}  onPress={() => navigation.navigate('FriendList', { userId: userProfile.id ,type:'message'})}>
+          <TouchableOpacity style={styles.headerButton}  onPress={() => navigation.navigate('FriendList', { userId: myUserId ,type:'message'})}>
             <Feather name="edit-3" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
-        <TextInput
+        {/* <TextInput
           style={styles.searchBar}
           placeholder="Search conversations"
           placeholderTextColor="#E0E7FF"
-        />
+        /> */}
       </LinearGradient>
 
       <View style={styles.mainContent}>

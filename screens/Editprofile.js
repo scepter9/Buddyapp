@@ -160,7 +160,7 @@ export default function EditProfile({ route, navigation }) {
   const avatarSource = image
     ? { uri: image.uri }
     : currentProfile?.image
-    ? { uri: `${API_BASE_URL}${currentProfile.image}` }   // BUG FIX: removed stray newline
+    ? { uri: `${API_BASE_URL}/uploads/${currentProfile.image}` }   // BUG FIX: removed stray newline
     : null;
 
   const initials = name

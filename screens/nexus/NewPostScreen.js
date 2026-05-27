@@ -320,7 +320,7 @@ useEffect(()=>{
         {userProfile && (
   <View style={styles.header}>
     <Image
-      source={{ uri: `${API_BASE_URL}${userProfile.image}` }}
+      source={{ uri: `${API_BASE_URL}/uploads/${userProfile.image}` }}
       style={styles.avatar}
     />
     

@@ -23,7 +23,7 @@ import { colors, radius, spacing } from "../Theme";
 const API_BASE_URL = "http://192.168.0.136:3000";
 
 const FALLBACK_ROOM_IMAGE = {
-  uri: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80",
+  uri: "https://picsum.photos/800/400",
 };
 
 
@@ -107,7 +107,7 @@ function TheComments({
     setLikeCount(prev => willBeLiked ? prev + 1 : Math.max(0, prev - 1));
     setIsMutating(true);
     try {
-      const endpoint = willBeLiked ? "addcommentroomlikes" : "removecommentroomlikes";
+      const endpoint = willBeLiked ?`addcommentroomlikes`:`removecommentroomlikes`
       const res = await fetch(`${API_BASE_URL}/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -116,10 +116,12 @@ function TheComments({
       if (!res.ok) {
         setLikebyme(wasLiked);
         setLikeCount(prev => wasLiked ? prev + 1 : Math.max(0, prev - 1));
+        console.log('issue');
       }
     } catch {
       setLikebyme(wasLiked);
       setLikeCount(prev => wasLiked ? prev + 1 : Math.max(0, prev - 1));
+      console.log('issue');
     } finally {
       setIsMutating(false);
     }
@@ -146,6 +148,8 @@ function TheComments({
 
   return (
     <View style={styles.cmRootShell}>
+
+  <View style={{position:'relative'}}>
       {canDelete && (
         <View style={styles.deleteContain}>
           <Feather name="trash-2" size={16} color="#fff" />
@@ -157,7 +161,7 @@ function TheComments({
       >
         <View style={styles.cmPrimaryLane}>
           <Image
-            source={{ uri: `${API_BASE_URL}${item.image}` }}
+            source={{ uri: `${API_BASE_URL}/uploads/${item.image}` }}
             style={styles.cmAvatarOrb}
           />
           <View style={styles.cmContentColumn}>
@@ -173,7 +177,7 @@ function TheComments({
                     <Text style={styles.replyLabel}>Replied to</Text>
                     <View style={styles.replyUserRow}>
                       <Image
-                        source={{ uri: `${API_BASE_URL}${item.replyUserImage}` }}
+                        source={{ uri: `${API_BASE_URL}/uploads/${item.replyUserImage}` }}
                         style={styles.replyPreviewAvatar}
                       />
                       <Text style={styles.replyPreviewName}>
@@ -210,7 +214,7 @@ function TheComments({
           </View>
         </View>
       </Animated.View>
-
+</View>
       {replies.length > 0 && (
         <TouchableOpacity onPress={() => setShowReplies(v => !v)} style={styles.viewReplyButton}>
           <View style={styles.viewReplyLine} />
@@ -226,7 +230,9 @@ function TheComments({
           <MemoizedComments
             item={reply}
             userisId={userisId}
-            onSelect={onSelect}
+            onSelect={(id, name, userid, text) =>
+              onSelect(item.id, name, userid, text)
+            }
             onSelectidforindex={onSelectidforindex}
             thepostid={thepostid}
             Roomid={Roomid}
@@ -279,7 +285,7 @@ const PostChild = React.memo(function PostChild({
   const [selectedValue, setSelectedValue] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  // BUG FIX: init ref for scroll guard — properly prevents scroll on initial load
+
   const didInitialLoad = useRef(false);
   const [showPost, setShowPost] = useState(false);
 
@@ -303,28 +309,41 @@ const PostChild = React.memo(function PostChild({
   }, [postComments]);
 
   // Fetch like state
-  useEffect(() => {
-    if (!searchid || !roomdetais) return;
-    const fetchLikes = async () => {
-      try {
-        const [stateRes, countRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/fetchlikestate?user=${searchid}&room=${roomdetais}`),
-          fetch(`${API_BASE_URL}/fetchlikes?room=${roomdetais}`),
-        ]);
-        if (stateRes.ok) {
-          const data = await stateRes.json();
-          setLikebyme(data.length > 0);
+  useEffect(()=>{
+    if(!searchid || !roomdetais) return;
+    const fetchlikestate=async()=>{
+     
+      try{
+        const res=await fetch(`${API_BASE_URL}/fetchlikestate?user=${searchid}&room=${roomdetais}`)
+        if(!res.ok){
+          console.log('something went wrong');
+          return;
         }
-        if (countRes.ok) {
-          const data = await countRes.json();
-          setLikeCount(data.count);
-        }
-      } catch (err) {
-        console.warn("Like fetch error:", err.message);
+        const data=await res.json()
+        setLikebyme(data.length>0)
+      }catch(err){
+        console.log(err);
       }
-    };
-    fetchLikes();
-  }, [searchid, roomdetais]);
+        }
+        fetchlikestate()
+  },[searchid,roomdetais])
+   useEffect(()=>{
+    const fetchlikes=async()=>{
+      if(!searchid || !roomdetais) return
+      try{
+        const res=await fetch(`${API_BASE_URL}/fetchlikes?room=${roomdetais}`)
+        if(!res.ok){
+          console.log('something went wrong');
+          return;
+        }
+        const data=await res.json()
+        setLikeCount(data.count)
+      }catch(err){
+        console.log(err);
+      }
+    }
+    fetchlikes()
+   },[searchid,roomdetais])
 
   // Fetch comments
   useEffect(() => {
@@ -368,6 +387,7 @@ const PostChild = React.memo(function PostChild({
   }, [postComments.length]);
 
   const postRoomLikes = async () => {
+    console.log(searchid,roomdetais);
     if (isMutating) return;
     Animated.sequence([
       Animated.timing(scaleAnim, { toValue: 1.3, duration: 150, useNativeDriver: true }),
@@ -379,19 +399,23 @@ const PostChild = React.memo(function PostChild({
     setLikeCount(prev => willBeLiked ? prev + 1 : Math.max(0, prev - 1));
     setIsMutating(true);
     try {
-      const endpoint = willBeLiked ? "addroomlikes" : "removeroomlikes";
+      const endpoint = willBeLiked ?`addroomlikes`:`removeroomlikes`
       const res = await fetch(`${API_BASE_URL}/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ searchid, roomdetais }),
+
       });
       if (!res.ok) {
         setLikebyme(wasLiked);
         setLikeCount(prev => wasLiked ? prev + 1 : Math.max(0, prev - 1));
+        console.log('error');
       }
+      
     } catch {
       setLikebyme(wasLiked);
       setLikeCount(prev => wasLiked ? prev + 1 : Math.max(0, prev - 1));
+      console.log('error1');
     } finally {
       setIsMutating(false);
     }
@@ -474,7 +498,7 @@ const PostChild = React.memo(function PostChild({
     <View style={styles.post}>
       <View style={styles.userRow}>
         <Image
-          source={{ uri: `${API_BASE_URL}${item.image}` }}
+          source={{ uri: `${API_BASE_URL}/uploads/${item.image}` }}
           style={styles.avatar}
         />
         <View style={styles.userInfo}>
@@ -485,7 +509,11 @@ const PostChild = React.memo(function PostChild({
           <Text style={styles.time}>{formatTimestamp(item.posted_at)}</Text>
         </View>
         {(isUser || Adminstate) && (
-          <TouchableOpacity style={styles.moreBtn} onPress={deletePost}>
+          <TouchableOpacity style={styles.moreBtn} onPress={()=>
+          Alert.alert('Confirm Delete','Are you sure you want to delete this post',
+          [{text:'Cancel',style:'default',onPress:()=>{console.log('Woah')}},
+        {text:'delete',style:'destructive',onPress:()=>deletePost()}])
+          }>
             <Ionicons name="ellipsis-horizontal-outline" size={20} color="rgba(255,255,255,0.5)" />
           </TouchableOpacity>
         )}
@@ -500,7 +528,7 @@ const PostChild = React.memo(function PostChild({
             const fullUri = `${API_BASE_URL}${uri}`;
             const isVideo = postVideos.includes(uri);
             let itemWidth = "100%";
-            let itemHeight = 600;
+            let itemHeight = 450;
             if (total === 2) { itemWidth = "49.5%"; itemHeight = 400; }
             if (total === 3) {
               itemWidth = index === 2 ? "100%" : "49.5%";
@@ -545,27 +573,40 @@ const PostChild = React.memo(function PostChild({
       )}
 
       <View style={styles.reactions}>
-        <TouchableOpacity style={styles.reactionBtn} onPress={postRoomLikes}>
-          <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-            <Ionicons
-              name={likebyme ? "arrow-up-circle" : "arrow-up-circle-outline"}
-              size={30}
-              color={likebyme ? "#FF9500" : "rgba(255,255,255,0.4)"}
-            />
-          </Animated.View>
-          <Text style={styles.reactText}>{formatNumber(likeCount)}</Text>
-        </TouchableOpacity>
+  {/* Upvote pill */}
+  <View style={styles.upvotePill}>
+    <TouchableOpacity style={styles.upvoteBtn} onPress={postRoomLikes}>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <Ionicons
+          name={likebyme ? "arrow-up-circle" : "arrow-up-circle-outline"}
+          size={18}
+          color={likebyme ? "#FF9500" : "rgba(255,255,255,0.4)"}
+        />
+      </Animated.View>
+      <Text style={[styles.upvoteCount, likebyme && { color: '#FF9500' }]}>
+        {formatNumber(likeCount)}
+      </Text>
+    </TouchableOpacity>
+    {/* <View style={styles.upvoteSep} />
+    <TouchableOpacity style={styles.upvoteBtn}>
+      <Ionicons name="arrow-down-circle-outline" size={18} color="rgba(255,255,255,0.4)" />
+    </TouchableOpacity> */}
+  </View>
 
-        <TouchableOpacity style={styles.reactionBtn} onPress={() => setCommentModal(true)}>
-          <Ionicons name="chatbubbles-outline" size={28} color="rgba(255,255,255,0.4)" />
-          <Text style={styles.reactText}>{formatNumber(upperComments.length)}</Text>
-        </TouchableOpacity>
+  {/* Comments */}
+  <TouchableOpacity style={styles.reactionBtn} onPress={() => setCommentModal(true)}>
+    <Ionicons name="chatbubble-outline" size={16} color="rgba(255,255,255,0.4)" />
+    <Text style={styles.reactText}>{formatNumber(upperComments.length)}</Text>
+  </TouchableOpacity>
 
-        <TouchableOpacity style={styles.reactionBtn} onPress={() => Share.share({ message: "Check this post" })}>
-          <Ionicons name="repeat-outline" size={28} color="rgba(255,255,255,0.4)" />
-          <Text style={styles.reactText}>{item.reactions?.share || 0}</Text>
-        </TouchableOpacity>
-      </View>
+  <View style={styles.reactionSpacer} />
+
+  {/* Share */}
+  <TouchableOpacity style={styles.shareBtn} onPress={() => Share.share({ message: 'Check this post' })}>
+    <Ionicons name="share-outline" size={16} color="rgba(255,255,255,0.35)" />
+    <Text style={styles.shareBtnText}>Share</Text>
+  </TouchableOpacity>
+</View>
 
       {/* Comment modal */}
       <Modal
@@ -825,32 +866,60 @@ export default function DesignersHubScreen({ navigation, route }) {
     }
   };
 
-  const handleImage = async () => {
+  const handleimage = async () => {
+    
+     
+  
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Permission required", "Allow photo library access.");
+      Alert.alert("Access required to access photos");
       return;
     }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
+      allowsMultipleSelection: false,
       quality: 1,
     });
+
     if (result.canceled || !result.assets?.length) return;
-    const asset = result.assets[0];
-    try {
-      const formData = new FormData();
-      formData.append("image", { uri: asset.uri, type: asset.type || "image/jpeg", name: asset.fileName || "room.jpg" });
-      const res = await fetch(`${API_BASE_URL}/api/upload`, { method: "POST", body: formData });
-      if (!res.ok) return;
-      const data = await res.json();
-      socket.emit("sendimage", data.imageUrl);
-    } catch (err) {
-      // BUG FIX: don't throw from press handler — show alert instead
-      Alert.alert("Upload failed", "Could not upload image.");
-      console.warn("Image upload error:", err.message);
+    setRoomImage(null)
+
+
+   const asset=result.assets[0]
+   try{
+    const formData1=new FormData();
+    formData1.append("image", {
+      uri: asset.uri,
+      type: asset.type || "image/jpeg",
+      name: asset.fileName || "room.jpg",
+    });      
+  
+   
+   
+    const postimage=await fetch(`${API_BASE_URL}/api/upload`,{
+      method:'POST',
+      body:formData1
+    })
+    if(!postimage.ok) {
+      console.log('something is wrong ');
+      return;
     }
-  };
+    const data=await postimage.json()
+  
+    const theimage=data.imageUrl
+    if (!socket) return;
+socket.emit("sendimage", theimage);
+
+
+   }
+   catch(err){
+    Alert.alert("Upload failed", "Could not upload image."); 
+   }
+
+ 
+};
 
   const handleBio = () => {
     if (!bioText.trim()) return;
@@ -895,7 +964,7 @@ export default function DesignersHubScreen({ navigation, route }) {
   , [loadingMore]);
 
   const imageSource = roomImage
-    ? { uri: `${API_BASE_URL}${roomImage}` }
+    ? { uri: `${API_BASE_URL}/uploads/${roomImage}` }
     : FALLBACK_ROOM_IMAGE; // BUG FIX: no more watermark fallback
 
   return (
@@ -1024,7 +1093,7 @@ export default function DesignersHubScreen({ navigation, route }) {
                 {isAdmin && (
                   <>
                     <View style={styles.menuDivider} />
-                    <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenModal(false); handleImage(); }}>
+                    <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenModal(false); setTimeout(() => handleimage(), 300); }} disabled={!isAdmin}>
                       <Feather name="image" size={15} color={colors.text.primary} />
                       <Text style={styles.menuText}>Change Wallpaper</Text>
                     </TouchableOpacity>
@@ -1124,21 +1193,68 @@ const styles = StyleSheet.create({
   newPostsText: { color: "#fff", fontSize: 13, fontWeight: "600" },
 
   // ── Post card ──
-  // BUG FIX: replaced BlurView with plain View
+
   post: {
-    backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 16, padding: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(255,255,255,0.07)",
-    marginBottom: 4,
-  },
-  userRow: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
-  avatar: { width: 48, height: 48, borderRadius: 24 },
-  userInfo: { marginLeft: 10, flex: 1 },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  username: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  handle: { color: "rgba(255,255,255,0.4)", fontSize: 13 },
-  time: { color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 2 },
-  moreBtn: { padding: 8 },
-  postText: { color: "#e5e7eb", fontSize: 15, lineHeight: 22, marginBottom: 8 },
+  backgroundColor: '#111827',
+  borderRadius: 14,
+  padding: 0,
+  overflow: 'hidden',
+  marginBottom: 6,
+  borderWidth: 1,
+  borderColor: 'rgba(255,255,255,0.07)',
+},
+userRow: {
+  flexDirection: 'row',
+  alignItems: 'flex-start',
+  padding: 14,
+  paddingBottom: 10,
+  gap: 10,
+},
+avatar: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+},
+
+userInfo: {
+  flex: 1,
+  marginLeft: 0,
+},
+
+nameRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 6,
+  flexWrap: 'wrap',
+},
+
+username: {
+  color: '#f1f5f9',
+  fontWeight: '600',
+  fontSize: 14,
+},
+handle: {
+  color: 'rgba(255,255,255,0.35)',
+  fontSize: 12,
+},
+
+time: {
+  color: 'rgba(255,255,255,0.28)',
+  fontSize: 11,
+  marginTop: 2,
+},
+moreBtn: {
+  padding: 6,
+  borderRadius: 8,
+},
+
+postText: {
+  color: '#e2e8f0',
+  fontSize: 14,
+  lineHeight: 21,
+  paddingHorizontal: 14,
+  paddingBottom: 10,
+},
 
   // ── Media ──
   mediaContainer: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 8 },
@@ -1148,9 +1264,85 @@ const styles = StyleSheet.create({
   mediaOverflowText: { color: "#fff", fontSize: 24, fontWeight: "800" },
 
   // ── Reactions ──
-  reactions: { flexDirection: "row", justifyContent: "space-between", marginTop: 12 },
-  reactionBtn: { flexDirection: "row", alignItems: "center", gap: 6 },
-  reactText: { color: "rgba(255,255,255,0.45)", fontSize: 13, fontWeight: "500" },
+  reactions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.05)',
+    gap: 6,
+  },
+  
+  // Upvote pill — wraps like/dislike together
+  upvotePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  
+  upvoteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  
+  upvoteSep: {
+    width: 1,
+    height: '100%',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  
+  upvoteCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  
+  reactionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  
+  reactText: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  
+  // Add this new one for the spacer
+  reactionSpacer: {
+    flex: 1,
+  },
+  
+  shareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    color: 'rgba(255,255,255,0.35)',
+  },
+  
+  shareBtnText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.35)',
+    fontWeight: '500',
+  },
 
   // ── FAB ──
   fab: { position: "absolute", bottom: 24, right: 20 },
@@ -1195,7 +1387,17 @@ const styles = StyleSheet.create({
   // ── Comments ──
   cmRootShell: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(255,255,255,0.07)", position: "relative" },
   cmRootShellSwipe: { width: "100%", backgroundColor: "#111", borderRadius: 12 },
- deleteContain : { position: "absolute", left: 16, top: 10, bottom: 10, width: 72, backgroundColor: "#ff3b30", borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  deleteContain: {
+    position: "absolute",
+    left: 16,
+    top: 0,
+    bottom: 0,
+    width: 72,
+    backgroundColor: "#ff3b30",
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   cmPrimaryLane: { flexDirection: "row" },
   cmAvatarOrb: { width: 34, height: 34, borderRadius: 17, marginRight: 10, backgroundColor: "#333" },
   cmContentColumn: { flex: 1 },

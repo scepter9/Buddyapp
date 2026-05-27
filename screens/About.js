@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   Image,
-  ScrollView,
   Animated,
   SafeAreaView,
   StyleSheet,
@@ -75,8 +74,10 @@ export default function About({ navigation }) {
   const [notificationCount, setNotificationCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  // FIX: start at 1 — never invisible by default
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const hasAnimated = useRef(false);
 
   const fetchUserData = useCallback(async () => {
     setIsLoading(true);
@@ -111,12 +112,20 @@ export default function About({ navigation }) {
       fetchUserData();
       fetchNotificationCount();
 
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-      ]).start();
-
-      if (user?.id) socket.emit("registerUser", user.id);
+      // FIX: only animate on first focus, not every time screen is revisited
+      if (!hasAnimated.current) {
+        hasAnimated.current = true;
+        fadeAnim.setValue(0);
+        slideAnim.setValue(24);
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]).start();
+      } else {
+        // Already animated — just make sure it's fully visible
+        fadeAnim.setValue(1);
+        slideAnim.setValue(0);
+      }
 
       const onNewNotif = () => setNotificationCount((p) => p + 1);
       const onNotifRead = () => setNotificationCount((p) => Math.max(0, p - 1));
@@ -128,8 +137,15 @@ export default function About({ navigation }) {
         socket.off("newNotification", onNewNotif);
         socket.off("notificationRead", onNotifRead);
       };
-    }, [fetchUserData, fetchNotificationCount, user?.id])
+    }, [fetchUserData, fetchNotificationCount])
   );
+
+  // FIX: register socket user in a separate effect tied to user?.id
+  // so it doesn't keep re-running the entire useFocusEffect
+  const userId = user?.id;
+  useCallback(() => {
+    if (userId) socket.emit("registerUser", userId);
+  }, [userId]);
 
   if (isLoading) {
     return (
@@ -158,9 +174,13 @@ export default function About({ navigation }) {
 
       {/* ── Top bar ── */}
       <View style={s.topBar}>
-        <TouchableOpacity onPress={() => navigation.navigate("Profile")} style={s.avatarWrap} activeOpacity={0.85}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Profile")}
+          style={s.avatarWrap}
+          activeOpacity={0.85}
+        >
           {user?.image ? (
-            <Image source={{ uri: `${API_BASE_URL}${user.image}` }} style={s.avatar} />
+            <Image source={{ uri: `${API_BASE_URL}/uploads/${user.image}` }} style={s.avatar} />
           ) : (
             <LinearGradient colors={["#9333ea", "#6366f1"]} style={s.avatar}>
               <Text style={s.avatarInitials}>{initials}</Text>
@@ -198,7 +218,7 @@ export default function About({ navigation }) {
 
         <FeatureCard
           onPress={() => navigation.navigate("CampusPulse")}
-          gradColors={["#1a0533", "#3b0764", "#1e1040"]}
+          gradColors={colors.gradient.cardPurple}
           borderColor="rgba(147,51,234,0.4)"
           icon="radio"
           eyebrow="CAMPUS PULSE"
@@ -210,7 +230,7 @@ export default function About({ navigation }) {
 
         <FeatureCard
           onPress={() => navigation.navigate("InterestRoom")}
-          gradColors={["#0c1a3a", "#0e3a6e", "#0c2340"]}
+          gradColors={colors.gradient.cardBlue}
           borderColor="rgba(0,217,255,0.3)"
           icon="hash"
           eyebrow="INTEREST ROOMS"
@@ -222,7 +242,7 @@ export default function About({ navigation }) {
 
         <FeatureCard
           onPress={() => navigation.navigate("MainRoom")}
-          gradColors={["#1a1040", "#2d1069", "#1a0a40"]}
+          gradColors={colors.gradient.cardPurple}
           borderColor="rgba(99,102,241,0.4)"
           icon="shield-off"
           eyebrow="ANONYMOUS ZONE"
@@ -243,8 +263,10 @@ export default function About({ navigation }) {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg.screen },
   loading: {
-    flex: 1, backgroundColor: colors.bg.screen,
-    alignItems: "center", justifyContent: "center",
+    flex: 1,
+    backgroundColor: colors.bg.screen,
+    alignItems: "center",
+    justifyContent: "center",
   },
   loadingText: { marginTop: 12, fontSize: 15, color: colors.text.muted },
 
@@ -257,7 +279,6 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(99,102,241,0.06)", bottom: 80, left: -80,
   },
 
-  // ── Top bar ──
   topBar: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: spacing.lg, paddingVertical: 14, gap: 12,
@@ -296,7 +317,6 @@ const s = StyleSheet.create({
     marginBottom: 20, letterSpacing: 0.2,
   },
 
-  // ── Feature card ──
   featureCard: {
     borderRadius: radius.xl, borderWidth: 1,
     padding: 22, marginBottom: 16, overflow: "hidden", position: "relative",
@@ -309,17 +329,10 @@ const s = StyleSheet.create({
     position: "absolute", width: 120, height: 120, borderRadius: 60,
     borderWidth: 1, borderColor: "rgba(255,255,255,0.04)", right: -20, top: -20,
   },
-  eyebrowRow: {
-    flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 16,
-  },
+  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 16 },
   eyebrowDot: { width: 5, height: 5, borderRadius: 3 },
-  eyebrow: {
-    fontSize: 9, fontWeight: "800", letterSpacing: 2,
-    color: "rgba(255,255,255,0.4)",
-  },
-  cardBody: {
-    flexDirection: "row", alignItems: "flex-start", gap: 14, marginBottom: 20,
-  },
+  eyebrow: { fontSize: 9, fontWeight: "800", letterSpacing: 2, color: "rgba(255,255,255,0.4)" },
+  cardBody: { flexDirection: "row", alignItems: "flex-start", gap: 14, marginBottom: 20 },
   cardIconWrap: {
     width: 50, height: 50, borderRadius: 14,
     backgroundColor: "rgba(255,255,255,0.1)",

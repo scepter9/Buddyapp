@@ -1,5 +1,5 @@
 import React,{useEffect} from "react";
-import { View, Image, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Image, TouchableOpacity, StyleSheet ,Text} from "react-native";
 import { Feather } from "@expo/vector-icons"; 
 import { Video } from "expo-av";
 import { Audio } from 'expo-av';
@@ -26,9 +26,12 @@ export default function ViewImage({ route, navigation }) {
       </TouchableOpacity>
 
       {/* Optional menu button (top-right) */}
-      <TouchableOpacity style={styles.menuButton}>
-      <Feather name="more-vertical" size={24} color="#fff" />
-      </TouchableOpacity>
+      {mediatype==='image' && (
+           <TouchableOpacity style={styles.menuButton} >
+           <Text style={{fontSize:15,color:'#fff'}} >Save</Text>
+           </TouchableOpacity>
+      )}
+   
 
       {/* Fullscreen Image */}
       {mediatype==='image'?(
@@ -78,5 +81,11 @@ const styles = StyleSheet.create({
     top: 50,
     right: 20,
     zIndex: 2,
+    paddingVertical:14,
+    paddingHorizontal:12,
+    borderRadius:10,
+    backgroundColor:'rgba(255,255,255,0.05)',
+    alignItems:'center',
+    justifyContent:'center'
   },
 });

@@ -258,7 +258,7 @@ export default function RequestToWrite({ navigation }) {
             {image ? (
               <View style={s.imagePreviewWrap}>
                 <Image
-                  source={{ uri: `${API_BASE_URL}${image}` }}
+                  source={{ uri: `${API_BASE_URL}/uploads/${image}` }}
                   style={s.imagePreview}
                 />
                 <TouchableOpacity

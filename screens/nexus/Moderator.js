@@ -8,7 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { colors, radius, spacing } from '../Theme';
-// BUG FIX: removed unused expo-image-picker import
+
 
 const API_BASE_URL = 'http://192.168.0.136:3000';
 

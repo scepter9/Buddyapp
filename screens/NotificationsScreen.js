@@ -10,11 +10,9 @@ import { Feather } from '@expo/vector-icons';
 import BottomNavigator from './BottomNavigator';
 import socket from './Socket';
 import { AuthorContext } from './AuthorContext';
-import { colors, radius, spacing } from './Theme';
 
 const API_BASE_URL = 'http://192.168.0.136:3000';
 
-// BUG FIX: added LIKE and COMMENT which were missing — LIKE was used in switch but not defined
 const TYPES = {
   FOLLOW:  'follow',
   LIKE:    'like',
@@ -22,7 +20,6 @@ const TYPES = {
   ANON:    'anon',
 };
 
-// BUG FIX: formatTimeAgo was called but never defined anywhere — defined here
 const formatTimeAgo = (time) => {
   if (!time) return 'Just now';
   const seconds = Math.floor((Date.now() - new Date(time)) / 1000);
@@ -45,19 +42,28 @@ const NotificationItem = React.memo(function NotificationItem({
   const { id, sender_name, sender_image, message, created_at, type, sender_id } = notification;
 
   const slideAnim = useRef(new Animated.Value(0)).current;
-
+  // FIX: track whether delete bg is showing — only reveal on actual swipe
+  const deleteOpacity = useRef(new Animated.Value(0)).current;
 
   const panResponder = useRef(PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 5 && g.dx > 0,
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 8 && g.dx > 0,
     onPanResponderMove: (_, g) => {
-      if (g.dx > 0) slideAnim.setValue(Math.min(g.dx, 120));
+      if (g.dx > 0) {
+        const val = Math.min(g.dx, 120);
+        slideAnim.setValue(val);
+        // FIX: fade in the delete bg proportionally as user swipes
+        deleteOpacity.setValue(val / 80);
+      }
     },
     onPanResponderRelease: (_, g) => {
-      if (g.dx > 60) {
-        Animated.timing(slideAnim, { toValue: 150, duration: 200, useNativeDriver: true })
+      if (g.dx > 70) {
+        Animated.timing(slideAnim, { toValue: 400, duration: 220, useNativeDriver: true })
           .start(() => onDelete(id));
       } else {
-        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }).start();
+        Animated.parallel([
+          Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }),
+          Animated.timing(deleteOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+        ]).start();
       }
     },
   })).current;
@@ -66,20 +72,19 @@ const NotificationItem = React.memo(function NotificationItem({
     if (sender_id) navigation.navigate('Profile', { userId: sender_id });
   };
 
-  // Icon and accent color per type
   const typeConfig = {
-    [TYPES.FOLLOW]:  { icon: 'user-plus', color: '#9333ea' },
-    [TYPES.LIKE]:    { icon: 'heart',     color: '#f43f5e' },
-    [TYPES.COMMENT]: { icon: 'message-circle', color: '#0284c7' },
-    [TYPES.ANON]:    { icon: 'shield-off', color: '#6366f1' },
+    [TYPES.FOLLOW]:  { icon: 'user-plus',      color: '#9333ea', bg: 'rgba(147,51,234,0.12)' },
+    [TYPES.LIKE]:    { icon: 'heart',           color: '#f43f5e', bg: 'rgba(244,63,94,0.12)'  },
+    [TYPES.COMMENT]: { icon: 'message-circle',  color: '#0ea5e9', bg: 'rgba(14,165,233,0.12)' },
+    [TYPES.ANON]:    { icon: 'shield-off',      color: '#6366f1', bg: 'rgba(99,102,241,0.12)' },
   };
-  const config = typeConfig[type] ?? { icon: 'bell', color: colors.accent.purple };
+  const config = typeConfig[type] ?? { icon: 'bell', color: '#9333ea', bg: 'rgba(147,51,234,0.12)' };
 
   const renderBody = () => {
     switch (type) {
       case TYPES.FOLLOW:
         return (
-          <View style={s.followRow}>
+          <View style={{ gap: 6 }}>
             <Text style={s.messageText}>
               <Text style={s.senderName} onPress={goToProfile}>{sender_name}</Text>
               {' '}followed you.
@@ -104,7 +109,6 @@ const NotificationItem = React.memo(function NotificationItem({
           </Text>
         );
       case TYPES.ANON:
-        // System notification — no sender
         return <Text style={s.messageText}>{message}</Text>;
       default:
         return (
@@ -120,17 +124,18 @@ const NotificationItem = React.memo(function NotificationItem({
 
   return (
     <View style={s.rowShell}>
-      {/* Delete reveal */}
-      <View style={s.deleteReveal}>
-        <Feather name="trash-2" size={16} color="#fff" />
-      </View>
+      {/* FIX: delete bg is invisible until swipe begins — controlled by deleteOpacity */}
+      <Animated.View style={[s.deleteReveal, { opacity: deleteOpacity }]}>
+        <Feather name="trash-2" size={17} color="#fff" />
+        <Text style={s.deleteLabel}>Delete</Text>
+      </Animated.View>
 
       <Animated.View
         {...panResponder.panHandlers}
         style={[s.rowCard, { transform: [{ translateX: slideAnim }] }]}
       >
-        {/* Type icon */}
-        <View style={[s.typeIcon, { backgroundColor: `${config.color}22` }]}>
+        {/* Left: type icon */}
+        <View style={[s.typeIcon, { backgroundColor: config.bg }]}>
           <Feather name={config.icon} size={16} color={config.color} />
         </View>
 
@@ -142,8 +147,8 @@ const NotificationItem = React.memo(function NotificationItem({
               style={s.avatar}
             />
           ) : (
-            <View style={[s.avatarFallback, { backgroundColor: `${config.color}33` }]}>
-              <Feather name={config.icon} size={18} color={config.color} />
+            <View style={[s.avatarFallback, { backgroundColor: config.bg }]}>
+              <Feather name={config.icon} size={17} color={config.color} />
             </View>
           )}
         </TouchableOpacity>
@@ -169,7 +174,6 @@ export default function NotificationScreen() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [disabledRequests, setDisabledRequests] = useState({});
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -205,16 +209,9 @@ export default function NotificationScreen() {
       fetchNotifications();
       markAsRead();
 
-      // BUG FIX: only add NEW listeners here — no socket.disconnect() in cleanup
-      // socket.disconnect() would kill the shared socket for the whole app
-      const onNewNotif = (notif) => {
-        setNotifications((prev) => [notif, ...prev]);
-      };
-
-      // BUG FIX: backend now emits { deletedId } — use that to filter locally
-      const onDeleted = ({ deletedId }) => {
+      const onNewNotif = (notif) => setNotifications((prev) => [notif, ...prev]);
+      const onDeleted = ({ deletedId }) =>
         setNotifications((prev) => prev.filter((n) => n.id !== deletedId));
-      };
 
       socket.on('newNotification', onNewNotif);
       socket.on('UpdateAfterdeletenotication', onDeleted);
@@ -222,22 +219,18 @@ export default function NotificationScreen() {
       return () => {
         socket.off('newNotification', onNewNotif);
         socket.off('UpdateAfterdeletenotication', onDeleted);
-        // do NOT call socket.disconnect() here
       };
     }, [fetchNotifications, markAsRead])
   );
 
-  // Register user room for targeted socket events
   useFocusEffect(
     useCallback(() => {
-      if (loggedInUserId) {
-        socket.emit('registerUser', loggedInUserId);
-      }
+      if (loggedInUserId) socket.emit('registerUser', loggedInUserId);
     }, [loggedInUserId])
   );
 
-  // ── Delete single ──
   const handleDelete = useCallback(async (id) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
     try {
       const res = await fetch(`${API_BASE_URL}/deletesinglenotification`, {
         method: 'POST',
@@ -246,36 +239,28 @@ export default function NotificationScreen() {
         body: JSON.stringify({ notid: id }),
       });
       if (!res.ok) {
-        Alert.alert('Error', 'Could not delete notification.');
-        return;
+        // re-fetch to restore if server failed
+        fetchNotifications();
       }
-      // BUG FIX: was missing return in setNotifications callback — state never updated
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-    } catch (err) {
-      Alert.alert('Error', 'Could not delete notification.');
+    } catch {
+      fetchNotifications();
     }
-  }, []);
+  }, [fetchNotifications]);
 
-  // ── Clear all ──
-  const clearAll = async () => {
+  const clearAll = () => {
     Alert.alert(
       'Clear all notifications',
       'This will remove all notifications. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Clear all',
-          style: 'destructive',
+          text: 'Clear all', style: 'destructive',
           onPress: async () => {
             try {
               const res = await fetch(`${API_BASE_URL}/notifications/clear-all`, {
-                method: 'POST',
-                credentials: 'include',
+                method: 'POST', credentials: 'include',
               });
-              if (!res.ok) {
-                Alert.alert('Error', 'Failed to clear notifications.');
-                return;
-              }
+              if (!res.ok) { Alert.alert('Error', 'Failed to clear notifications.'); return; }
               setNotifications([]);
             } catch {
               Alert.alert('Error', 'Failed to clear notifications.');
@@ -286,17 +271,15 @@ export default function NotificationScreen() {
     );
   };
 
-  // ── Follow back ──
   const handleFollowBack = async (targetUserId) => {
     try {
       const res = await fetch(`${API_BASE_URL}/follow`, {
-        method: 'POST',
-        credentials: 'include',
+        method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ receiver_id: targetUserId }),
       });
       if (!res.ok) throw new Error('Failed to follow back');
-      Alert.alert('Done', 'Followed back successfully!');
+      Alert.alert('Done', 'Followed back!');
       fetchNotifications();
     } catch (err) {
       Alert.alert('Error', err.message);
@@ -317,7 +300,7 @@ export default function NotificationScreen() {
       <SafeAreaView style={s.safe}>
         <StatusBar barStyle="light-content" />
         <View style={s.centered}>
-          <ActivityIndicator size="large" color={colors.accent.purple} />
+          <ActivityIndicator size="large" color="#9333ea" />
           <Text style={s.loadingText}>Loading notifications...</Text>
         </View>
       </SafeAreaView>
@@ -329,10 +312,10 @@ export default function NotificationScreen() {
       <SafeAreaView style={s.safe}>
         <StatusBar barStyle="light-content" />
         <View style={s.centered}>
-          <Text style={s.errorEmoji}>😕</Text>
+          <Text style={s.emptyEmoji}>😕</Text>
           <Text style={s.errorText}>{error}</Text>
           <TouchableOpacity style={s.retryBtn} onPress={fetchNotifications}>
-            <Text style={s.retryText}>Try again</Text>
+            <Text style={s.retryBtnText}>Try again</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -342,35 +325,40 @@ export default function NotificationScreen() {
   return (
     <SafeAreaView style={s.safe}>
       <StatusBar barStyle="light-content" />
+
+      {/* Ambient blobs */}
       <View style={s.blobTR} pointerEvents="none" />
+      <View style={s.blobBL} pointerEvents="none" />
 
       {/* Header */}
       <View style={s.header}>
         <View>
           <Text style={s.headerTitle}>Notifications</Text>
           {notifications.length > 0 && (
-            <Text style={s.headerSub}>{notifications.length} total</Text>
+            <Text style={s.headerSub}>{notifications.length} alert{notifications.length !== 1 ? 's' : ''}</Text>
           )}
         </View>
         {notifications.length > 0 && (
-          <TouchableOpacity style={s.clearBtn} onPress={clearAll}>
-            <Feather name="trash-2" size={16} color="#f87171" />
+          <TouchableOpacity style={s.clearBtn} onPress={clearAll} activeOpacity={0.8}>
+            <Feather name="trash-2" size={15} color="#f87171" />
           </TouchableOpacity>
         )}
       </View>
 
+      {/* Divider */}
       <LinearGradient
-        colors={['transparent', '#9333ea', 'transparent']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={s.headerDivider}
+        colors={['transparent', 'rgba(147,51,234,0.5)', 'transparent']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+        style={s.divider}
       />
 
-      {/* Hint */}
-      <View style={s.swipeHint}>
-        <Feather name="arrow-right" size={11} color="rgba(255,255,255,0.2)" />
-        <Text style={s.swipeHintText}>Swipe right to dismiss</Text>
-      </View>
+      {/* Swipe hint */}
+      {notifications.length > 0 && (
+        <View style={s.hintRow}>
+          <Feather name="arrow-right" size={10} color="rgba(255,255,255,0.18)" />
+          <Text style={s.hintText}>Swipe right to dismiss</Text>
+        </View>
+      )}
 
       {notifications.length === 0 ? (
         <View style={s.centered}>
@@ -393,89 +381,122 @@ export default function NotificationScreen() {
   );
 }
 
+// ─────────────────────────────────────────
+// Styles — no Theme.js dependencies
+// ─────────────────────────────────────────
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg.screen },
+  safe: { flex: 1, backgroundColor: '#0a0a12' },
+
   blobTR: {
-    position: 'absolute', width: 240, height: 240, borderRadius: 120,
-    backgroundColor: 'rgba(147,51,234,0.08)', top: -60, right: -60,
+    position: 'absolute', width: 260, height: 260, borderRadius: 130,
+    backgroundColor: 'rgba(147,51,234,0.07)', top: -80, right: -80,
+  },
+  blobBL: {
+    position: 'absolute', width: 180, height: 180, borderRadius: 90,
+    backgroundColor: 'rgba(99,102,241,0.05)', bottom: 100, left: -60,
   },
 
   // ── Header ──
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingTop: 18, paddingBottom: 14,
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16,
   },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: colors.text.primary },
-  headerSub: { fontSize: 12, color: colors.text.muted, marginTop: 2 },
-  headerDivider: { height: 1, marginBottom: 8 },
+  headerTitle: {
+    fontSize: 26, fontWeight: '800', color: '#f1f5f9', letterSpacing: -0.3,
+  },
+  headerSub: { fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 },
+  divider: { height: 1, marginBottom: 6 },
   clearBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(248,113,113,0.1)',
-    borderWidth: 1, borderColor: 'rgba(248,113,113,0.2)',
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(248,113,113,0.08)',
+    borderWidth: 1, borderColor: 'rgba(248,113,113,0.18)',
     alignItems: 'center', justifyContent: 'center',
   },
 
-  // ── Swipe hint ──
-  swipeHint: {
+  // ── Hint ──
+  hintRow: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: spacing.lg, marginBottom: 8,
+    paddingHorizontal: 20, marginBottom: 10,
   },
-  swipeHintText: { fontSize: 11, color: 'rgba(255,255,255,0.2)' },
+  hintText: { fontSize: 11, color: 'rgba(255,255,255,0.18)' },
 
-  list: { paddingHorizontal: spacing.lg, paddingBottom: 100 },
+  list: { paddingHorizontal: 16, paddingBottom: 110 },
 
-  // ── Row ──
-  rowShell: { position: 'relative', marginBottom: 10 },
+  // ── Row shell & swipe ──
+  rowShell: {
+    position: 'relative',
+    marginBottom: 10,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
   deleteReveal: {
-    position: 'absolute', left: 0, top: 0, bottom: 0, width: 72,
-    backgroundColor: '#ef4444', borderRadius: radius.lg,
-    alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%',
+    backgroundColor: '#ef4444',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 20,
+    gap: 8,
+    borderRadius: 16,
   },
+  deleteLabel: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  // ── Card ──
   rowCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: colors.bg.card,
-    borderWidth: 1, borderColor: colors.border.subtle,
-    borderRadius: radius.lg, padding: 14,
+    backgroundColor: '#13111f',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 16, padding: 14,
   },
+
   typeIcon: {
-    width: 34, height: 34, borderRadius: 10,
+    width: 36, height: 36, borderRadius: 11,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   avatar: {
-    width: 40, height: 40, borderRadius: 20,
-    flexShrink: 0,
+    width: 42, height: 42, borderRadius: 21, flexShrink: 0,
   },
   avatarFallback: {
-    width: 40, height: 40, borderRadius: 20,
+    width: 42, height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
+
   content: { flex: 1 },
-  messageText: { fontSize: 13, color: colors.text.primary, lineHeight: 18 },
-  senderName: { fontWeight: '700', color: colors.accent.lavender },
-  timestamp: { fontSize: 11, color: colors.text.muted, marginTop: 4 },
+  messageText: {
+    fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 19,
+  },
+  senderName: {
+    fontWeight: '700', color: '#c084fc',
+  },
+  timestamp: {
+    fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 5,
+  },
 
   // ── Follow back ──
-  followRow: { gap: 6 },
   followBtn: {
-    alignSelf: 'flex-start', marginTop: 6,
+    alignSelf: 'flex-start',
     backgroundColor: 'rgba(147,51,234,0.15)',
     borderWidth: 1, borderColor: 'rgba(147,51,234,0.3)',
-    borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 6,
+    borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6,
   },
   followBtnText: { fontSize: 12, fontWeight: '700', color: '#c084fc' },
 
   // ── States ──
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  loadingText: { fontSize: 14, color: colors.text.muted },
-  errorEmoji: { fontSize: 36, marginBottom: 4 },
-  errorText: { fontSize: 14, color: '#f87171', textAlign: 'center', paddingHorizontal: 40 },
-  retryBtn: {
-    marginTop: 8, backgroundColor: 'rgba(147,51,234,0.15)',
-    borderWidth: 1, borderColor: 'rgba(147,51,234,0.3)',
-    borderRadius: radius.full, paddingHorizontal: 20, paddingVertical: 10,
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  loadingText: { fontSize: 14, color: 'rgba(255,255,255,0.4)', marginTop: 8 },
+  emptyEmoji: { fontSize: 44, marginBottom: 6 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#f1f5f9' },
+  emptyDesc: {
+    fontSize: 13, color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center', paddingHorizontal: 40, lineHeight: 19,
   },
-  retryText: { fontSize: 14, fontWeight: '700', color: '#c084fc' },
-  emptyEmoji: { fontSize: 44, marginBottom: 8 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: colors.text.primary },
-  emptyDesc: { fontSize: 13, color: colors.text.muted, textAlign: 'center', paddingHorizontal: 40 },
+  errorText: {
+    fontSize: 14, color: '#f87171', textAlign: 'center', paddingHorizontal: 40,
+  },
+  retryBtn: {
+    marginTop: 8,
+    backgroundColor: 'rgba(147,51,234,0.15)',
+    borderWidth: 1, borderColor: 'rgba(147,51,234,0.3)',
+    borderRadius: 999, paddingHorizontal: 22, paddingVertical: 10,
+  },
+  retryBtnText: { fontSize: 14, fontWeight: '700', color: '#c084fc' },
 });

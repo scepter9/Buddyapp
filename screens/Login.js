@@ -143,7 +143,7 @@ setIsSubmitting(true);
 <TouchableOpacity onPress={() => navigation.navigate('Register')}>
 <Text style={{color:'#A78BFA', fontSize:13, fontWeight:'600'}}>New here? Join free →</Text>
 </TouchableOpacity>
-<TouchableOpacity onPress={() => navigation.navigate('ForgotPass')}>
+<TouchableOpacity onPress={() => navigation.navigate('Forgotpassword')}>
 <Text style={{color:'rgba(255,255,255,0.2)', fontSize:13}}>Forgot password?</Text>
 </TouchableOpacity>
 </View>

@@ -121,7 +121,7 @@ export default function MainRoom({ navigation }) {
       Alert.alert("Missing info", "Please set a duration greater than 0.");
       return;
     }
-
+ 
     // BUG FIX: generate code before using it
     const roomRandomCode = generateRandomCode();
 

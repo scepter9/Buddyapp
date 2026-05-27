@@ -50,13 +50,13 @@ function FriendRow({ friend, onPress, onFollowToggle, isFollowingThem }) {
   return (
     <TouchableOpacity
       style={s.row}
-      onPress={() => onPress}
+      onPress={onPress}
       activeOpacity={0.65}
     >
       {/* Avatar */}
       {friend.image ? (
         <Image
-          source={{ uri: `${API_BASE_URL}${friend.image}` }}
+          source={{ uri: `${API_BASE_URL}/uploads/${friend.image}` }}
           style={s.avatar}
         />
       ) : (
@@ -163,7 +163,7 @@ export default function FriendList({ navigation, route }) {
         navigation.navigate('MessageUser', {
           recipientId: item.id,
           recipientName: item.FULLNAME,
-          recipientImage: item.image,
+          recipientImage: `${API_BASE_URL}/uploads/${item.image}`,
         });
   
       } else if (type === 'profile') {

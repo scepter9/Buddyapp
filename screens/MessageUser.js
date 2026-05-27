@@ -2,15 +2,16 @@ import React, { useState, useEffect, useRef, useCallback, useContext } from 'rea
 import {
     View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
     SafeAreaView, Platform, KeyboardAvoidingView, ActivityIndicator,
-    Image, Animated, TouchableWithoutFeedback, Dimensions, PanResponder, Alert,
+    Image, Animated, TouchableWithoutFeedback, Dimensions, PanResponder, Alert,StatusBar
 } from 'react-native';
 import { AuthorContext } from './AuthorContext';
 import { UnreadMessagesContext } from './UnreadMessagesContext';
 import * as ImagePicker from 'expo-image-picker';
-import { Feather } from '@expo/vector-icons';
+import { Feather ,Ionicons} from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import socket from './Socket'
 import Slideupbar from './Slideupbar';
+import { useFocusEffect } from '@react-navigation/native';
 
 const API_BASE_URL = 'http://192.168.0.136:3000';
 const { width: screenWidth } = Dimensions.get('window');
@@ -50,94 +51,183 @@ const toastStyles = StyleSheet.create({
 });
 
 const AudioMessage = ({ uri, isMine }) => {
-    const [sound, setSound] = useState(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [position, setPosition] = useState(0);
-    const [duration, setDuration] = useState(0);
-    const progressAnim = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => () => { sound?.unloadAsync(); }, [sound]);
-
+    const soundRef = useRef(null);         // source of truth for the sound object
+    const [isPlaying, setIsPlaying]  = useState(false);
+    const [position,  setPosition]   = useState(0);
+    const [duration,  setDuration]   = useState(0);
+  
+    // Set audio mode once on mount
+    useEffect(() => {
+      Audio.setAudioModeAsync({
+        allowsRecordingIOS:       false,
+        playsInSilentModeIOS:     true,
+        shouldDuckAndroid:        true,
+        playThroughEarpieceAndroid: false,
+      });
+    }, []);
+  
+    // FIX: on blur — stop, unload, and reset everything so it works fresh on return
+    useFocusEffect(
+      useCallback(() => {
+        return () => {
+          if (soundRef.current) {
+            soundRef.current.stopAsync().catch(() => {});
+            soundRef.current.unloadAsync().catch(() => {});
+            soundRef.current = null;
+          }
+          setIsPlaying(false);
+          setPosition(0);
+          // keep duration so the timer still shows total length at rest
+        };
+      }, [])
+    );
+  
+    const onPlaybackStatus = useCallback((status) => {
+        if (!status.isLoaded) return;
+        setPosition(status.positionMillis);
+        if (status.durationMillis) setDuration(status.durationMillis);
+        if (status.didJustFinish) {
+          setIsPlaying(false);
+          setPosition(0);
+          // FIX: seek back to 0 immediately on the sound object itself
+          // so it's ready to replay without needing a seek in togglePlay
+          soundRef.current?.setPositionAsync(0).catch(() => {});
+        }
+      }, []);
+  
     const togglePlay = async () => {
-        if (sound) {
+        try {
+          if (soundRef.current) {
             if (isPlaying) {
-                await sound.pauseAsync();
-                setIsPlaying(false);
+              await soundRef.current.pauseAsync();
+              setIsPlaying(false);
             } else {
-                await sound.playAsync();
-                setIsPlaying(true);
+              // FIX: always seek to current position before playing
+              // if position is 0 (finished or fresh), seek to start explicitly
+              await soundRef.current.setPositionAsync(position ?? 0);
+              await soundRef.current.playAsync();
+              setIsPlaying(true);
             }
             return;
-        }
-        const { sound: newSound } = await Audio.Sound.createAsync(
+          }
+      
+          // Load fresh
+          const { sound: newSound } = await Audio.Sound.createAsync(
             { uri: `${API_BASE_URL}${uri}` },
             { shouldPlay: true },
-            (status) => {
-                if (status.isLoaded) {
-                    setPosition(status.positionMillis);
-                    setDuration(status.durationMillis || 0);
-                    const progress = status.durationMillis ? status.positionMillis / status.durationMillis : 0;
-                    progressAnim.setValue(progress);
-                    if (status.didJustFinish) {
-                        setIsPlaying(false);
-                        setPosition(0);
-                        progressAnim.setValue(0);
-                    }
-                }
-            }
-        );
-        setSound(newSound);
-        setIsPlaying(true);
-    };
-
+            onPlaybackStatus
+          );
+          soundRef.current = newSound;
+          setIsPlaying(true);
+        } catch (err) {
+          console.warn('AudioMessage togglePlay error:', err.message);
+        }
+      };
+  
+    // Unload on unmount
+    useEffect(() => {
+      return () => {
+        soundRef.current?.unloadAsync().catch(() => {});
+      };
+    }, []);
+  
     const formatTime = (ms) => {
-        const s = Math.floor(ms / 1000);
-        return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      if (!ms) return '0:00';
+      const s = Math.floor(ms / 1000);
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
     };
-
-    const barCount = 24;
-
+  
+    const BAR_COUNT = 28;
+    const progress  = duration > 0 ? position / duration : 0;
+  
+    // Colours
+    const playBtnBg  = isMine ? 'rgba(255,255,255,0.2)' : 'rgba(99,102,241,0.12)';
+    const playIcon   = isMine ? '#fff'                  : '#6366f1';
+    const barActive  = isMine ? '#fff'                  : '#6366f1';
+    const barInactive= isMine ? 'rgba(255,255,255,0.28)': 'rgba(99,102,241,0.22)';
+    const timerColor = isMine ? 'rgba(255,255,255,0.65)': '#888';
+  
     return (
-        <View style={[audioStyles.wrapper, isMine ? audioStyles.wrapperSent : audioStyles.wrapperReceived]}>
-            <TouchableOpacity onPress={togglePlay} style={audioStyles.playBtn}>
-                <Feather name={isPlaying ? 'pause' : 'play'} size={18} color={isMine ? '#007bff' : '#555'} />
-            </TouchableOpacity>
-            <View style={audioStyles.waveform}>
-                {Array.from({ length: barCount }).map((_, i) => {
-                    const h = 6 + Math.sin(i * 0.8) * 5 + (i % 3 === 0 ? 8 : 0);
-                    const filled = duration > 0 && (i / barCount) < (position / duration);
-                    return (
-                        <View key={i} style={[audioStyles.bar, { height: h },
-                            filled ? (isMine ? audioStyles.barFilledSent : audioStyles.barFilledReceived)
-                                   : (isMine ? audioStyles.barEmptySent : audioStyles.barEmptyReceived)]} />
-                    );
-                })}
-            </View>
-            <Text style={[audioStyles.timer, isMine ? audioStyles.timerSent : audioStyles.timerReceived]}>
-                {formatTime(position || duration)}
-            </Text>
+      <View style={[a.wrapper, isMine ? a.sent : a.received]}>
+  
+        {/* Play / Pause */}
+        <TouchableOpacity
+          onPress={togglePlay}
+          activeOpacity={0.8}
+          style={[a.playBtn, { backgroundColor: playBtnBg }]}
+        >
+          <Feather name={isPlaying ? 'pause' : 'play'} size={15} color={playIcon} />
+        </TouchableOpacity>
+  
+        {/* Waveform */}
+        <View style={a.waveWrap}>
+          {Array.from({ length: BAR_COUNT }).map((_, i) => {
+            // Varied heights — deterministic so they don't repaint
+            const h = 5 + Math.abs(Math.sin(i * 0.85 + 0.5)) * 13 + (i % 5 === 0 ? 6 : 0);
+            const filled = i / BAR_COUNT < progress;
+            return (
+              <View
+                key={i}
+                style={[a.bar, { height: h, backgroundColor: filled ? barActive : barInactive }]}
+              />
+            );
+          })}
         </View>
+  
+        {/* Timer */}
+        <Text style={[a.timer, { color: timerColor }]}>
+          {isPlaying ? formatTime(position) : formatTime(duration)}
+        </Text>
+  
+      </View>
     );
-};
+  };
 
-const audioStyles = StyleSheet.create({
-    wrapper: { flexDirection: 'row', alignItems: 'center', padding: 8, borderRadius: 20, minWidth: 200 },
-    wrapperSent: { backgroundColor: '#0066dd' },
-    wrapperReceived: { backgroundColor: '#ececec' },
-    playBtn: {
-        width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.25)', marginRight: 10,
+  const a = StyleSheet.create({
+    wrapper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 22,
+      minWidth: 210,
+      maxWidth: 290,
+      gap: 10,
     },
-    waveform: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2 },
-    bar: { width: 3, borderRadius: 3 },
-    barFilledSent: { backgroundColor: '#fff' },
-    barEmptySent: { backgroundColor: 'rgba(255,255,255,0.4)' },
-    barFilledReceived: { backgroundColor: '#007bff' },
-    barEmptyReceived: { backgroundColor: '#bbb' },
-    timer: { fontSize: 11, marginLeft: 8, minWidth: 30 },
-    timerSent: { color: 'rgba(255,255,255,0.85)' },
-    timerReceived: { color: '#888' },
-});
+    sent: {
+      backgroundColor: '#5b5fc7',
+    },
+    received: {
+      backgroundColor: '#f0f0f6',
+    },
+    playBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    waveWrap: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2.5,
+      height: 30,
+      overflow: 'hidden',
+    },
+    bar: {
+      width: 3,
+      borderRadius: 2,
+    },
+    timer: {
+      fontSize: 11,
+      fontWeight: '600',
+      minWidth: 34,
+      textAlign: 'right',
+      flexShrink: 0,
+    },
+  });
 
 const SWIPE_THRESHOLD = 60;
 
@@ -195,6 +285,24 @@ const [clearstate,setClearstate]=useState(false)
     const scrollToBottom = (animated = true) => {
         scrollViewRef.current?.scrollToEnd({ animated });
     };
+    
+const markAsRead = useCallback(async (messageIds) => {
+    if (!messageIds?.length) return;
+    try {
+      socket.emit('mark-read', {
+        themessages: messageIds,  
+        sender: recipientId,       
+        receiver: myUserId,        
+      });
+      setMessages(prev =>
+        prev.map(item =>
+          messageIds.includes(item.id) ? { ...item, isRead: true, status: 'seen' } : item
+        )
+      );
+    } catch (err) {
+      console.log('Failed to mark as read', err);
+    }
+  }, [myUserId, recipientId]);  
 
     const openDropdown = useCallback((id) => {
         messageRefs.current[id]?.measureInWindow((x, y, width, height) => {
@@ -283,8 +391,12 @@ const [clearstate,setClearstate]=useState(false)
                 type: msg.type, text: msg.text, imageUri: msg.image_uri,
                 audioUri: msg.audio_uri, timestamp: msg.timestamp,
                 replyToId: msg.reply_to_id, status: 'sent',
-                isMine: msg.sender_id === myUserId,
+                isMine: msg.sender_id === myUserId,isRead:msg.is_read===1
             }));
+            const unRead = formatted.filter(prev => !prev.isRead && prev.senderId === recipientId);
+            if(unRead.length>0){
+                markAsRead(unRead.map(p=>p.id))
+            }
             setMessages(formatted);
             if (formatted.length > 0) resetUnreadCountForConversation(recipientId, myUserId);
         } catch {
@@ -293,7 +405,7 @@ const [clearstate,setClearstate]=useState(false)
             setIsLoading(false);
             setTimeout(() => scrollToBottom(false), 100);
         }
-    }, [myUserId, recipientId]);
+    }, [myUserId, recipientId,markAsRead]);
 
     useEffect(() => {
        
@@ -323,9 +435,21 @@ const [clearstate,setClearstate]=useState(false)
                     if (exists) return prev.map(m => m.id === message.id ? { ...m, status: 'sent' } : m);
                     return [...prev, { ...message, isMine: message.senderId === myUserId, status: 'sent' }];
                 });
+                if (message.senderId === recipientId) markAsRead([message.id]);
+               
                 if (message.senderId !== myUserId) resetUnreadCountForConversation(recipientId, myUserId);
             }
         });
+        socket.on('messages_read', ({ messageIds }) => {
+            setMessages(prev =>
+              prev.map(m =>
+                messageIds.includes(m.id) ? { ...m, isRead: true, status: 'seen' } : m
+              )
+            );
+          });
+          
+          // and clean up
+         
         return () => {
             socket.off('user_online');
             socket.off('chat_cleared');
@@ -337,6 +461,7 @@ const [clearstate,setClearstate]=useState(false)
             socket.off('unblocked_by_user');
             socket.off('typing');
             socket.off('newMessage');
+            socket.off('messages_read');
         };
     }, [myUserId, recipientId]);
 
@@ -509,7 +634,7 @@ try{
                         )}
 
                         {msg.type === 'image' && (
-                            <TouchableOpacity onPress={() => navigation.navigate('ViewImage', { imagevalue: `${API_BASE_URL}${msg.imageUri}`, mediatype: 'imagee' })}>
+                            <TouchableOpacity onPress={() => navigation.navigate('ViewImage', { imagevalue: `${API_BASE_URL}${msg.imageUri}`, mediatype: 'image' })}>
                                 <Image source={{ uri: `${API_BASE_URL}${msg.imageUri}` }} style={styles.chatImage} />
                             </TouchableOpacity>
                         )}
@@ -527,9 +652,23 @@ try{
                                 {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </Text>
                             {msg.isMine && (
-                                <Text style={styles.statusMark}>
-                                    {msg.status === 'sending' ? '○' : msg.status === 'failed' ? '✕' : '✓✓'}
-                                </Text>
+                         <Ionicons
+                         name={
+                           msg.status === 'sending'
+                             ? 'time-outline'
+                             : msg.status === 'failed'
+                             ? 'close-circle-outline'
+                             : 'checkmark-done'
+                         }
+                         size={16}
+                         color={
+                           msg.status === 'failed'
+                             ? '#ff4d4f'
+                             :msg.status==='seen'
+                              ?'#0084ff'
+                             : '#999'
+                         }
+                       />
                             )}
                         </View>
                     </TouchableOpacity>
@@ -584,11 +723,14 @@ try{
 
     return (
         <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
                     <Feather name="chevron-left" size={26} color="#111" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.headerUser} activeOpacity={0.7}>
+                <TouchableOpacity style={styles.headerUser} activeOpacity={0.7} onPress={()=> navigation.navigate('Profile', {
+          userId: recipientId
+        })}>
                     <View>
                     {recipientImage ? (
     <Image source={{ uri: recipientImage }} style={styles.avatar} />
@@ -734,11 +876,11 @@ try{
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f5f5f5' },
+    container: { flex: 1, backgroundColor: '#f5f5f5'},
 
     header: {
         flexDirection: 'row', alignItems: 'center', height: 62,
-        paddingHorizontal: 6, backgroundColor: '#fff',
+        paddingHorizontal: 6,  backgroundColor: '#f5f5f5',
         borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e8e8e8',
     },
     headerBtn: { padding: 10 },

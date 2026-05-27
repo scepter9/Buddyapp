@@ -12,10 +12,12 @@ import { useNavigationState } from "@react-navigation/native";
 import { UnreadMessagesContext } from "./UnreadMessagesContext";
 
 
+
 const TABS = [
   { name: "About",    icon: "home",    label: "Home"     },
   { name: "Messages", icon: "mail",    label: "Messages" },
   { name: "Profile",  icon: "user",    label: "Profile"  },
+ 
 ];
 
 function TabButton({ tab, isActive, onPress, badge, pulseAnim }) {
