@@ -28,7 +28,7 @@ import { AuthorContext } from "../AuthorContext";
 import { colors, radius, spacing } from "../Theme";
 import Slideupbar from "../Slideupbar";
 
-const API_BASE_URL = "http://192.168.0.136:3000";
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 
 const FALLBACK_IMAGE = {
   uri: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80",

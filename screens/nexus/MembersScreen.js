@@ -15,7 +15,7 @@ import {
 
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-const API_BASE_URL = "http://192.168.0.136:3000";
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 import { AuthorContext } from "../AuthorContext";
 import { io } from "socket.io-client";
 import socket from "../Socket";

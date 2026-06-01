@@ -17,7 +17,7 @@ import { Feather } from "@expo/vector-icons";
 import { AuthorContext } from "../AuthorContext";
 import { colors, radius, spacing } from "../Theme";
 
-const API_BASE_URL = "http://192.168.0.136:3000";
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 
 // ── Custom Select component (replaces Picker) ─────────────────────────────
 function CustomSelect({ label, options, value, onChange }) {

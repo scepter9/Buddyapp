@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity ,SafeAreaView} fro
 import BottomNavigator from "../BottomNavigator";
 import { LinearGradient } from 'expo-linear-gradient';
 
-const API_BASE_URL = "http://192.168.0.136:3000";
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 
 export default function CampusNexus({ navigation }) {
   const [Screenstats,setScreenstats]=useState({roomcount:0,roommemberscount:0})

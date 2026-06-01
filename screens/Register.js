@@ -7,7 +7,7 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 
-const API_BASE_URL = 'http://192.168.0.136:3000';
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 
 const universities = [
   { id: 1, name: "University of Lagos", short: "UNILAG" },

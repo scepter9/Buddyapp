@@ -16,7 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { colors, radius, spacing } from './Theme';
 import * as Clipboard from 'expo-clipboard';
 
-const API_BASE_URL = 'http://192.168.0.136:3000';
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 const { width: screenWidth } = Dimensions.get('window');
 
 // ── Toast ──────────────────────────────────────────────────────────────────

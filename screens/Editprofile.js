@@ -18,8 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, spacing } from './Theme';
-
-const API_BASE_URL = "http://192.168.0.136:3000";
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 
 // ── Labelled input ──
 function Field({ label, icon, value, onChangeText, placeholder, multiline, maxLength }) {

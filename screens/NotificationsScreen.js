@@ -11,7 +11,7 @@ import BottomNavigator from './BottomNavigator';
 import socket from './Socket';
 import { AuthorContext } from './AuthorContext';
 
-const API_BASE_URL = 'http://192.168.0.136:3000';
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 
 const TYPES = {
   FOLLOW:  'follow',

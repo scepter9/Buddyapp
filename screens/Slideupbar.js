@@ -14,7 +14,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 
-const API_BASE_URL = "http://192.168.0.136:3000";
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 
 const DEFAULT_REASONS = [
   'Harassment or bullying',

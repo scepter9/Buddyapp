@@ -2,8 +2,7 @@ import React, { createContext, useState, useEffect, useContext ,useCallback} fro
 import { io } from 'socket.io-client';
 import { Alert } from 'react-native';
 import { AuthorContext } from './AuthorContext'; // Assuming AuthorContext provides user.id
-
-const API_BASE_URL = "http://192.168.0.136:3000"; // Ensure this matches your backend URL
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 
 export const UnreadMessagesContext = createContext(); 
 

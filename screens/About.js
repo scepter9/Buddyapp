@@ -18,7 +18,7 @@ import socket from "./Socket";
 import { colors, radius, spacing } from "./Theme";
 import { AuthorContext } from "./AuthorContext";
 
-const API_BASE_URL = "http://192.168.0.136:3000";
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 
 function FeatureCard({ onPress, gradColors, borderColor, icon, eyebrow, title, description, stat, statIcon }) {
   const scale = useRef(new Animated.Value(1)).current;

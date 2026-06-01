@@ -21,7 +21,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import socket from './Socket';
 import { colors, radius, spacing } from './Theme';
 
-const API_BASE_URL = "http://192.168.0.136:3000";
+const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 
 const Messages = ({ navigation }) => {
   const [conversations, setConversations] = useState([]);
