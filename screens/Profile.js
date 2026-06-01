@@ -44,6 +44,61 @@ function InfoRow({ icon, label, value }) {
   );
 }
 
+// // ── Post card ──
+// function PostCard({ post }) {
+//   const [liked, setLiked] = useState(false);
+//   const [likeCount, setLikeCount] = useState(post.likes ?? 0);
+
+//   const handleLike = () => {
+//     setLiked(prev => !prev);
+//     setLikeCount(prev => liked ? Math.max(0, prev - 1) : prev + 1);
+//   };
+
+//   return (
+//     <View style={s.postCard}>
+//       <View style={s.postTop}>
+//         <View style={s.postAvatarWrap}>
+//           <LinearGradient colors={['#9333ea', '#e879f9']} style={s.postAvatarGrad}>
+//             <Text style={s.postAvatarText}>
+//               {post.authorName?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() ?? '?'}
+//             </Text>
+//           </LinearGradient>
+//         </View>
+//         <View style={s.postMeta}>
+//           <Text style={s.postAuthor}>{post.authorName ?? 'Unknown'}</Text>
+//           <Text style={s.postTime}>{post.timeAgo ?? 'recently'}</Text>
+//         </View>
+//         <Feather name="more-horizontal" size={16} color={colors.text.muted} />
+//       </View>
+
+//       {post.body ? (
+//         <Text style={s.postBody}>{post.body}</Text>
+//       ) : null}
+
+//       <View style={s.postActions}>
+//         <TouchableOpacity style={s.postAction} onPress={handleLike} activeOpacity={0.7}>
+//           <Feather
+//             name="heart"
+//             size={14}
+//             color={liked ? '#e879f9' : colors.text.muted}
+//           />
+//           <Text style={[s.postActionText, liked && { color: '#e879f9' }]}>
+//             {String(likeCount)}
+//           </Text>
+//         </TouchableOpacity>
+//         <TouchableOpacity style={s.postAction} activeOpacity={0.7}>
+//           <Feather name="message-circle" size={14} color={colors.text.muted} />
+//           <Text style={s.postActionText}>{String(post.comments ?? 0)}</Text>
+//         </TouchableOpacity>
+//         <TouchableOpacity style={s.postAction} activeOpacity={0.7}>
+//           <Feather name="share-2" size={14} color={colors.text.muted} />
+//           <Text style={s.postActionText}>{String(post.shares ?? 0)}</Text>
+//         </TouchableOpacity>
+//       </View>
+//     </View>
+//   );
+// }
+
 export default function Profile({ navigation, route }) {
   const [userProfile, setUserProfile] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -70,7 +125,6 @@ export default function Profile({ navigation, route }) {
       setLoggedInUserId(authData.id);
 
       const targetId = route.params?.userId || authData.id;
-      console.log(targetId);
 
       const profileRes = await fetch(`${API_BASE_URL}/users/${targetId}`, {
         method: 'GET',
@@ -79,7 +133,22 @@ export default function Profile({ navigation, route }) {
 
       if (!profileRes.ok) throw new Error('Profile not found.');
       const profileData = await profileRes.json();
-      setUserProfile(profileData);
+
+      // Fix: normalize interests — DB may return a comma string or JSON array
+      const rawInterests = profileData.interests;
+      let interests = [];
+      if (Array.isArray(rawInterests)) {
+        interests = rawInterests;
+      } else if (typeof rawInterests === 'string' && rawInterests.trim()) {
+        try {
+          const parsed = JSON.parse(rawInterests);
+          interests = Array.isArray(parsed) ? parsed : rawInterests.split(',').map(i => i.trim());
+        } catch {
+          interests = rawInterests.split(',').map(i => i.trim());
+        }
+      }
+
+      setUserProfile({ ...profileData, interests });
 
       if (targetId !== authData.id) {
         const followRes = await fetch(`${API_BASE_URL}/check-follow/${targetId}`, {
@@ -126,7 +195,7 @@ export default function Profile({ navigation, route }) {
         Alert.alert('Failed', data.error || `Could not ${endpoint}.`);
       }
     } catch {
-      Alert.alert('Network error', `Could not reach server.`);
+      Alert.alert('Network error', 'Could not reach server.');
     } finally {
       setIsFollowActionLoading(false);
     }
@@ -137,11 +206,21 @@ export default function Profile({ navigation, route }) {
     { icon: 'info', label: 'Bio', value: userProfile?.about },
   ], [userProfile]);
 
-  const interestColors = ['#9333ea', '#6366f1', '#0284c7', '#db2777', '#16a34a', '#d97706'];
+  const interestColors = [
+    { bg: 'rgba(147,51,234,0.15)', border: 'rgba(147,51,234,0.3)', text: '#c084fc' },
+    { bg: 'rgba(99,102,241,0.15)', border: 'rgba(99,102,241,0.3)', text: '#a5b4fc' },
+    { bg: 'rgba(2,132,199,0.15)', border: 'rgba(2,132,199,0.3)', text: '#7dd3fc' },
+    { bg: 'rgba(219,39,119,0.15)', border: 'rgba(219,39,119,0.3)', text: '#f9a8d4' },
+    { bg: 'rgba(22,163,74,0.15)', border: 'rgba(22,163,74,0.3)', text: '#86efac' },
+    { bg: 'rgba(217,119,6,0.15)', border: 'rgba(217,119,6,0.3)', text: '#fcd34d' },
+  ];
 
   const initials = userProfile?.name
     ? userProfile.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : '?';
+
+  // Fix: isPro may come as string "0"/"1" from MySQL — coerce to boolean
+  const isPro = !!Number(userProfile?.isPro);
 
   if (isLoadingProfile || !userProfile) {
     return (
@@ -157,8 +236,10 @@ export default function Profile({ navigation, route }) {
     ? { uri: `${API_BASE_URL}/uploads/${userProfile.image}` }
     : null;
 
-  const handle = userProfile.email?.split('@')[0] || 'user';
- 
+  const handle = userProfile.email?.split('@')[0] ?? 'user';
+
+  
+
   return (
     <SafeAreaView style={s.safe}>
       <StatusBar barStyle="light-content" />
@@ -166,116 +247,96 @@ export default function Profile({ navigation, route }) {
       {/* Ambient blob */}
       <View style={s.blob} pointerEvents="none" />
 
+      {/* Header row */}
+      <View style={s.topBar}>
+        {!isViewingOwnProfile ? (
+          <TouchableOpacity style={s.iconBtn} onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={18} color={colors.text.primary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={s.iconBtn} />
+        )}
+        <Text style={s.topBarTitle}>Profile</Text>
+        <View style={s.iconBtn}>
+          <Feather name="more-horizontal" size={18} color={colors.text.muted} />
+        </View>
+      </View>
+
       <ScrollView
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
       >
-
-        {/* ── Hero section ── */}
+        {/* ── Hero ── */}
         <View style={s.hero}>
-          {/* Back button if viewing someone else */}
-          {!isViewingOwnProfile && (
-            <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
-              <Feather name="arrow-left" size={20} color={colors.text.primary} />
-            </TouchableOpacity>
-          )}
 
           {/* Avatar */}
-          <TouchableOpacity onPress={!isViewingOwnProfile ?() => navigation.navigate('ViewImage', { imagevalue: `${API_BASE_URL}/uploads/${userProfile.image}`, mediatype: 'image' }):null}>
-          <View style={s.avatarWrap}>
-            <LinearGradient
-              colors={['#9333ea', '#6366f1']}
-              style={s.avatarRing}
-            >
-              <View style={s.avatarInner}>
-                {imageUri ? (
-                  <Image source={imageUri} style={s.avatarImg} />
-                ) : (
-                  <Text style={s.avatarInitials}>{initials}</Text>
-                )}
-              </View>
-            </LinearGradient>
-            {isViewingOwnProfile && (
-              <TouchableOpacity
-                style={s.editAvatarBtn}
-                onPress={() => navigation.navigate('Editprofile', {
-                  userId: userProfile.id,
-                  currentProfile: userProfile,
-                })}
-              >
-                <Feather name="camera" size={13} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </View>
+          <TouchableOpacity
+            activeOpacity={isViewingOwnProfile ? 1 : 0.85}
+            onPress={
+              !isViewingOwnProfile
+                ? () => navigation.navigate('ViewImage', {
+                    imagevalue: `${API_BASE_URL}/uploads/${userProfile.image}`,
+                    mediatype: 'image',
+                  })
+                : undefined
+            }
+          >
+            <View style={s.avatarWrap}>
+              <LinearGradient colors={['#9333ea', '#e879f9']} style={s.avatarRing}>
+                <View style={s.avatarInner}>
+                  {imageUri ? (
+                    <Image source={imageUri} style={s.avatarImg} />
+                  ) : (
+                    <Text style={s.avatarInitials}>{initials}</Text>
+                  )}
+                </View>
+              </LinearGradient>
+              {isViewingOwnProfile && (
+                <TouchableOpacity
+                  style={s.editAvatarBtn}
+                  onPress={() => navigation.navigate('Editprofile', {
+                    userId: userProfile.id,
+                    currentProfile: userProfile,
+                  })}
+                >
+                  <Feather name="camera" size={11} color="#fff" />
+                </TouchableOpacity>
+              )}
+            </View>
           </TouchableOpacity>
-         
 
-          {/* Name + handle */}
+          {/* Name + badge */}
           <View style={s.nameRow}>
             <Text style={s.name}>{userProfile.name}</Text>
-            {userProfile.isPro && (
+            {isPro && (
               <View style={s.proBadge}>
                 <Text style={s.proText}>PRO</Text>
               </View>
             )}
           </View>
-          <Text style={s.handle}>@{handle}</Text>
+          <Text style={s.handle}>{'@'}{handle}</Text>
 
-          {userProfile.joinDate && (
+          {userProfile.joinDate ? (
             <View style={s.joinRow}>
               <Feather name="calendar" size={11} color={colors.text.muted} />
-              <Text style={s.joinText}>Joined {userProfile.joinDate}</Text>
+              <Text style={s.joinText}>{'Joined '}{userProfile.joinDate}</Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* ── Stats ── */}
-    {/* ── Stats ── */}
-<TouchableOpacity
-  style={s.statsRow}
-  onPress={() => navigation.navigate('FriendList', { userId: userProfile.id, type: 'profile' })}
-  activeOpacity={0.8}
->
-  <StatItem count={userProfile.following} label="Following" />
-  <View style={s.statDivider} />
-  <StatItem count={userProfile.followers} label="Followers" />
-  <Feather name="chevron-right" size={14} color={colors.text.muted} style={{ marginLeft: 'auto', paddingRight: 4 }} />
-</TouchableOpacity>
+        <TouchableOpacity
+          style={s.statsRow}
+          onPress={() => navigation.navigate('FriendList', { userId: userProfile.id, type: 'profile' })}
+          activeOpacity={0.8}
+        >
+          <StatItem count={userProfile.following} label="Following" />
+          <View style={s.statDivider} />
+          <StatItem count={userProfile.followers} label="Followers" />
+          <Feather name="chevron-right" size={14} color={colors.text.muted} style={{ marginLeft: 'auto', paddingRight: 4 }} />
+        </TouchableOpacity>
 
-        {/* ── Info rows ── */}
-        <View style={s.card}>
-          {infoRows.map((row, i) => (
-            <React.Fragment key={row.label}>
-              <InfoRow {...row} />
-              {i < infoRows.length - 1 && <View style={s.rowDivider} />}
-            </React.Fragment>
-          ))}
-        </View>
-
-        {/* ── Interests ── */}
-        {userProfile.interests?.length > 0 && (
-          <View style={s.card}>
-            <Text style={s.cardTitle}>Interests</Text>
-            <View style={s.interestWrap}>
-              {userProfile.interests.map((interest, i) => (
-                <View
-                  key={i}
-                  style={[
-                    s.interestPill,
-                    { backgroundColor: `${interestColors[i % interestColors.length]}22`,
-                      borderColor: `${interestColors[i % interestColors.length]}55` }
-                  ]}
-                >
-                  <Text style={[s.interestText, { color: interestColors[i % interestColors.length] }]}>
-                    {interest}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* ── Actions ── */}
+        {/* ── Action buttons ── */}
         {isViewingOwnProfile ? (
           <View style={s.actionsWrap}>
             <TouchableOpacity
@@ -310,14 +371,8 @@ export default function Profile({ navigation, route }) {
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <>
-                  <Feather
-                    name={isFollowing ? 'user-minus' : 'user-plus'}
-                    size={15}
-                    color="#fff"
-                  />
-                  <Text style={s.primaryBtnText}>
-                    {isFollowing ? 'Unfollow' : 'Follow'}
-                  </Text>
+                  <Feather name={isFollowing ? 'user-minus' : 'user-plus'} size={15} color="#fff" />
+                  <Text style={s.primaryBtnText}>{isFollowing ? 'Unfollow' : 'Follow'}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -336,6 +391,37 @@ export default function Profile({ navigation, route }) {
           </View>
         )}
 
+        {/* ── Info card ── */}
+        <View style={s.card}>
+          {infoRows.map((row, i) => (
+            <React.Fragment key={row.label}>
+              <InfoRow {...row} />
+              {i < infoRows.length - 1 && <View style={s.rowDivider} />}
+            </React.Fragment>
+          ))}
+        </View>
+
+        {/* ── Interests ── */}
+        {userProfile.interests && userProfile.interests.length > 0 && (
+          <View style={s.card}>
+            <Text style={s.cardTitle}>INTERESTS</Text>
+            <View style={s.interestWrap}>
+              {userProfile.interests.map((interest, i) => {
+                const c = interestColors[i % interestColors.length];
+                return (
+                  <View
+                    key={String(i)}
+                    style={[s.interestPill, { backgroundColor: c.bg, borderColor: c.border }]}
+                  >
+                    <Text style={[s.interestText, { color: c.text }]}>{interest}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+       
         <View style={{ height: 100 }} />
       </ScrollView>
 
@@ -355,21 +441,27 @@ const s = StyleSheet.create({
     position: 'absolute', width: 260, height: 260, borderRadius: 130,
     backgroundColor: 'rgba(147,51,234,0.08)', top: -80, right: -80,
   },
-  scroll: { paddingHorizontal: spacing.lg, paddingTop: 20 },
 
-  // ── Hero ──
-  hero: { alignItems: 'center', marginBottom: 20 },
-  backBtn: {
-    alignSelf: 'flex-start',
-    marginBottom: 16,
-    width: 38, height: 38, borderRadius: 19,
+  // ── Top bar ──
+  topBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg, paddingVertical: 10,
+  },
+  topBarTitle: { fontSize: 14, fontWeight: '700', color: colors.text.secondary },
+  iconBtn: {
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: colors.bg.card,
     borderWidth: 1, borderColor: colors.border.subtle,
     alignItems: 'center', justifyContent: 'center',
   },
+
+  scroll: { paddingHorizontal: spacing.lg, paddingTop: 8 },
+
+  // ── Hero ──
+  hero: { alignItems: 'center', marginBottom: 16 },
   avatarWrap: { position: 'relative', marginBottom: 14 },
   avatarRing: {
-    width: 96, height:96, borderRadius: 48,
+    width: 92, height: 92, borderRadius: 46,
     padding: 2.5, alignItems: 'center', justifyContent: 'center',
   },
   avatarInner: {
@@ -378,10 +470,10 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   avatarImg: { width: '100%', height: '100%' },
-  avatarInitials: { color: '#fff', fontSize: 30, fontWeight: '700' },
+  avatarInitials: { color: '#fff', fontSize: 28, fontWeight: '700' },
   editAvatarBtn: {
     position: 'absolute', bottom: 0, right: 0,
-    width: 28, height: 28, borderRadius: 14,
+    width: 26, height: 26, borderRadius: 13,
     backgroundColor: colors.accent.purple,
     borderWidth: 2, borderColor: colors.bg.screen,
     alignItems: 'center', justifyContent: 'center',
@@ -403,22 +495,39 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.bg.card,
     borderWidth: 1, borderColor: colors.border.subtle,
-    borderRadius: radius.lg, padding: 16, marginBottom: 14,
+    borderRadius: radius.lg, padding: 16, marginBottom: 12,
   },
   statItem: { flex: 1, alignItems: 'center' },
   statCount: { fontSize: 20, fontWeight: '800', color: colors.text.primary },
   statLabel: { fontSize: 11, color: colors.text.muted, marginTop: 2, fontWeight: '500' },
   statDivider: { width: 1, height: 30, backgroundColor: colors.border.subtle },
 
+  // ── Actions ──
+  actionsWrap: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  primaryBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 7, backgroundColor: colors.accent.purple,
+    borderRadius: radius.lg, paddingVertical: 13,
+  },
+  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  unfollowBtn: { backgroundColor: 'rgba(239,68,68,0.8)' },
+  secondaryBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 7, backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: 'rgba(147,51,234,0.25)',
+    borderRadius: radius.lg, paddingVertical: 13,
+  },
+  secondaryBtnText: { color: colors.accent.lavender, fontWeight: '700', fontSize: 14 },
+
   // ── Card ──
   card: {
     backgroundColor: colors.bg.card,
     borderWidth: 1, borderColor: colors.border.subtle,
-    borderRadius: radius.lg, padding: 16, marginBottom: 14,
+    borderRadius: radius.lg, padding: 16, marginBottom: 12,
   },
   cardTitle: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 1.5,
-    color: colors.text.secondary, marginBottom: 12,
+    fontSize: 9, fontWeight: '700', letterSpacing: 2,
+    color: colors.text.muted, marginBottom: 10,
   },
   rowDivider: { height: 1, backgroundColor: colors.border.subtle, marginVertical: 10 },
 
@@ -440,20 +549,28 @@ const s = StyleSheet.create({
   },
   interestText: { fontSize: 12, fontWeight: '600' },
 
-  // ── Actions ──
-  actionsWrap: { flexDirection: 'row', gap: 10, marginBottom: 8 },
-  primaryBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 7, backgroundColor: colors.accent.purple,
-    borderRadius: radius.lg, paddingVertical: 13,
+  // ── Posts ──
+  sectionHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 10,
   },
-  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  unfollowBtn: { backgroundColor: 'rgba(239,68,68,0.8)' },
-  secondaryBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 7, backgroundColor: colors.bg.card,
-    borderWidth: 1, borderColor: 'rgba(147,51,234,0.25)',
-    borderRadius: radius.lg, paddingVertical: 13,
+  sectionTitle: { fontSize: 14, fontWeight: '800', color: colors.text.primary },
+  seeAll: { fontSize: 12, fontWeight: '600', color: colors.accent.purple },
+
+  postCard: {
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.border.subtle,
+    borderRadius: radius.lg, padding: 14, marginBottom: 10,
   },
-  secondaryBtnText: { color: colors.accent.lavender, fontWeight: '700', fontSize: 14 },
+  postTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  postAvatarWrap: { width: 32, height: 32, borderRadius: 16, overflow: 'hidden' },
+  postAvatarGrad: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  postAvatarText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  postMeta: { flex: 1 },
+  postAuthor: { fontSize: 13, fontWeight: '700', color: colors.text.primary },
+  postTime: { fontSize: 10, color: colors.text.muted },
+  postBody: { fontSize: 13, color: colors.text.secondary, lineHeight: 19, marginBottom: 12 },
+  postActions: { flexDirection: 'row', gap: 20 },
+  postAction: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  postActionText: { fontSize: 12, color: colors.text.muted, fontWeight: '500' },
 });

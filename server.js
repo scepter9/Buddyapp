@@ -99,14 +99,15 @@ const transporter = nodemailer.createTransport({
 });
 // Database
 const db = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_DATABASE,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-  });
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE,
+  port: process.env.DB_PORT,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
   
   console.log('MySQL pool created');
   
@@ -2796,7 +2797,7 @@ const isMod = (req, res, next) => {
 };
 
 // ── Submit a report ──
-app.post('/postreport', isMod,(req, res) => {
+app.post('/postreport', (req, res) => {
   const { senderId, reporthead, reportedname, reason, details } = req.body;
 
   if (!senderId || !reporthead || !reportedname || !reason) {
@@ -2872,10 +2873,7 @@ app.post('/modreports/:id/dismiss', isMod, (req, res) => {
   );
 });
 
-// ── Warn — notify the reported user + mark inReview ──
-// BUG FIX: was reading req.query on a POST — changed to req.body
-// BUG FIX: socket emit moved inside DB callback so it only fires on success
-// BUG FIX: table name was 'notification' — corrected to 'notifications'
+
 app.post('/modreports/warn', isMod, (req, res) => {
   const { theid, sender, message } = req.body;
 
@@ -2961,6 +2959,6 @@ app.post('/modreports/:id/remove', isMod, (req, res) => {
 
 
 
-server.listen(3000, () => {
-  console.log('Server running on http://localhost:3000');
-});
+// ✅ Render assigns the port dynamically
+const PORT = process.env.DB_PORT || 3000;
+server.listen(PORT, () => console.log(`Server running on ${PORT}`));

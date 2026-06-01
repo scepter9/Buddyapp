@@ -80,7 +80,7 @@ export default function App() {
     <Stack.Screen name="DesignersHubScreen" component={DesignersHubScreen} options={{ headerShown: false }} />
     <Stack.Screen name="NewPostScreen" component={NewPostScreen} options={{ headerShown: false }} />
     <Stack.Screen name="MembersScreen" component={MembersScreen} options={{ headerShown: false }} />
-    {/* <Stack.Screen name="Moderator" component={Moderator} options={{ headerShown: false }} /> */}
+    <Stack.Screen name="Moderator" component={Moderator} options={{ headerShown: false }} />
     <Stack.Screen name="Slideupbar" component={Slideupbar} options={{ headerShown: false }} />
    
   </Stack.Navigator> 

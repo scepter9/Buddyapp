@@ -3,11 +3,25 @@
     "name": "myproject",
     "slug": "myproject",
     "version": "1.0.0",
+    "plugins": [
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Buddy to save images to your gallery.",
+          "savePhotosPermission": "Allow Buddy to save photos."
+        }
+      ]
+    ],
     "splash": {
       "image": "./assets/image4.jpeg",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "entryPoint": "./index.js"
+    "entryPoint": "./index.js",
+    "extra": {
+      "eas": {
+        "projectId": "ff5420f6-ac8a-4115-96db-2404a0d46c78"
+      }
+    }
   }
 }

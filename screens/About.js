@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback,useContext } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import BottomNavigator from "./BottomNavigator";
 import socket from "./Socket";
 import { colors, radius, spacing } from "./Theme";
+import { AuthorContext } from "./AuthorContext";
 
 const API_BASE_URL = "http://192.168.0.136:3000";
 
@@ -74,7 +75,7 @@ export default function About({ navigation }) {
   const [notificationCount, setNotificationCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  // FIX: start at 1 — never invisible by default
+
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   const hasAnimated = useRef(false);
@@ -239,8 +240,20 @@ export default function About({ navigation }) {
           stat="24+ rooms live"
           statIcon="users"
         />
-
-        <FeatureCard
+{/* {isAdmin && (
+  <FeatureCard
+          onPress={() => navigation.navigate("Moderator")}
+          gradColors={colors.gradient.cardPurple}
+          borderColor="rgba(99,102,241,0.4)"
+          icon="shield-off"
+          eyebrow="MODERATOR"
+          title="For Admins Only."
+          description="This section can only be visible to admins only."
+          stat="MOD"
+          statIcon="shield-off"
+        />
+)} */}
+          <FeatureCard
           onPress={() => navigation.navigate("MainRoom")}
           gradColors={colors.gradient.cardPurple}
           borderColor="rgba(99,102,241,0.4)"

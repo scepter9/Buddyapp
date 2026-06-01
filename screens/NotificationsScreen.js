@@ -33,9 +33,6 @@ const formatTimeAgo = (time) => {
   return `${Math.floor(days / 30)}mo ago`;
 };
 
-// ─────────────────────────────────────────
-// Single notification row
-// ─────────────────────────────────────────
 const NotificationItem = React.memo(function NotificationItem({
   notification, onFollowPress, onDelete, navigation,
 }) {

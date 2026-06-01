@@ -157,7 +157,7 @@ export default function ModeratorScreen({ navigation }) {
 
   // ── Fetch reports + stats ──
   useFocusEffect(
-    useCallback(() => {
+    useCallback(() => { 
       const fetchAll = async () => {
         setLoading(true);
         try {
@@ -323,7 +323,7 @@ export default function ModeratorScreen({ navigation }) {
         style={s.header}
       >
         <View style={s.headerTop}>
-          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+          <TouchableOpacity style={s.backBtn} onPress={() => navigation.replace('About') }>
             <Feather name="arrow-left" size={18} color={colors.text.primary} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>

@@ -387,7 +387,7 @@ const PostChild = React.memo(function PostChild({
   }, [postComments.length]);
 
   const postRoomLikes = async () => {
-    console.log(searchid,roomdetais);
+  
     if (isMutating) return;
     Animated.sequence([
       Animated.timing(scaleAnim, { toValue: 1.3, duration: 150, useNativeDriver: true }),
@@ -732,6 +732,8 @@ export default function DesignersHubScreen({ navigation, route }) {
   const [showBanner, setShowBanner] = useState(false);
   const [showSwipeHint, setShowSwipeHint] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  // Add this with your other useState hooks near the top
+const [shouldLaunchPicker, setShouldLaunchPicker] = useState(false);
 
   const bannerAnim = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef(null);
@@ -741,6 +743,18 @@ export default function DesignersHubScreen({ navigation, route }) {
 
   useEffect(() => { postsArrayRef.current = postsArray; }, [postsArray]);
 
+  useEffect(() => {
+    if (!openModal && shouldLaunchPicker) {
+      setShouldLaunchPicker(false);
+      
+      // A tiny safety padding for Android layout cycles
+      const timer = setTimeout(() => {
+        handleimage();
+      }, 150); 
+      
+      return () => clearTimeout(timer);
+    }
+  }, [openModal, shouldLaunchPicker]);
   // Socket setup
   useEffect(() => {
     if (!searchid || !roomid) return;
@@ -1093,10 +1107,14 @@ socket.emit("sendimage", theimage);
                 {isAdmin && (
                   <>
                     <View style={styles.menuDivider} />
-                    <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenModal(false); setTimeout(() => handleimage(), 300); }} disabled={!isAdmin}>
-                      <Feather name="image" size={15} color={colors.text.primary} />
-                      <Text style={styles.menuText}>Change Wallpaper</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity 
+  style={styles.menuItem} 
+  onPress={handleimage}  // ← direct call, no setTimeout, no setOpenModal here
+  disabled={!isAdmin}
+>
+  <Feather name="image" size={15} color={colors.text.primary} />
+  <Text style={styles.menuText}>Change Wallpaper</Text>
+</TouchableOpacity>
                     <View style={styles.menuDivider} />
                     <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenModal(false); setBioModal(true); }}>
                       <Feather name="edit-3" size={15} color={colors.text.primary} />
@@ -1115,7 +1133,7 @@ socket.emit("sendimage", theimage);
                 </TouchableOpacity>
 
                 <View style={styles.menuDivider} />
-                <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenModal(false); setShowReport(true); }}>
+                 <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenModal(false); setShowReport(true); }}> 
                   <Feather name="flag" size={15} color="#f87171" />
                   <Text style={[styles.menuText, { color: "#f87171" }]}>Report Room</Text>
                 </TouchableOpacity>
