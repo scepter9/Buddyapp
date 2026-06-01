@@ -1,8 +1,10 @@
 {
   "expo": {
-    "name": "myproject",
+    "name": "Buddyapp",
     "slug": "myproject",
     "version": "1.0.0",
+    "scheme": "buddyapp",
+    "orientation": "portrait",
     "plugins": [
       [
         "expo-media-library",
@@ -16,6 +18,22 @@
       "image": "./assets/image4.jpeg",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
+    },
+    "android": {
+      "package": "com.buddyapp.main",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.buddyapp.main",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Buddy needs microphone access for voice messages.",
+        "NSPhotoLibraryUsageDescription": "Buddy needs photo access to share images."
+      }
     },
     "entryPoint": "./index.js",
     "extra": {
