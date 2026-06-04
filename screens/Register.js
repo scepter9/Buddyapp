@@ -105,41 +105,70 @@ function OtpInput({ code, onChangeCode, hasError }) {
   );
 }
 
-
 function UniversitySelector({ label, universities, selectedSchool, setSelectedSchool }) {
+  const [expanded, setExpanded] = useState(false);
+  const VISIBLE = 5;
+
+  const displayed = expanded ? universities : universities.slice(0, VISIBLE);
+
   return (
     <View style={s.wrapper}>
-      <ScrollView
-        style={{ maxHeight: 5 * 74}}
-        showsVerticalScrollIndicator={false}
-        nestedScrollEnabled={true}
-      >
-        {universities.map((item) => {
-          const isSelected = selectedSchool === item.name;
-          return (
-            <TouchableOpacity
-              key={item.id}
-              activeOpacity={0.85}
-              onPress={() => setSelectedSchool(item.name)}
-              style={[s.card, isSelected && s.cardSelected]}
-            >
-              <View style={s.leftAccent} />
-              <View style={s.textWrap}>
-                <Text style={[s.name, isSelected && s.nameSelected]}>{item.name}</Text>
-                <Text style={[s.short, isSelected && s.shortSelected]}>{item.short}</Text>
+      {displayed.map((item) => {
+        const isSelected = selectedSchool === item.name;
+        return (
+          <TouchableOpacity
+            key={item.id}
+            activeOpacity={0.85}
+            onPress={() => setSelectedSchool(item.name)}
+            style={[s.card, isSelected && s.cardSelected]}
+          >
+            <View style={s.leftAccent} />
+            <View style={s.textWrap}>
+              <Text style={[s.name, isSelected && s.nameSelected]}>{item.name}</Text>
+              <Text style={[s.short, isSelected && s.shortSelected]}>{item.short}</Text>
+            </View>
+            {isSelected && (
+              <View style={s.badge}>
+                <Text style={s.badgeText}>✓</Text>
               </View>
-              {isSelected && (
-                <View style={s.badge}>
-                  <Text style={s.badgeText}>✓</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+
+      {/* If selected school is not in the first 5, always show it */}
+      {!expanded && selectedSchool && !universities.slice(0, VISIBLE).some(u => u.name === selectedSchool) && (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => {}}
+          style={[s.card, s.cardSelected]}
+        >
+          <View style={s.leftAccent} />
+          <View style={s.textWrap}>
+            <Text style={[s.name, s.nameSelected]}>{selectedSchool}</Text>
+            <Text style={[s.short, s.shortSelected]}>
+              {universities.find(u => u.name === selectedSchool)?.short}
+            </Text>
+          </View>
+          <View style={s.badge}>
+            <Text style={s.badgeText}>✓</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity
+        onPress={() => setExpanded(v => !v)}
+        style={s.expandBtn}
+        activeOpacity={0.7}
+      >
+        <Text style={s.expandText}>
+          {expanded ? "Show less ↑" : `Show all ${universities.length} universities ↓`}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
+
 
 // ─── Countdown — outside Register ────────────────────────────
 function Countdown({ onExpire }) {
@@ -765,6 +794,17 @@ const styles = StyleSheet.create({
   signtextbutton: { width: '100%', backgroundColor: '#ffffff', borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
   signtext: { fontSize: 15, fontWeight: '800', color: '#0a0a0f' },
   otherscreen: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 8 },
+  expandBtn: {
+  alignItems: "center",
+  paddingVertical: 12,
+  marginBottom: 6,
+},
+expandText: {
+  color: "#00D2FF",
+  fontSize: 13,
+  fontWeight: "600",
+  letterSpacing: 0.3,
+},
 });
 const s = StyleSheet.create({
   wrapper: {
