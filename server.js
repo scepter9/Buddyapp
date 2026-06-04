@@ -108,7 +108,7 @@ const db = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0
 });
-  
+   
   console.log('MySQL pool created');
   
 
@@ -402,7 +402,8 @@ app.post('/Login', (req, res) => {
       email: user.EMAIL,
       phone: user.PHONE,
       image:user.image,
-    role:user.userrole
+    role:user.userrole,
+    uni:user.university
     };
 
     return res.status(200).json({
@@ -1813,24 +1814,42 @@ upload.single('image'),(req,res)=>{
 
 
 app.get('/pulsedata', (req, res) => {
-  const {userid}=req.query
-  const sql = `SELECT cr.ID, cr.title, cr.author, cr.post, cr.image, cr.user, cr.posted_at,
+  const {userid,useruni}=req.query
+  const sql = `SELECT cr.ID, cr.title, cr.author, cr.post, cr.image, cr.user, cr.posted_at,a.university,
   IF(cl.userid IS NULL, 0, 1) AS pulselikestate,
   COUNT(cl_all.pulseid) AS pulselikecount
 FROM campulsepulse cr
 LEFT JOIN campuslikes cl ON cl.pulseid = cr.ID AND cl.userid = ?
+LEFT JOIN projecttables a on cr.user=a.ID and a.university=?
 LEFT JOIN campuslikes cl_all ON cl_all.pulseid = cr.ID
 GROUP BY cr.ID
 ORDER BY pulselikecount DESC
-LIMIT 15; `;
-  db.query(sql,[userid], (err, result) => {
+LIMIT 15`;
+  db.query(sql,[userid,useruni], (err, result) => {
     if (err) {
       return res.status(500).json({ error: 'An error occurred' });
     }
     return res.json( result );
   });
 });
-
+app.get('/mystories',(req,res)=>{
+  const {user}=req.query;
+  db.query(`SELECT cr.ID, cr.title, cr.author, cr.post, cr.image, cr.user, cr.posted_at,
+  IF(cl.userid IS NULL, 0, 1) AS pulselikestate,
+  COUNT(cl_all.pulseid) AS pulselikecount
+FROM campulsepulse cr 
+LEFT JOIN campuslikes cl ON cl.pulseid = cr.ID AND cl.userid = ?
+LEFT JOIN campuslikes cl_all ON cl_all.pulseid = cr.ID
+where cr.user=?
+GROUP BY cr.ID 
+ORDER BY pulselikecount DESC
+LIMIT 15`,[user,user],(err,result)=>{
+  if(err){
+    return res.status(500).json({error:'Database error occured when fetching personal stories'})
+  }
+  res.json(result)
+})
+})
 
 app.get('/olderstories', (req, res) => {
   const {userid,lasttime}=req.query
@@ -1840,6 +1859,7 @@ app.get('/olderstories', (req, res) => {
 FROM campulsepulse cr
 
 LEFT JOIN campuslikes cl ON cl.pulseid = cr.ID AND cl.userid = ?
+LEFT JOIN projecttables a on cr.user=a.ID and a.university=?
 LEFT JOIN campuslikes cl_all ON cl_all.pulseid = cr.ID
 where cr.posted_at<?
 GROUP BY cr.ID

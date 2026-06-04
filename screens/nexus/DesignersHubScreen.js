@@ -61,8 +61,7 @@ const safeParse = (data) => {
 function TheComments({
   item, onSelect, onSelectidforindex, onremove,
   thepostid, Roomid, isAdminstate, setScrollEnabled,
-  replies = [],
-
+  replies = [],onLikeupdate,
   userisId,
 }) {
   const { user } = useContext(AuthorContext);
@@ -117,6 +116,10 @@ function TheComments({
         setLikebyme(wasLiked);
         setLikeCount(prev => wasLiked ? prev + 1 : Math.max(0, prev - 1));
         console.log('issue');
+      }
+      else{
+        const newcount=willBeLiked?prev+1:Math.max(0,likeCount-1);
+        onLikeupdate?.(commentid,willBeLiked,newcount)
       }
     } catch {
       setLikebyme(wasLiked);
@@ -487,6 +490,9 @@ const PostChild = React.memo(function PostChild({
         isAdminstate={Adminstate}
         setScrollEnabled={setScrollEnabled}
         replies={replying}
+        onLikeupdate={(id,liked,count)=>setPostComments(prev=>
+          prev.map(c=>c.id===id?{...c,likestate:liked,likecount:count}:c)
+          )}
       />
     );
   }, [setUser, setUserIndex, searchid, postComments]);
@@ -517,7 +523,7 @@ const PostChild = React.memo(function PostChild({
             <Ionicons name="ellipsis-horizontal-outline" size={20} color="rgba(255,255,255,0.5)" />
           </TouchableOpacity>
         )}
-      </View>
+      </View> 
 
       {item.post ? <Text style={styles.postText}>{item.post}</Text> : null}
 

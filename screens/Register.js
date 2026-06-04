@@ -4,7 +4,7 @@ import {
   ScrollView, StyleSheet, Text, TextInput, TouchableOpacity,
   TouchableWithoutFeedback, View, Image,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+
 import { Ionicons } from '@expo/vector-icons';
 
 const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
@@ -16,30 +16,50 @@ const universities = [
   { id: 4, name: "Covenant University", short: "CU" },
   { id: 5, name: "University of Nigeria, Nsukka", short: "UNN" },
   { id: 6, name: "Obafemi Awolowo University", short: "OAU" },
-  { id: 7, name: "Ahmadu Bello University", short: "ABU" },
-  { id: 8, name: "Federal University Oye-Ekiti", short: "FUOYE" },
-  { id: 9, name: "University of Benin", short: "UNIBEN" },
-  { id: 10, name: "Lagos State University", short: "LASU" },
-  { id: 11, name: "University of Ilorin", short: "UNILORIN" },
-  { id: 12, name: "Federal University of Technology, Akure", short: "FUTA" },
-  { id: 13, name: "Babcock University", short: "BABCOCK" },
-  { id: 14, name: "University of Abuja", short: "UNIABUJA" },
-  { id: 15, name: "Federal University of Agriculture, Abeokuta", short: "FUNAAB" },
-  { id: 16, name: "Federal University of Technology, Minna", short: "FUTMINNA" },
-  { id: 17, name: "Federal University of Technology, Owerri", short: "FUTO" },
-  { id: 18, name: "Nnamdi Azikiwe University", short: "UNIZIK" },
-  { id: 19, name: "Ladoke Akintola University of Technology", short: "LAUTECH" },
-  { id: 20, name: "Ekiti State University", short: "EKSU" },
-  { id: 21, name: "University of Jos", short: "UNIJOS" },
-  { id: 22, name: "Bayero University Kano", short: "BUK" },
-  { id: 23, name: "University of Calabar", short: "UNICAL" },
-  { id: 24, name: "American University of Nigeria", short: "AUN" },
-  { id: 25, name: "Afe Babalola University", short: "ABUAD" },
-  { id: 26, name: "Bowen University", short: "BOWEN" },
-  { id: 27, name: "Redeemer's University", short: "RUN" },
-  { id: 28, name: "Landmark University", short: "LMU" },
-  { id: 29, name: "Pan-Atlantic University", short: "PAU" },
-  { id: 30, name: "Nile University of Nigeria", short: "NILE" },
+  { id: 7, name: "University of Benin", short: "UNIBEN" },
+  { id: 8, name: "Lagos State University", short: "LASU" },
+  { id: 9, name: "University of Ilorin", short: "UNILORIN" },
+  { id: 10, name: "Federal University of Technology, Akure", short: "FUTA" },
+  { id: 11, name: "Babcock University", short: "BABCOCK" },
+  { id: 12, name: "University of Abuja", short: "UNIABUJA" },
+  { id: 13, name: "Federal University of Agriculture, Abeokuta", short: "FUNAAB" },
+  { id: 14, name: "Federal University of Technology, Owerri", short: "FUTO" },
+  { id: 15, name: "Nnamdi Azikiwe University", short: "UNIZIK" },
+  { id: 16, name: "Ladoke Akintola University of Technology", short: "LAUTECH" },
+  { id: 17, name: "Ekiti State University", short: "EKSU" },
+  { id: 18, name: "University of Calabar", short: "UNICAL" },
+  { id: 19, name: "American University of Nigeria", short: "AUN" },
+  { id: 20, name: "Afe Babalola University", short: "ABUAD" },
+  { id: 21, name: "Bowen University", short: "BOWEN" },
+  { id: 22, name: "Redeemer's University", short: "RUN" },
+  { id: 23, name: "Landmark University", short: "LMU" },
+  { id: 24, name: "Pan-Atlantic University", short: "PAU" },
+  { id: 25, name: "Nile University of Nigeria", short: "NILE" },
+  { id: 26, name: "Federal University of Technology, Minna", short: "FUTMINNA" },
+  { id: 27, name: "Ahmadu Bello University", short: "ABU" },
+  { id: 28, name: "Bayero University Kano", short: "BUK" },
+  { id: 29, name: "University of Jos", short: "UNIJOS" },
+  { id: 30, name: "Rivers State University", short: "RSU" },
+  { id: 31, name: "Delta State University", short: "DELSU" },
+  { id: 32, name: "Ambrose Alli University", short: "AAU" },
+  { id: 33, name: "Cross River University of Technology", short: "CRUTECH" },
+  { id: 34, name: "Edo University Iyamho", short: "EUI" },
+  { id: 35, name: "Michael Okpara University of Agriculture", short: "MOUAU" },
+  { id: 36, name: "Enugu State University of Science and Technology", short: "ESUT" },
+  { id: 37, name: "Anambra State University", short: "ANSU" },
+  { id: 38, name: "Abia State University", short: "ABSU" },
+  { id: 39, name: "Imo State University", short: "IMSU" },
+  { id: 40, name: "Ignatius Ajuru University of Education", short: "IAUE" },
+  { id: 41, name: "Niger Delta University", short: "NDU" },
+  { id: 42, name: "Olabisi Onabanjo University", short: "OOU" },
+  { id: 43, name: "Osun State University", short: "UNIOSUN" },
+  { id: 44, name: "Kwara State University", short: "KWASU" },
+  { id: 45, name: "Mountain Top University", short: "MTU" },
+  { id: 46, name: "Augustine University", short: "AUI" },
+  { id: 47, name: "Caleb University", short: "CALEB" },
+  { id: 48, name: "Elizade University", short: "EU" },
+  { id: 49, name: "Gregory University Uturu", short: "GUU" },
+  { id: 50, name: "Paul University Awka", short: "PAULUNIV" },
 ];
 
 
@@ -86,38 +106,28 @@ function OtpInput({ code, onChangeCode, hasError }) {
 }
 
 
- function UniversitySelector({
-  label,
-  universities,
-  selectedSchool,
-  setSelectedSchool,
-}) {
+function UniversitySelector({ label, universities, selectedSchool, setSelectedSchool }) {
   return (
     <View style={s.wrapper}>
-    
-
-    {universities.map((item)=>{
+      <ScrollView
+        style={{ maxHeight: 5 * 74}}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled={true}
+      >
+        {universities.map((item) => {
           const isSelected = selectedSchool === item.name;
           return (
-            <TouchableOpacity key={item.id}
+            <TouchableOpacity
+              key={item.id}
               activeOpacity={0.85}
               onPress={() => setSelectedSchool(item.name)}
-              style={[
-                s.card,
-                isSelected && s.cardSelected,
-              ]}
+              style={[s.card, isSelected && s.cardSelected]}
             >
               <View style={s.leftAccent} />
-
               <View style={s.textWrap}>
-                <Text style={[s.name, isSelected && s.nameSelected]}>
-                  {item.name}
-                </Text>
-                <Text style={[s.short, isSelected && s.shortSelected]}>
-                  {item.short}
-                </Text>
+                <Text style={[s.name, isSelected && s.nameSelected]}>{item.name}</Text>
+                <Text style={[s.short, isSelected && s.shortSelected]}>{item.short}</Text>
               </View>
-
               {isSelected && (
                 <View style={s.badge}>
                   <Text style={s.badgeText}>✓</Text>
@@ -125,11 +135,8 @@ function OtpInput({ code, onChangeCode, hasError }) {
               )}
             </TouchableOpacity>
           );
-    })}
-
-         
-        
-      
+        })}
+      </ScrollView>
     </View>
   );
 }
@@ -763,7 +770,6 @@ const s = StyleSheet.create({
   wrapper: {
     marginTop: 10,
   },
-
   label: {
     fontSize: 12,
     color: "rgba(255,255,255,0.5)",
@@ -771,58 +777,49 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
-
   card: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     borderRadius: 16,
     marginBottom: 10,
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    position: "relative",
-    overflow: "hidden",
   },
-
   cardSelected: {
     backgroundColor: "rgba(124, 58, 237, 0.25)",
     borderColor: "#7C3AED",
     transform: [{ scale: 1.01 }],
   },
-
   leftAccent: {
     width: 4,
-    height: "100%",
+    height: 40,        // fixed height instead of "100%"
     backgroundColor: "#00D2FF",
     borderRadius: 10,
     marginRight: 12,
+    alignSelf: "center",
   },
-
   textWrap: {
     flex: 1,
   },
-
   name: {
     color: "rgba(255,255,255,0.85)",
     fontSize: 14,
     fontWeight: "600",
   },
-
   nameSelected: {
     color: "#ffffff",
   },
-
   short: {
     color: "rgba(255,255,255,0.4)",
     fontSize: 12,
     marginTop: 2,
   },
-
   shortSelected: {
     color: "#c4b5fd",
   },
-
   badge: {
     width: 24,
     height: 24,
@@ -830,10 +827,11 @@ const s = StyleSheet.create({
     backgroundColor: "#00D2FF",
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: 8,
   },
-
   badgeText: {
     color: "#0a0a0f",
     fontWeight: "900",
+    fontSize: 12,
   },
 });

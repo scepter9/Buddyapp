@@ -9,7 +9,7 @@ export const AuthorProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   const checkSession = () => {
-    fetch(`${API_BASE_URL}/check-session`, {
+    fetch(`${API_BASE_URL}/check-session`, { 
       method: 'GET',
       credentials: 'include',
     })

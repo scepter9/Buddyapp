@@ -254,6 +254,7 @@ const StoryCard = React.memo(function StoryCard({ item, myUserId, navigation, on
 export default function CampusPulse({ navigation }) {
   const { user } = useContext(AuthorContext);
   const myUserId = user?.id;
+const myuserUni=user?.uni
 
   const [stories, setStories] = useState([]);
   const [myStories, setMyStories] = useState([]);
@@ -273,7 +274,7 @@ export default function CampusPulse({ navigation }) {
       const fetchStories = async () => {
         setInitialLoading(true);
         try {
-          const res = await fetch(`${API_BASE_URL}/pulsedata?userid=${myUserId}`);
+          const res = await fetch(`${API_BASE_URL}/pulsedata?userid=${myUserId}&useruni=${myuserUni}`);
           if (!res.ok) throw new Error("Failed to fetch stories");
           const data = await res.json();
           setStories(data);
@@ -293,7 +294,7 @@ export default function CampusPulse({ navigation }) {
     useCallback(() => {
       const fetchMyStories = async () => {
         try {
-          const res = await fetch(`${API_BASE_URL}/mystories`, {
+          const res = await fetch(`${API_BASE_URL}/mystories?user=${myUserId}`, {
             credentials: "include",
           });
           if (!res.ok) return;
@@ -341,7 +342,7 @@ export default function CampusPulse({ navigation }) {
     try {
       const lastTime = stories[stories.length - 1].posted_at;
       const res = await fetch(
-        `${API_BASE_URL}/olderstories?userid=${myUserId}&lasttime=${lastTime}`
+        `${API_BASE_URL}/olderstories?userid=${myUserId}&lasttime=${lastTime}&useruni=${myuserUni}`
       );
       if (!res.ok) return;
       const data = await res.json();

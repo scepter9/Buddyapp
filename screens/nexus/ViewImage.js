@@ -6,7 +6,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { Video } from "expo-av";
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library';
 
 export default function ViewImage({ route, navigation }) {

@@ -75,7 +75,9 @@ export default function About({ navigation }) {
   const [notificationCount, setNotificationCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-
+const {users}=useContext(AuthorContext);
+const usersrole=users.role;
+const isAdmin=usersrole==='Admin'
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   const hasAnimated = useRef(false);
@@ -240,7 +242,7 @@ export default function About({ navigation }) {
           stat="24+ rooms live"
           statIcon="users"
         />
-{/* {isAdmin && (
+{isAdmin && (
   <FeatureCard
           onPress={() => navigation.navigate("Moderator")}
           gradColors={colors.gradient.cardPurple}
@@ -252,7 +254,7 @@ export default function About({ navigation }) {
           stat="MOD"
           statIcon="shield-off"
         />
-)} */}
+)}
           <FeatureCard
           onPress={() => navigation.navigate("MainRoom")}
           gradColors={colors.gradient.cardPurple}
