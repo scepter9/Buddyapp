@@ -75,9 +75,7 @@ export default function About({ navigation }) {
   const [notificationCount, setNotificationCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-const {users}=useContext(AuthorContext);
-const usersrole=users.role;
-const isAdmin=usersrole==='Admin'
+
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   const hasAnimated = useRef(false);
@@ -242,19 +240,7 @@ const isAdmin=usersrole==='Admin'
           stat="24+ rooms live"
           statIcon="users"
         />
-{isAdmin && (
-  <FeatureCard
-          onPress={() => navigation.navigate("Moderator")}
-          gradColors={colors.gradient.cardPurple}
-          borderColor="rgba(99,102,241,0.4)"
-          icon="shield-off"
-          eyebrow="MODERATOR"
-          title="For Admins Only."
-          description="This section can only be visible to admins only."
-          stat="MOD"
-          statIcon="shield-off"
-        />
-)}
+
           <FeatureCard
           onPress={() => navigation.navigate("MainRoom")}
           gradColors={colors.gradient.cardPurple}
