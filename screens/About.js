@@ -69,7 +69,12 @@ function FeatureCard({ onPress, gradColors, borderColor, icon, eyebrow, title, d
     </TouchableOpacity>
   );
 }
-
+const formatNumber = (val) => {
+  if (!val) return "0";
+  if (val < 1000) return val.toString();
+  if (val < 1_000_000) return (val / 1000).toFixed(1) + "k";
+  return (val / 1_000_000).toFixed(1) + "m";
+};
 export default function About({ navigation }) {
   const [user, setUser] = useState(null);
   const [notificationCount, setNotificationCount] = useState(0);
@@ -87,6 +92,7 @@ export default function About({ navigation }) {
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setUser(data);
+      
     } catch (err) {
       console.error("Error fetching user:", err);
     } finally {
@@ -166,6 +172,7 @@ export default function About({ navigation }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
+  const newLocal = `No rooms yet `;
   return (
     <SafeAreaView style={s.safe}>
       <StatusBar barStyle="light-content" />
@@ -181,7 +188,7 @@ export default function About({ navigation }) {
           activeOpacity={0.85}
         >
           {user?.image ? (
-            <Image source={{ uri: `${API_BASE_URL}/uploads/${user.image}` }} style={s.avatar} />
+            <Image source={{ uri: user.image }} style={s.avatar} />
           ) : (
             <LinearGradient colors={["#9333ea", "#6366f1"]} style={s.avatar}>
               <Text style={s.avatarInitials}>{initials}</Text>
@@ -237,10 +244,22 @@ export default function About({ navigation }) {
           eyebrow="INTEREST ROOMS"
           title="Find your people"
           description="Live group spaces built around what you love — join or create your own."
-          stat="24+ rooms live"
+          stat={user.roomcount>0?`${formatNumber(Number(user.roomcount))}+ communities live`:`No communites yet,Be the first to create one`}
           statIcon="users"
         />
-
+{user.userrole==='Admin' && (
+  <FeatureCard
+          onPress={() => navigation.navigate("Moderator")}
+          gradColors={colors.gradient.cardPurple}
+          borderColor="rgba(99,102,241,0.4)"
+          icon="shield-off"
+          eyebrow="MODERATOR"
+          title="For Admins Only."
+          description="This section can only be visible to admins only."
+          stat="MOD"
+          statIcon="shield-off"
+        />
+)}
           <FeatureCard
           onPress={() => navigation.navigate("MainRoom")}
           gradColors={colors.gradient.cardPurple}
