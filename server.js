@@ -15,7 +15,7 @@ const { result, last } = require('lodash');
 const bcrypt = require('bcrypt');
 const cron=require('node-cron');
 const { report } = require('process');
-const cloudinary=require("cloudinary").v2;
+const cloudinary=require("cloudinary")
 const {CloudinaryStorage}=require("multer-storage-cloudinary")
 
 //"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" -u root -p buddy > backup.sql
