@@ -116,11 +116,12 @@ function TheComments({
         setLikebyme(wasLiked);
         setLikeCount(prev => wasLiked ? prev + 1 : Math.max(0, prev - 1));
         console.log('issue');
+      }else {
+       
+        const newCount = willBeLiked ? likeCount + 1 : Math.max(0, likeCount - 1);
+        onLikeupdate?.(commentid, willBeLiked, newCount);
       }
-      else{
-        const newcount=willBeLiked?prev+1:Math.max(0,likeCount-1);
-        onLikeupdate?.(commentid,willBeLiked,newcount)
-      }
+     
     } catch {
       setLikebyme(wasLiked);
       setLikeCount(prev => wasLiked ? prev + 1 : Math.max(0, prev - 1));
@@ -164,7 +165,7 @@ function TheComments({
       >
         <View style={styles.cmPrimaryLane}>
           <Image
-            source={{ uri: `${API_BASE_URL}/uploads/${item.image}` }}
+            source={{ uri: item.image }}
             style={styles.cmAvatarOrb}
           />
           <View style={styles.cmContentColumn}>
@@ -180,7 +181,7 @@ function TheComments({
                     <Text style={styles.replyLabel}>Replied to</Text>
                     <View style={styles.replyUserRow}>
                       <Image
-                        source={{ uri: `${API_BASE_URL}/uploads/${item.replyUserImage}` }}
+                        source={{ uri: item.replyUserImage}}
                         style={styles.replyPreviewAvatar}
                       />
                       <Text style={styles.replyPreviewName}>
@@ -288,7 +289,24 @@ const PostChild = React.memo(function PostChild({
   const [selectedValue, setSelectedValue] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [book,setisbook]=useState(false)
+  const bookref=useRef(new Animated.Value(1)).current;
+const isbookmark=()=>{
+setisbook(true);
+Animated.sequence([
+  Animated.timing(bookref,{
+    toValue:1.3,
+    duration:150,
+    useNativeDriver:true
+  }),
+  Animated.timing(bookref,{
+    toValue:1,
+    duration:150,
+    useNativeDriver:true
+  })
+]).start()
 
+}
   const didInitialLoad = useRef(false);
   const [showPost, setShowPost] = useState(false);
 
@@ -303,6 +321,7 @@ const PostChild = React.memo(function PostChild({
     });
   }, []);
 
+  
   const setUserIndex = useCallback((theid) => {
     if (!theid) return;
     const index = postComments.findIndex(u => u.id === theid);
@@ -504,7 +523,7 @@ const PostChild = React.memo(function PostChild({
     <View style={styles.post}>
       <View style={styles.userRow}>
         <Image
-          source={{ uri: `${API_BASE_URL}/uploads/${item.image}` }}
+          source={{ uri: item.image}}
           style={styles.avatar}
         />
         <View style={styles.userInfo}>
@@ -531,7 +550,7 @@ const PostChild = React.memo(function PostChild({
         <View style={styles.mediaContainer}>
           {[...postImages, ...postVideos].map((uri, index) => {
             const total = postImages.length + postVideos.length;
-            const fullUri = `${API_BASE_URL}${uri}`;
+            const fullUri = `${uri}`;
             const isVideo = postVideos.includes(uri);
             let itemWidth = "100%";
             let itemHeight = 450;
@@ -607,11 +626,16 @@ const PostChild = React.memo(function PostChild({
 
   <View style={styles.reactionSpacer} />
 
-  {/* Share */}
-  <TouchableOpacity style={styles.shareBtn} onPress={() => Share.share({ message: 'Check this post' })}>
-    <Ionicons name="share-outline" size={16} color="rgba(255,255,255,0.35)" />
-    <Text style={styles.shareBtnText}>Share</Text>
-  </TouchableOpacity>
+  
+  <TouchableOpacity style={styles.bookmarkBtn} onPress={isbookmark}>
+  <Animated.View style={{ transform: [{ scale: bookref }] }}>
+    <Ionicons
+      name={book ? 'bookmark' : 'bookmark-outline'}
+      size={22}
+      color={book ? '#FF9500' : 'rgba(255,255,255,0.35)'}
+    />
+  </Animated.View>
+</TouchableOpacity>
 </View>
 
       {/* Comment modal */}
@@ -738,8 +762,7 @@ export default function DesignersHubScreen({ navigation, route }) {
   const [showBanner, setShowBanner] = useState(false);
   const [showSwipeHint, setShowSwipeHint] = useState(false);
   const [showReport, setShowReport] = useState(false);
-  // Add this with your other useState hooks near the top
-const [shouldLaunchPicker, setShouldLaunchPicker] = useState(false);
+  
 
   const bannerAnim = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef(null);
@@ -749,18 +772,7 @@ const [shouldLaunchPicker, setShouldLaunchPicker] = useState(false);
 
   useEffect(() => { postsArrayRef.current = postsArray; }, [postsArray]);
 
-  useEffect(() => {
-    if (!openModal && shouldLaunchPicker) {
-      setShouldLaunchPicker(false);
-      
-      // A tiny safety padding for Android layout cycles
-      const timer = setTimeout(() => {
-        handleimage();
-      }, 150); 
-      
-      return () => clearTimeout(timer);
-    }
-  }, [openModal, shouldLaunchPicker]);
+  
   // Socket setup
   useEffect(() => {
     if (!searchid || !roomid) return;
@@ -826,7 +838,25 @@ const [shouldLaunchPicker, setShouldLaunchPicker] = useState(false);
     });
   }, [searchid]);
 
- 
+ useEffect(()=>{
+const handler=(data)=>{
+  if(data.room_of_posts_id!==roomid) return;
+  if(data.sender_id===searchid){
+    setPostsArray(prev=>{
+      const existing =new Set(prev.map(p=>p.id))
+      if(existing.has(data.id)) return prev;
+      return [data,...prev]
+
+    }
+      );
+      flatListRef.current?.scrollToOffset({offset:0,animated:true})
+  }else{
+    triggerBanner[data]
+  }
+}
+socket.on('PushResponse',handler);
+return()=>socket.off('PushResponse',handler)
+ },[roomid,searchid])
   useEffect(() => {
     if (!postsArrayRef.current.length) return;
     const interval = setInterval(async () => {
@@ -984,7 +1014,7 @@ socket.emit("sendimage", theimage);
   , [loadingMore]);
 
   const imageSource = roomImage
-    ? { uri: `${API_BASE_URL}/uploads/${roomImage}` }
+    ? { uri: roomImage }
     : FALLBACK_ROOM_IMAGE; // BUG FIX: no more watermark fallback
 
   return (
@@ -1115,7 +1145,7 @@ socket.emit("sendimage", theimage);
                     <View style={styles.menuDivider} />
                     <TouchableOpacity 
   style={styles.menuItem} 
-  onPress={handleimage}  // ← direct call, no setTimeout, no setOpenModal here
+  onPress={handleimage} 
   disabled={!isAdmin}
 >
   <Feather name="image" size={15} color={colors.text.primary} />

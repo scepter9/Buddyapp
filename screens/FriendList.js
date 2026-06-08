@@ -56,7 +56,7 @@ function FriendRow({ friend, onPress, onFollowToggle, isFollowingThem }) {
       {/* Avatar */}
       {friend.image ? (
         <Image
-          source={{ uri: `${API_BASE_URL}/uploads/${friend.image}` }}
+          source={{ uri: `${friend.image}` }}
           style={s.avatar}
         />
       ) : (
@@ -163,7 +163,7 @@ export default function FriendList({ navigation, route }) {
         navigation.navigate('MessageUser', {
           recipientId: item.id,
           recipientName: item.FULLNAME,
-          recipientImage: `${API_BASE_URL}/uploads/${item.image}`,
+          recipientImage: `${item.image}`,
         });
   
       } else if (type === 'profile') {

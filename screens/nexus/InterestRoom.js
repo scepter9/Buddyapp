@@ -323,7 +323,7 @@ const RoomCard = React.memo(function RoomCard({ item, navigation, isJoined }) {
                   style={[s.avatarItem, { marginLeft: i === 0 ? 0 : -10 }]}
                 >
                   <Image
-                    source={{ uri: `${API_BASE_URL}/uploads/${u.image}` }}
+                    source={{ uri: u.image}}
                     style={StyleSheet.absoluteFillObject}
                   />
                 </View>

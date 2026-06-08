@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo,useRef, useContext } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,22 @@ import {
   ActivityIndicator,
   SafeAreaView,
   StatusBar,
+  Animated
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather ,Ionicons} from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import BottomNavigator from './BottomNavigator';
 import { colors, radius, spacing } from './Theme';
+import { AuthorContext } from './AuthorContext';
 
 const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
+
+
+const formatTime = (ms) => {
+  if (!ms) return '0:00';
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
 
 // ── Stat pill ──
 function StatItem({ count, label }) {
@@ -44,60 +53,8 @@ function InfoRow({ icon, label, value }) {
   );
 }
 
-// // ── Post card ──
-// function PostCard({ post }) {
-//   const [liked, setLiked] = useState(false);
-//   const [likeCount, setLikeCount] = useState(post.likes ?? 0);
+// ── Post card ──
 
-//   const handleLike = () => {
-//     setLiked(prev => !prev);
-//     setLikeCount(prev => liked ? Math.max(0, prev - 1) : prev + 1);
-//   };
-
-//   return (
-//     <View style={s.postCard}>
-//       <View style={s.postTop}>
-//         <View style={s.postAvatarWrap}>
-//           <LinearGradient colors={['#9333ea', '#e879f9']} style={s.postAvatarGrad}>
-//             <Text style={s.postAvatarText}>
-//               {post.authorName?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() ?? '?'}
-//             </Text>
-//           </LinearGradient>
-//         </View>
-//         <View style={s.postMeta}>
-//           <Text style={s.postAuthor}>{post.authorName ?? 'Unknown'}</Text>
-//           <Text style={s.postTime}>{post.timeAgo ?? 'recently'}</Text>
-//         </View>
-//         <Feather name="more-horizontal" size={16} color={colors.text.muted} />
-//       </View>
-
-//       {post.body ? (
-//         <Text style={s.postBody}>{post.body}</Text>
-//       ) : null}
-
-//       <View style={s.postActions}>
-//         <TouchableOpacity style={s.postAction} onPress={handleLike} activeOpacity={0.7}>
-//           <Feather
-//             name="heart"
-//             size={14}
-//             color={liked ? '#e879f9' : colors.text.muted}
-//           />
-//           <Text style={[s.postActionText, liked && { color: '#e879f9' }]}>
-//             {String(likeCount)}
-//           </Text>
-//         </TouchableOpacity>
-//         <TouchableOpacity style={s.postAction} activeOpacity={0.7}>
-//           <Feather name="message-circle" size={14} color={colors.text.muted} />
-//           <Text style={s.postActionText}>{String(post.comments ?? 0)}</Text>
-//         </TouchableOpacity>
-//         <TouchableOpacity style={s.postAction} activeOpacity={0.7}>
-//           <Feather name="share-2" size={14} color={colors.text.muted} />
-//           <Text style={s.postActionText}>{String(post.shares ?? 0)}</Text>
-//         </TouchableOpacity>
-//       </View>
-//     </View>
-//   );
-// }
 
 export default function Profile({ navigation, route }) {
   const [userProfile, setUserProfile] = useState(null);
@@ -108,6 +65,7 @@ export default function Profile({ navigation, route }) {
 
   const isViewingOwnProfile = userProfile?.id === loggedInUserId;
 
+ 
   const fetchProfileData = useCallback(async () => {
     setIsLoadingProfile(true);
     try {
@@ -233,7 +191,7 @@ export default function Profile({ navigation, route }) {
   }
 
   const imageUri = userProfile.image
-    ? { uri: `${API_BASE_URL}/uploads/${userProfile.image}` }
+    ? { uri: `${userProfile.image}` }
     : null;
 
   const handle = userProfile.email?.split('@')[0] ?? 'user';
@@ -245,7 +203,7 @@ export default function Profile({ navigation, route }) {
       <StatusBar barStyle="light-content" />
 
       {/* Ambient blob */}
-      <View style={s.blob} pointerEvents="none" />
+      <View style={s.blob} pointerEvents="none" /> 
 
       {/* Header row */}
       <View style={s.topBar}>
@@ -275,7 +233,7 @@ export default function Profile({ navigation, route }) {
             onPress={
               !isViewingOwnProfile
                 ? () => navigation.navigate('ViewImage', {
-                    imagevalue: `${API_BASE_URL}/uploads/${userProfile.image}`,
+                    imagevalue: `${userProfile.image}`,
                     mediatype: 'image',
                   })
                 : undefined
@@ -421,7 +379,10 @@ export default function Profile({ navigation, route }) {
           </View>
         )}
 
-       
+<View>
+
+</View>
+
         <View style={{ height: 100 }} />
       </ScrollView>
 

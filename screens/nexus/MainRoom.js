@@ -106,7 +106,7 @@ export default function MainRoom({ navigation }) {
     outputRange: ["2%", "52%"],
   });
 
-  // Notify user — subscribe them to this room for cron notifications
+  
   const subscribeToRoom = (code) => {
     if (!usersid || !code) return;
     socket.emit('Addasmember', { usersid, generatedCode: code });

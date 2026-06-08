@@ -135,7 +135,7 @@ export default function FullStory({ navigation, route }) {
   }
 
   const imageSource = story.image
-    ? { uri: `${API_BASE_URL}${story.image}` }
+    ? { uri: story.image}
     : FALLBACK_IMAGE;
 
   const initials = story.author?.[0]?.toUpperCase() ?? "A";

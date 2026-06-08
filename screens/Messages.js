@@ -165,7 +165,7 @@ const Messages = ({ navigation }) => {
         <View style={s.avatarWrap}>
           {item.other_user_image_uri ? (
             <Image
-              source={{ uri: `${API_BASE_URL}/uploads/${item.other_user_image_uri}` }}
+              source={{ uri: `${item.other_user_image_uri}` }}
               style={s.avatar}
             />
           ) : (

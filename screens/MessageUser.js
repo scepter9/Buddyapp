@@ -111,7 +111,7 @@ const AudioMessage = ({ uri, isMine }) => {
         return;
       }
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: `${API_BASE_URL}${uri}` },
+        { uri: `${uri}` },
         { shouldPlay: true },
         onPlaybackStatus
       );
@@ -540,8 +540,8 @@ function MessageUser({ navigation, route }) {
             )}
 
             {msg.type === 'image' && (
-              <TouchableOpacity onPress={() => navigation.navigate('ViewImage', { imagevalue: `${API_BASE_URL}${msg.imageUri}`, mediatype: 'image' })}>
-                <Image source={{ uri: `${API_BASE_URL}${msg.imageUri}` }} style={s.chatImage} />
+              <TouchableOpacity onPress={() => navigation.navigate('ViewImage', { imagevalue: `${msg.imageUri}`, mediatype: 'image' })}>
+                <Image source={{ uri: `${msg.imageUri}` }} style={s.chatImage} />
               </TouchableOpacity>
             )}
 

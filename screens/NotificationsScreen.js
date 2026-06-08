@@ -140,7 +140,7 @@ const NotificationItem = React.memo(function NotificationItem({
         <TouchableOpacity onPress={goToProfile} activeOpacity={0.85}>
           {sender_image ? (
             <Image
-              source={{ uri: `${API_BASE_URL}/uploads/${sender_image}` }}
+              source={{ uri: `${sender_image}` }}
               style={s.avatar}
             />
           ) : (

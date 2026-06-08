@@ -50,7 +50,7 @@ const formatTimestamp = (time) => {
 };
 function MyStoryCard({ item, onDelete, onPress }) {
   const imageSource = item.image
-    ? { uri: `${API_BASE_URL}/uploads/${item.image}` }
+    ? { uri: item.image}
     : FALLBACK_IMAGE;
 
   const confirmDelete = () => {
@@ -165,7 +165,7 @@ const StoryCard = React.memo(function StoryCard({ item, myUserId, navigation, on
   };
 
   const imageSource = item.image
-    ? { uri: `${API_BASE_URL}${item.image}` }
+    ? { uri: item.image }
     : FALLBACK_IMAGE;
 
   return (

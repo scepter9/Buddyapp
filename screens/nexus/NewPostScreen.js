@@ -27,6 +27,7 @@ import { Video } from "expo-av";
 const API_BASE_URL = "https://buddyapp-1ib3.onrender.com";
 const { width } = Dimensions.get("window");
 import { Feather } from "@expo/vector-icons";
+import socket from "../Socket";
 
 
 
@@ -152,8 +153,17 @@ useEffect(()=>{
               }),
             });
         
-            if (!res.ok) throw new Error("Post creation failed");
-        
+            if (!res.ok) {
+              Alert.alert('Failed to post , try again ')
+              return;
+            }
+             socket.emit('Pushpost',{
+              searchid,
+              roomid,
+              posttext,
+              sentimage,
+              sentvideo,
+             })
           } catch (err) {
             console.log("Posting failed:", err.message);
           }finally{
@@ -320,7 +330,7 @@ useEffect(()=>{
         {userProfile && (
   <View style={styles.header}>
     <Image
-      source={{ uri: `${API_BASE_URL}/uploads/${userProfile.image}` }}
+      source={{ uri: userProfile.image }}
       style={styles.avatar}
     />
     

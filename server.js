@@ -15,7 +15,8 @@ const { result, last } = require('lodash');
 const bcrypt = require('bcrypt');
 const cron=require('node-cron');
 const { report } = require('process');
-
+const cloudinary=require("cloudinary").v2;
+const {CloudinaryStorage}=require("multer-storage-cloudinary")
 
 //"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" -u root -p buddy > backup.sql
 //very important
@@ -42,7 +43,11 @@ app.use(session({
 }));
 
 
-
+cloudinary.config({
+  cloud_name:process.env.CLOUD_NAME,
+  api_key:process.env.CLOUD_API_KEY,
+  api_secret:process.env.CLOUD_API_SECRET
+})
 
 const server = http.createServer(app);
 
@@ -437,7 +442,9 @@ app.get('/Profile', (req, res) => {
     // Removed console.log('Session:', req.session); from here, as it's not directly related to the response
 });
 app.get('/About',(req,res)=>{
-    const sql='SELECT ID as id , FullNAME as name , IMAGE as image FROM projecttables WHERE ID=?';
+    const sql=`SELECT a.ID as id , a.FullNAME as name , a.IMAGE as image,a.userrole,coalesce(count(u.id),0)
+    as roomcount FROM projecttables a join createinterestroom u where a.ID=? group by u.id  
+   `;
     db.query(sql,[req.session.user.id],(err,results)=>{
         if(err){
             console.error('Error Fetching User Values',err);
@@ -587,27 +594,47 @@ app.post('/reset-password', async (req, res) => {
 
 
 // Store images in uploads/
-const storage = multer.diskStorage({
-    destination: 'uploads/',
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-        cb(null, uniqueName);
-    },
-});
+// const storage = multer.diskStorage({
+//     destination: 'uploads/',
+//     filename: (req, file, cb) => {
+//         const ext = path.extname(file.originalname);
+//         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+//         cb(null, uniqueName);
+//     },
+// });
 
-const audioStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/audio/'),
-  filename: (req, file, cb) => cb(null, `voice_${Date.now()}.m4a`),
-});
-
-const uploadAudio = multer({ storage: audioStorage, limits: { fileSize: 20 * 1024 * 1024 } });
-
+const audioStorage = new CloudinaryStorage({
+  cloudinary,
+  params:{
+    folder:'buddyapp/audio',
+    allowed_formats:['mp3','aac','m4a','wav'],
+    resource_type:'video'
+  }
+})
+const imageStorage=new CloudinaryStorage({
+  cloudinary,
+  params:{
+    folder:'buddyapp/images',
+    allowed_formats:['jpg','jpeg','png','webp'],
+    resource_type:'image'
+  }
+})
+const videoStorage=new CloudinaryStorage({
+  cloudinary,
+  params:{
+    folder:'buddyapp/videos',
+    allowed_formats:['mp4','mov','avi'],
+    resource_type:'video'
+  }
+})
+const uploadAudio = multer({ storage: audioStorage});
+const uploadVideo = multer({ storage: videoStorage});
+const uploadImage = multer({ storage: imageStorage});
 const upload = multer({ storage });
 
 app.post('/api/upload-audio', uploadAudio.single('audio'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  res.json({ audioUrl: `/uploads/audio/${req.file.filename}` });
+  res.json({ audioUrl:req.file.path });
 });
 
 app.get('/get-profile', (req, res) => {
@@ -1652,7 +1679,7 @@ app.post('/newAnonroom', (req, res) => {
   endtime.setMinutes(endtime.getMinutes() + (Number(selectedMinute) || 0));
 
   const sql = `
-    INSERT INTO newAnongroup(roomName, tags, roomRandomCode, hour, minute, starttime, stoptime, status)
+    INSERT INTO newanongroup(roomName, tags, roomRandomCode, hour, minute, starttime, stoptime, status)
     VALUES(?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
@@ -1666,7 +1693,7 @@ app.post('/newAnonroom', (req, res) => {
 });
 app.get('/getanonroom/:roomcode', (req, res) => {
   db.query(
-    'SELECT * FROM newAnongroup WHERE roomRandomCode = ?',
+    'SELECT * FROM newanongroup WHERE roomRandomCode = ?',
     [req.params.roomcode],
     (err, result) => {
       if (err) return res.status(500).json({ error: 'Database error' });
@@ -2001,6 +2028,7 @@ io.on('connection',(socket)=>{
   socket.on('disconnect',()=>{
     // console.log('User disconnected');
   })
+ 
 })
 app.post('/postnewtextval',(req,res)=>{
   const {searchid,
@@ -2016,11 +2044,11 @@ app.post('/postnewtextval',(req,res)=>{
   })
 });
 
-app.post('/api/videoupload',upload.single('video'),(req,res)=>{
+app.post('/api/videoupload',uploadVideo.single('video'),(req,res)=>{
   if(!req.file){
 return res.status(400).json({message:'No file uploaded'})
   }
-  const VideoUrl=`/uploads/${req.file.filename}`;
+  const VideoUrl=req.file.path;
   res.json({VideoUrl})
 })
 
@@ -2032,14 +2060,14 @@ return res.status(400).json({message:'No file uploaded'})
   
 app.post(
   "/api/uploads/images",
-  upload.array("images", 10), // up to 10 images
+  uploadImage.array("images", 10), // up to 10 images
   (req, res) => {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "No files uploaded" });
     }
 
     const imageUrls = req.files.map(
-      file => `/uploads/${file.filename}`
+      file => file.path
     );
 
     res.json({ imageUrls });
@@ -2054,7 +2082,7 @@ app.post(
     }
 
     const videoUrls = req.files.map(
-      file => `/uploads/${file.filename}`
+      file => file.path
     );
 
     res.json({ videoUrls });
@@ -2171,7 +2199,29 @@ io.on('connection', (socket) => {
     );
     console.log( roomOnlineUsers.get(receiveroomid).size);
   });
-  
+  socket.on('Pushpost',({searchid,roomid,posttext,sentimage,sentvideo})=>{
+    db.query(
+      `INSERT INTO roomposts(sender_id, post, room_of_posts_id, postvideo, postimage) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [searchid, posttext, roomid, JSON.stringify(sentvideo), JSON.stringify(sentimage)],
+      (err, result) => {
+        if (err) {
+          console.log(err); 
+          return 
+        }
+        db.query(`select cr.id,cr.sender_id,cr.post,cr.posted_at,cr.room_of_posts_id,
+        cr.postvideo,cr.postimage,a.USERNAME as usersname,a.FULLNAME as fullname,a.image 
+         from roomposts cr  inner join projecttables a on cr.sender_id=a.ID where cr.room_of_posts_id=? and cr.sender_id=? and cr.id=? ;`,[roomid,searchid,result.insertId],
+         (err,pushresult)=>{
+          if (err) {
+            console.log(err); 
+            return 
+          }
+          io.to(`room-${roomid}`).emit('PushResponse',pushresult[0])
+         })
+      }
+    );
+  })
 
   socket.on('sendimage', (image) => {
     if (!roomid) return console.log('sendimage: no roomid');
