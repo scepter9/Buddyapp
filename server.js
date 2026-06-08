@@ -655,7 +655,7 @@ app.get('/get-profile', (req, res) => {
 
 
 // Update profile route
-app.post('/update-profile', upload.single('image'), (req, res) => {
+app.post('/update-profile', uploadImage.single('image'), (req, res) => {
   const { name, about, university } = req.body;
   const image = req.file;
   const userId = req.session.user?.id;
