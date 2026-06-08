@@ -630,7 +630,7 @@ const videoStorage=new CloudinaryStorage({
 const uploadAudio = multer({ storage: audioStorage});
 const uploadVideo = multer({ storage: videoStorage});
 const uploadImage = multer({ storage: imageStorage});
-const upload = multer({ storage });
+
 
 app.post('/api/upload-audio', uploadAudio.single('audio'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -1829,7 +1829,7 @@ io.on('connection', (socket) => {
 //   }
 // }, { timezone: 'Africa/Lagos' });
 app.post('/api/upload',
-upload.single('image'),(req,res)=>{
+uploadImage.single('image'),(req,res)=>{
   if(!req.file){
     return res.status(400).json({message:'No file uploaded'})
   }
@@ -2075,7 +2075,7 @@ app.post(
 );
 app.post(
   "/api/uploads/videos",
-  upload.array("videos", 10), // up to 10 images
+  uploadVideo.array("videos", 10), // up to 10 images
   (req, res) => {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "No files uploaded" });
