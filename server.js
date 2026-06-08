@@ -44,10 +44,16 @@ app.use(session({
 
 
 cloudinary.config({
-  cloud_name:process.env.CLOUD_NAME,
-  api_key:process.env.CLOUD_API_KEY,
-  api_secret:process.env.CLOUD_API_SECRET
-})
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY,
+  api_secret: process.env.CLOUD_API_SECRET,
+});
+
+console.log('[Cloudinary]', {
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY ? 'set' : 'MISSING',
+  api_secret: process.env.CLOUD_API_SECRET ? 'set' : 'MISSING',
+});
 
 const server = http.createServer(app);
 
@@ -686,12 +692,10 @@ app.post('/update-profile', uploadImage.single('image'), (req, res) => {
   }
 
   // IMAGE
-  if (image) {
-      const imagePath = image.filename;
-
-      updates.push('IMAGE = ?');
-      values.push(imagePath);
-  }
+ if (image) {
+  updates.push('IMAGE = ?');
+  values.push(image.path); // full Cloudinary URL
+}
 
   // NO CHANGES
   if (updates.length === 0) {
