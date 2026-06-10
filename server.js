@@ -1767,8 +1767,8 @@ io.on('connection', (socket) => {
       timestamp: new Date().toISOString(),
     });
   });
-  socket.on('sendEmoji',({emojiId,messageId})=>{
-    if(!emojiId || !messageId) return;
+  socket.on('sendEmoji',({emojiId,messageId,roomCode})=>{
+   if (emojiId === undefined || emojiId === null || !messageId) return;
     io.to(roomCode).emit('Receiveemoji',(
       {messageId,emojiId}
     ))
