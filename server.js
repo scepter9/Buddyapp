@@ -1769,7 +1769,7 @@ io.on('connection', (socket) => {
   });
   socket.on('sendEmoji',({emojiId,messageId})=>{
     if(!emojiId || !messageId) return;
-    io.to(roomcode).emit('Receiveemoji',(
+    io.to(roomCode).emit('Receiveemoji',(
       {messageId,emojiId}
     ))
   })
