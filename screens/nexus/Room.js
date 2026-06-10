@@ -15,6 +15,8 @@ import {
   StatusBar,
   Alert,         // BUG FIX: was missing from imports
   ActivityIndicator,
+  Pressable,
+  Modal
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
@@ -218,7 +220,7 @@ export default function Room({ navigation, route }) {
     const senderColors = emojiColorMap.get(item.senderId) || ["#c084fc", "#818cf8"];
     const isMe = item.senderId === myUserId;
 
-    const slideAnim = useRef(new Animated.Value(-60)).current;
+    const slideAnim = useRef(new Animated.Value(120)).current;
     const opacityAnim = useRef(new Animated.Value(0)).current;
     const [showPicker, setShowPicker] = useState(false);
     const [reactions, setReactions] = useState({}); 
@@ -243,22 +245,22 @@ export default function Room({ navigation, route }) {
         Animated.spring(slideAnim, {
             toValue: 0,
             useNativeDriver: true,
-            friction: 7,
-            tension: 50,
+            friction: 20,
+            tension: 40,
         }).start();
         Animated.timing(opacityAnim, {
             toValue: 1,
             useNativeDriver: true,
-            duration: 200,
+            duration: 500,
         }).start();
 
         // auto hide after 3 seconds
-        setTimeout(() => hideSlide(), 3000);
+        // setTimeout(() => hideSlide(), 10000);
     };
 
     const hideSlide = () => {
         Animated.spring(slideAnim, {
-            toValue: -60,
+            toValue: 120,
             useNativeDriver: true,
         }).start();
         Animated.timing(opacityAnim, {
@@ -274,7 +276,7 @@ export default function Room({ navigation, route }) {
     };
 
     return (
-        <TouchableOpacity onLongPress={showSlide} activeOpacity={1}>
+        <Pressable onLongPress={showSlide} activeOpacity={1}>
             <Animated.View style={[styles.messageRow, isMe ? styles.myMessageRow : styles.otherMessageRow]}>
                 {!isMe && (
                     <LinearGradient colors={senderColors} style={styles.avatarRing}>
@@ -320,23 +322,32 @@ export default function Room({ navigation, route }) {
                     </LinearGradient>
                 )}
             </Animated.View>
-
+            <Modal
+    transparent
+    visible={showPicker}
+    animationType="none"
+    onRequestClose={hideSlide}
+>
+    <Pressable style={{ flex: 1 }} onPress={hideSlide}>
+        <Animated.View style={[
+            styles.emojiPicker,
+            isMe ? styles.emojiPickerRight : styles.emojiPickerLeft,
+            { transform: [{ translateY: slideAnim }], opacity: opacityAnim }
+        ]}>
+            {emojiOptions.map((emo, index) => (
+                <Pressable key={index} onPress={() => onSelect(index)}>
+                    <Text style={styles.emojiOption}>{emo}</Text>
+                </Pressable>
+            ))}
+        </Animated.View>
+    </Pressable>
+</Modal>
             {/* Emoji picker */}
-            {showPicker && (
-                <Animated.View style={[
-                    styles.emojiPicker,
-                    isMe ? styles.emojiPickerRight : styles.emojiPickerLeft,
-                    { transform: [{ translateY: slideAnim }], opacity: opacityAnim }
-                ]}>
-                    {emojiOptions.map((emo, index) => (
-                        <TouchableOpacity key={index} onPress={() => onSelect(index)}>
-                            <Text style={styles.emojiOption}>{emo}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </Animated.View>
-            )}
-        </TouchableOpacity>
+           
+        </Pressable>
+       
     );
+
 };
 
 // Then renderMessage becomes simply:
