@@ -191,7 +191,7 @@ export default function Profile({ navigation, route }) {
   }
 
   const imageUri = userProfile.image
-    ? { uri: `${userProfile.image}` }
+    ? { uri: userProfile.image }
     : null;
 
   const handle = userProfile.email?.split('@')[0] ?? 'user';
@@ -339,7 +339,7 @@ export default function Profile({ navigation, route }) {
               onPress={() => navigation.navigate('MessageUser', {
                 recipientId: userProfile.id,
                 recipientName: userProfile.name,
-                recipientImage: `${API_BASE_URL}/uploads/${userProfile.image}`,
+                recipientImage: `${userProfile.image}`,
               })}
               activeOpacity={0.85}
             >

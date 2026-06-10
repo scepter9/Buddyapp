@@ -147,7 +147,7 @@ export default function Slideupbar({
               <View style={styles.avatarWrap}>
                 {stuffimage ? (
                   <Image
-                    source={{ uri: `${API_BASE_URL}/uploads/${stuffimage}` }}
+                    source={{ uri: `${stuffimage}` }}
                     style={styles.avatar}
                   />
                 ) : (

@@ -28,7 +28,7 @@ app.use(cors({
 
 // JSON parser
 app.use(express.json());
-app.use('/uploads', express.static('uploads'));
+// app.use('/uploads', express.static('uploads'));
 
 // Session config
 app.use(session({
@@ -692,10 +692,12 @@ app.post('/update-profile', uploadImage.single('image'), (req, res) => {
   }
 
   // IMAGE
- if (image) {
-  updates.push('IMAGE = ?');
-  values.push(image.path); // full Cloudinary URL
-}
+
+  if (image) {
+    updates.push('IMAGE = ?');
+    values.push(image.path); // full Cloudinary URL
+  }
+
 
   // NO CHANGES
   if (updates.length === 0) {
@@ -1765,6 +1767,12 @@ io.on('connection', (socket) => {
       timestamp: new Date().toISOString(),
     });
   });
+  socket.on('sendEmoji',({emojiId,messageId})=>{
+    if(!emojiId || !messageId) return;
+    io.to(roomcode).emit('Receiveemoji',(
+      {messageId,emojiId}
+    ))
+  })
 
   // ── Disconnecting ──
   socket.on('disconnecting', () => {
@@ -1832,16 +1840,13 @@ io.on('connection', (socket) => {
 //     console.error('Cron error:', err.message);
 //   }
 // }, { timezone: 'Africa/Lagos' });
-app.post('/api/upload',
-uploadImage.single('image'),(req,res)=>{
-  if(!req.file){
-    return res.status(400).json({message:'No file uploaded'})
-  }
-  const imageUrl = `/uploads/${req.file.filename}`;
-  // console.log(imageUrl);
-  res.json({ imageUrl })
-}
-)
+
+// Use uploadImage which uses Cloudinary storage ✅
+app.post('/api/upload', uploadImage.single('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+  res.json({ imageUrl: req.file.path }); // full Cloudinary URL
+});
+
 
 
 app.get('/pulsedata', (req, res) => {
@@ -2054,11 +2059,8 @@ return res.status(400).json({message:'No file uploaded'})
   }
   const VideoUrl=req.file.path;
   res.json({VideoUrl})
-})
 
-
-
-
+  })
 
 
   
@@ -2864,7 +2866,7 @@ app.post('/clearchat', (req, res) => {
 const isMod = (req, res, next) => {
   const user = req.session.user;
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  if (user.role !== 'mod' && user.role !== 'admin') {
+  if (user.role !== 'mod' && user.role !== 'Admin') {
     return res.status(403).json({ error: 'Not authorized' });
   }
   next();

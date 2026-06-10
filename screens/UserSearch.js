@@ -22,7 +22,7 @@ function UserRow({ user, onPress, score }) {
     <TouchableOpacity style={s.row} onPress={() => onPress(user.id)} activeOpacity={0.8}>
       {user.image ? (
         // BUG FIX: was missing /uploads/ in URI
-        <Image source={{ uri: `${API_BASE_URL}/uploads/${user.image}` }} style={s.avatar} />
+        <Image source={{ uri: `${user.image}` }} style={s.avatar} />
       ) : (
         <LinearGradient colors={['#9333ea', '#6366f1']} style={s.avatar}>
           <Text style={s.avatarInitials}>{initials}</Text>

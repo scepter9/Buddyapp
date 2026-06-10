@@ -95,7 +95,7 @@ const Messages = ({ navigation }) => {
                       ...conv,
                       other_user_name: userInfo.name || 'New User',
                       other_user_image_uri: userInfo.image
-                        ? `${API_BASE_URL}/uploads/${userInfo.image}`
+                        ? `${userInfo.image}`
                         : null,
                     };
                   }
@@ -125,7 +125,7 @@ const Messages = ({ navigation }) => {
 
   const handleConversationPress = (conversation) => {
     const imageUrl = conversation.other_user_image_uri
-      ? `${API_BASE_URL}/uploads/${conversation.other_user_image_uri}`
+      ? `${conversation.other_user_image_uri}`
       : null;
     navigation.navigate('MessageUser', {
       recipientId: conversation.other_user_id,
