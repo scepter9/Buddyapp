@@ -1767,12 +1767,11 @@ io.on('connection', (socket) => {
       timestamp: new Date().toISOString(),
     });
   });
-  socket.on('sendEmoji',({emojiId,messageId,roomCode})=>{
-   if (emojiId === undefined || emojiId === null || !messageId) return;
-    io.to(roomCode).emit('Receiveemoji',(
-      {messageId,emojiId}
-    ))
-  })
+
+  socket.on('sendEmoji', ({ emojiId, messageId, roomCode, type }) => {
+    if (emojiId === undefined || emojiId === null || !messageId || !roomCode) return;
+    io.to(roomCode).emit('Receiveemoji', { messageId, emojiId, type });
+});
 
   // ── Disconnecting ──
   socket.on('disconnecting', () => {
@@ -2155,6 +2154,48 @@ if(err){
 res.json(result)
    })
 })
+app.get('/bookmarks',(req,res)=>{
+  const {userId}=req.query;
+  db.query(`select cr.id,cr.sender_id,cr.post,cr.posted_at,cr.room_of_posts_id,
+  cr.postvideo,cr.postimage,a.USERNAME as usersname,a.FULLNAME as fullname,a.image 
+   from roomposts cr  inner join projecttables a on cr.sender_id=a.ID inner join bookmarks br on br.roomid=cr.room_of_posts_id and br.postid=cr.id where br.userid=? order by  cr.posted_at desc 
+   limit 20`,[userId],(err,result)=>{
+    if (err) {
+      console.log(err); // log the actual error
+      return res.status(500).json({ error: 'An error occurred' });
+    }
+res.json(result)
+   })
+})
+app.post('/postbook-add',(req,res)=>{
+  const {searchid,roomdetais,Roomid}=req.body;
+  db.query(`insert ignore into bookmarks(userid,postid,roomid)values(?,?,?)`,[searchid,roomdetais,Roomid],(err,result)=>{
+    if (err) {
+      console.log(err); // log the actual error
+      return res.status(500).json({ error: 'An error occurred' });
+    }
+    res.status(200).json({ success: true });
+  })
+})
+app.get('/fetchbookstate',(req,res)=>{
+  const {user,postid,roomid}=req.query;
+  db.query(`select * from bookmarks where userid=? and postid=? and roomid=?`,[user,postid,roomid],(err,result)=>{
+    if(err){
+      return res.status(500).json({error:'An error occured fetching bookstate'})
+    }
+    res.json(result)
+  })
+})
+app.post('/postbook-remove',(req,res)=>{
+  const {searchid,roomdetais,Roomid}=req.body;
+  db.query(`delete from bookmarks where userid=?,postid=? and roomid=?`,[searchid,roomdetais,Roomid],(err,result)=>{
+    if (err) {
+      console.log(err); // log the actual error
+      return res.status(500).json({ error: 'An error occurred' });
+    }
+    res.status(200).json({ success: true });
+  })
+})
 app.get('/getroomolder',(req,res)=>{
   const {lasttime,roomid}=req.query;
 db.query(`select cr.id,cr.sender_id,cr.post,cr.posted_at,cr.room_of_posts_id,
@@ -2402,8 +2443,8 @@ io.on('connection',(socket)=>{
 })
 
 app.get('/fetchlikestate',(req,res)=>{
-  const {user,room}=req.query;
-  db.query(`select * from roomlikes where userid=? and roomid=?`,[user,room],(err,result)=>{
+  const {user,postid,roomid}=req.query;
+  db.query(`select * from roomlikes where userid=? and roomid=? and postid=?`,[user,roomid,postid],(err,result)=>{
     if(err){
      return res.status(500).json({error:err.message})
     }
@@ -2420,8 +2461,8 @@ app.get('/fetchcommentlikestate',(req,res)=>{
   })
 })
 app.get('/fetchlikes',(req,res)=>{
-  const {room}=req.query;
-  db.query(`select roomid,count(roomid) as roomlikenum from roomlikes where roomid=? group by roomid ;`,[room],(err,result)=>{
+  const {postid,roomid}=req.query;
+  db.query(`select postid,count(postid) as roomlikenum from roomlikes where roomid=? and postid=?group by roomid ;`,[roomid,postid],(err,result)=>{
     if(err){
     return  res.status(500).json({error:err.message})
     }
@@ -2438,8 +2479,8 @@ app.get('/fetchcommentlikes',(req,res)=>{
   })
 })
 app.post('/addroomlikes',(req,res)=>{
-  const {searchid,roomdetais}=req.body;
-  db.query(`INSERT IGNORE INTO roomlikes(userid,roomid) VALUES(?,?)`,[searchid,roomdetais],(err,result)=>{
+  const {searchid,roomdetais,Roomid}=req.body;
+  db.query(`INSERT IGNORE INTO roomlikes(userid,postid,roomid) VALUES(?,?,?)`,[searchid,roomdetais,Roomid],(err,result)=>{
     if(err){
       return  res.status(500).json({error:err.message})
       }    
@@ -2449,8 +2490,8 @@ app.post('/addroomlikes',(req,res)=>{
 
 })
 app.post('/addcommentroomlikes',(req,res)=>{
-  const {userisId,commentid}=req.body;
-  db.query(`INSERT IGNORE INTO roomcommentlikes(user_id,commentid) VALUES(?,?)`,[userisId,commentid],(err,result)=>{
+  const {userisId,commentid,thepostid,Roomid}=req.body;
+  db.query(`INSERT IGNORE INTO roomcommentlikes(user_id,commentid,postid,roomid) VALUES(?,?,?,?)`,[userisId,commentid,thepostid,Roomid],(err,result)=>{
     if(err){
       return  res.status(500).json({error:err.message})
       }    
@@ -2459,8 +2500,8 @@ app.post('/addcommentroomlikes',(req,res)=>{
 
 })
 app.post('/removeroomlikes',(req,res)=>{
-  const {searchid,roomdetais}=req.body;
-  db.query(`delete from roomlikes where userid=? and roomid=?`,[searchid,roomdetais],(err,result)=>{
+  const {searchid,roomdetais,Roomid}=req.body;
+  db.query(`delete from roomlikes where userid=? and roomid=? and postid=? `,[searchid,Roomid,roomdetais],(err,result)=>{
     if(err){
       return  res.status(500).json({error:err.message})
       }    
@@ -2469,8 +2510,8 @@ app.post('/removeroomlikes',(req,res)=>{
 
 })
 app.post('/removecommentroomlikes',(req,res)=>{
-  const {userisId,commentid}=req.body;
-  db.query(`delete from roomcommentlikes where user_id=? and commentid=?`,[userisId,commentid],(err,result)=>{
+  const {userisId,commentid,thepostid,Roomid}=req.body;
+  db.query(`delete from roomcommentlikes where user_id=? and commentid=? and roomid=? and postid=?`,[userisId,commentid,Roomid,thepostid],(err,result)=>{
     if(err){
       return  res.status(500).json({error:err.message})
       }    
@@ -2719,12 +2760,16 @@ app.get('/fetchpostcomment',(req,res)=>{
   FROM roomcommentlikes
   WHERE user_id = ?
   AND commentid = cr.id
+  AND postid=cr.postid
+  AND roomid=cr.room_of_post_id
   ) as likestate,
   
   (
   SELECT COUNT(*)
   FROM roomcommentlikes
   WHERE commentid = cr.id
+    AND postid=cr.postid
+  AND roomid=cr.room_of_post_id
   ) as likecount
   
   FROM commenting cr

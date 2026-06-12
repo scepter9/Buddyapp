@@ -18,6 +18,7 @@ const TYPES = {
   LIKE:    'like',
   COMMENT: 'comment',
   ANON:    'anon',
+  REPORT:   'report'
 };
 
 const formatTimeAgo = (time) => {
@@ -34,7 +35,7 @@ const formatTimeAgo = (time) => {
 };
 
 const NotificationItem = React.memo(function NotificationItem({
-  notification, onFollowPress, onDelete, navigation,
+  notification, onFollowPress, onDelete, navigation,setScrollEnabled
 }) {
   const { id, sender_name, sender_image, message, created_at, type, sender_id } = notification;
 
@@ -44,6 +45,7 @@ const NotificationItem = React.memo(function NotificationItem({
 
   const panResponder = useRef(PanResponder.create({
     onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 8 && g.dx > 0,
+    onPanResponderGrant:()=>setScrollEnabled(false),
     onPanResponderMove: (_, g) => {
       if (g.dx > 0) {
         const val = Math.min(g.dx, 120);
@@ -53,6 +55,7 @@ const NotificationItem = React.memo(function NotificationItem({
       }
     },
     onPanResponderRelease: (_, g) => {
+      setScrollEnabled(true)
       if (g.dx > 70) {
         Animated.timing(slideAnim, { toValue: 400, duration: 220, useNativeDriver: true })
           .start(() => onDelete(id));
@@ -74,6 +77,7 @@ const NotificationItem = React.memo(function NotificationItem({
     [TYPES.LIKE]:    { icon: 'heart',           color: '#f43f5e', bg: 'rgba(244,63,94,0.12)'  },
     [TYPES.COMMENT]: { icon: 'message-circle',  color: '#0ea5e9', bg: 'rgba(14,165,233,0.12)' },
     [TYPES.ANON]:    { icon: 'shield-off',      color: '#6366f1', bg: 'rgba(99,102,241,0.12)' },
+    [TYPES.REPORT]:    { icon: 'shield-off',      color: '#6366f1', bg: 'rgba(99,102,241,0.12)' },
   };
   const config = typeConfig[type] ?? { icon: 'bell', color: '#9333ea', bg: 'rgba(147,51,234,0.12)' };
 
@@ -168,9 +172,10 @@ export default function NotificationScreen() {
   const { user } = useContext(AuthorContext);
   const loggedInUserId = user?.id;
 
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -289,6 +294,7 @@ export default function NotificationScreen() {
       onFollowPress={handleFollowBack}
       onDelete={handleDelete}
       navigation={navigation}
+      setScrollEnabled={setScrollEnabled}
     />
   ), [handleDelete, navigation]);
 
@@ -365,6 +371,7 @@ export default function NotificationScreen() {
         </View>
       ) : (
         <FlatList
+        scrollEnabled={scrollEnabled}
           data={notifications}
           renderItem={renderItem}
           keyExtractor={(item) => item.id.toString()}

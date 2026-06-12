@@ -37,12 +37,180 @@ const emojiColors = [
   ["#34d399", "#22d3ee"],
   ["#fbbf24", "#f87171"],
 ];
+const formatNumber = (val) => {
+  if (!val) return "0";
+  if (val < 1000) return val.toString();
+  if (val < 1_000_000) return (val / 1000).toFixed(1) + "k";
+  return (val / 1_000_000).toFixed(1) + "m";
+};
 
+ const MessageBubble = ({ item, myUserId, socket, emojiOptions, emojiMap, emojiColorMap, onPickerChange,room}) => {
+    const senderEmoji = emojiMap.get(item.senderId) || "👤";
+    const senderColors = emojiColorMap.get(item.senderId) || ["#c084fc", "#818cf8"];
+    const isMe = item.senderId === myUserId;
+
+    const slideAnim = useRef(new Animated.Value(80)).current;
+    const opacityAnim = useRef(new Animated.Value(0)).current;
+    const [showPicker, setShowPicker] = useState(false);
+    const [reactions, setReactions] = useState({}); 
+
+    useEffect(() => {
+      const handler = ({ messageId, emojiId, type }) => {
+          if (item.id !== messageId) return;
+          const emoji = emojiOptions[emojiId];
+          if (!emoji) return;
+          setReactions(prev => {
+              const current = prev[emoji] || { count: 0, reacted: false };
+              if (type === 'remove') {
+                  return { ...prev, [emoji]: { ...current, count: Math.max(0, current.count - 1) }};
+              }
+              return { ...prev, [emoji]: { ...current, count: current.count + 1 }};
+          });
+      };
+      socket.on('Receiveemoji', handler);
+      return () => socket.off('Receiveemoji', handler);
+  }, [item.id]);
+
+    const showSlide = () => {
+      onPickerChange(true)   
+        setShowPicker(true);
+        Animated.spring(slideAnim, {
+            toValue: 0,
+            useNativeDriver: true,
+            friction: 20,
+            tension: 40,
+        }).start();
+        Animated.timing(opacityAnim, {
+            toValue: 1,
+            useNativeDriver: true,
+            duration: 500,
+        }).start();
+
+        // auto hide after 3 seconds
+        // setTimeout(() => hideSlide(), 10000);
+    };
+
+    const hideSlide = () => {
+      onPickerChange(false)   
+        Animated.spring(slideAnim, {
+            toValue: 120,
+            useNativeDriver: true,
+        }).start();
+        Animated.timing(opacityAnim, {
+            toValue: 0,
+            useNativeDriver: true,
+            duration: 200,
+        }).start(() => setShowPicker(false));
+    };
+
+// Frontend — update onSelect
+const onSelect = (index) => {
+  const emoji = emojiOptions[index];
+  const alreadyReacted = reactions[emoji]?.reacted;
+
+  // optimistic update
+  setReactions(prev => {
+      const current = prev[emoji] || { count: 0, reacted: false };
+      if (alreadyReacted) {
+          return { ...prev, [emoji]: { count: Math.max(0, current.count - 1), reacted: false }};
+      }
+      return { ...prev, [emoji]: { count: current.count + 1, reacted: true }};
+  });
+
+  socket.emit('sendEmoji', {
+      emojiId: index,
+      messageId: item.id,
+      roomCode,
+      type: alreadyReacted ? 'remove' : 'add'    // ← tell backend which
+  });
+  hideSlide();
+};
+
+    return (
+        <TouchableOpacity
+         onPress={showSlide} activeOpacity={1}>
+            <Animated.View style={[styles.messageRow, isMe ? styles.myMessageRow : styles.otherMessageRow]}>
+                {!isMe && (
+                    <LinearGradient colors={senderColors} style={styles.avatarRing}>
+                        <View style={styles.avatarInner}>
+                            <Text style={styles.avatarEmoji}>{senderEmoji}</Text>
+                        </View>
+                    </LinearGradient>
+                )}
+
+                <View style={[styles.bubbleWrapper, isMe && styles.myBubbleWrapper]}>
+                    {isMe ? (
+                        <LinearGradient
+                            colors={["#9333ea", "#6366f1"]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={[styles.bubble, styles.myBubble]}
+                        >
+                            <Text style={styles.messageText}>{item.text}</Text>
+                        </LinearGradient>
+                    ) : (
+                        <View style={[styles.bubble, styles.otherBubble]}>
+                            <Text style={styles.messageText}>{item.text}</Text>
+                        </View>
+                    )}
+
+                    {/* Reactions display */}
+                    {Object.keys(reactions).length > 0 && (
+    <View style={styles.reactionsRow}>
+        {Object.entries(reactions)
+            .filter(([_, data]) => data.count > 0)   // hide zeroed out reactions
+            .map(([emoji, data]) => (
+                <View key={emoji} style={[
+                    styles.reactionBadge,
+                    data.reacted && styles.reactionBadgeActive  // highlight yours
+                ]}>
+                    <Text style={styles.reactionText}>{emoji} {formatNumber(data.count)}</Text>
+                </View>
+            ))}
+    </View>
+)}
+                </View>
+
+                {isMe && (
+                    <LinearGradient colors={["#9333ea", "#ec4899"]} style={styles.avatarRing}>
+                        <View style={styles.avatarInner}>
+                            <Text style={styles.avatarEmoji}>🎭</Text>
+                        </View>
+                    </LinearGradient>
+                )}
+            </Animated.View>
+            <Modal
+    transparent
+    visible={showPicker}
+    animationType="none"
+    onRequestClose={hideSlide}
+>
+    <TouchableOpacity style={{ flex: 1 }} onPress={hideSlide} activeOpacity={0.8}>
+        <Animated.View style={[
+            styles.emojiPicker,
+            isMe ? styles.emojiPickerRight : styles.emojiPickerLeft,
+            { transform: [{ translateY: slideAnim }], opacity: opacityAnim }
+        ]}>
+            {emojiOptions.map((emo, index) => (
+                <Pressable key={index} onPress={() => onSelect(index)}>
+                    <Text style={styles.emojiOption}>{emo}</Text>
+                </Pressable>
+            ))}
+        </Animated.View>
+    </TouchableOpacity>
+</Modal>
+            {/* Emoji picker */}
+           
+        </TouchableOpacity>
+       
+    );
+
+};
 export default function Room({ navigation, route }) {
   const { roomCode } = route.params;
   const { user } = useContext(AuthorContext);
   const myUserId = user?.id;
-
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [roomName, setRoomName] = useState("");
   const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -215,149 +383,20 @@ export default function Room({ navigation, route }) {
     outputRange: ["rgba(255,255,255,0.08)", "rgba(147,51,234,0.7)"],
   });
 
-  const MessageBubble = ({ item, myUserId, socket, emojiOptions }) => {
-    const senderEmoji = emojiMap.get(item.senderId) || "👤";
-    const senderColors = emojiColorMap.get(item.senderId) || ["#c084fc", "#818cf8"];
-    const isMe = item.senderId === myUserId;
 
-    const slideAnim = useRef(new Animated.Value(120)).current;
-    const opacityAnim = useRef(new Animated.Value(0)).current;
-    const [showPicker, setShowPicker] = useState(false);
-    const [reactions, setReactions] = useState({}); 
-
-    useEffect(() => {
-        const handler = ({ messageId, emojiId }) => {
-            if (item.id !== messageId) return;
-            const emoji = emojiOptions[emojiId];
-            if (!emoji) return;
-            setReactions(prev => ({
-                ...prev,
-                [emoji]: (prev[emoji] || 0) + 1
-            }));
-        };
-
-        socket.on('Receiveemoji', handler);
-        return () => socket.off('Receiveemoji', handler);
-    }, [item.id]);
-
-    const showSlide = () => {
-        setShowPicker(true);
-        Animated.spring(slideAnim, {
-            toValue: 0,
-            useNativeDriver: true,
-            friction: 20,
-            tension: 40,
-        }).start();
-        Animated.timing(opacityAnim, {
-            toValue: 1,
-            useNativeDriver: true,
-            duration: 500,
-        }).start();
-
-        // auto hide after 3 seconds
-        // setTimeout(() => hideSlide(), 10000);
-    };
-
-    const hideSlide = () => {
-        Animated.spring(slideAnim, {
-            toValue: 120,
-            useNativeDriver: true,
-        }).start();
-        Animated.timing(opacityAnim, {
-            toValue: 0,
-            useNativeDriver: true,
-            duration: 200,
-        }).start(() => setShowPicker(false));
-    };
-
-    const onSelect = (index) => {
-        socket.emit('sendEmoji', { emojiId: index, messageId: item.id });
-        hideSlide();
-    };
-
-    return (
-        <Pressable onLongPress={showSlide} activeOpacity={1}>
-            <Animated.View style={[styles.messageRow, isMe ? styles.myMessageRow : styles.otherMessageRow]}>
-                {!isMe && (
-                    <LinearGradient colors={senderColors} style={styles.avatarRing}>
-                        <View style={styles.avatarInner}>
-                            <Text style={styles.avatarEmoji}>{senderEmoji}</Text>
-                        </View>
-                    </LinearGradient>
-                )}
-
-                <View style={[styles.bubbleWrapper, isMe && styles.myBubbleWrapper]}>
-                    {isMe ? (
-                        <LinearGradient
-                            colors={["#9333ea", "#6366f1"]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={[styles.bubble, styles.myBubble]}
-                        >
-                            <Text style={styles.messageText}>{item.text}</Text>
-                        </LinearGradient>
-                    ) : (
-                        <View style={[styles.bubble, styles.otherBubble]}>
-                            <Text style={styles.messageText}>{item.text}</Text>
-                        </View>
-                    )}
-
-                    {/* Reactions display */}
-                    {Object.keys(reactions).length > 0 && (
-                        <View style={styles.reactionsRow}>
-                            {Object.entries(reactions).map(([emoji, count]) => (
-                                <View key={emoji} style={styles.reactionBadge}>
-                                    <Text style={styles.reactionText}>{emoji} {count}</Text>
-                                </View>
-                            ))}
-                        </View>
-                    )}
-                </View>
-
-                {isMe && (
-                    <LinearGradient colors={["#9333ea", "#ec4899"]} style={styles.avatarRing}>
-                        <View style={styles.avatarInner}>
-                            <Text style={styles.avatarEmoji}>🎭</Text>
-                        </View>
-                    </LinearGradient>
-                )}
-            </Animated.View>
-            <Modal
-    transparent
-    visible={showPicker}
-    animationType="none"
-    onRequestClose={hideSlide}
->
-    <Pressable style={{ flex: 1 }} onPress={hideSlide}>
-        <Animated.View style={[
-            styles.emojiPicker,
-            isMe ? styles.emojiPickerRight : styles.emojiPickerLeft,
-            { transform: [{ translateY: slideAnim }], opacity: opacityAnim }
-        ]}>
-            {emojiOptions.map((emo, index) => (
-                <Pressable key={index} onPress={() => onSelect(index)}>
-                    <Text style={styles.emojiOption}>{emo}</Text>
-                </Pressable>
-            ))}
-        </Animated.View>
-    </Pressable>
-</Modal>
-            {/* Emoji picker */}
-           
-        </Pressable>
-       
-    );
-
-};
 
 // Then renderMessage becomes simply:
 const renderMessage = ({ item }) => (
-    <MessageBubble
-        item={item}
-        myUserId={myUserId}
-        socket={socket}
-        emojiOptions={["👍", "❤️", "😂", "😮", "😢", "🔥"]}
-    />
+  <MessageBubble
+      item={item}
+      myUserId={myUserId}
+      socket={socket}
+      emojiOptions={["👍", "❤️", "😭", "😢", "🔥","💀","😑","🤬","🎉","💦","🍆","🥱","💅","🙏","🤯"]}
+      emojiMap={emojiMap}
+      emojiColorMap={emojiColorMap}
+      onPickerChange={setPickerOpen}
+      room={roomCode}
+  />
 );
  
 
@@ -384,7 +423,8 @@ const renderMessage = ({ item }) => (
       <View style={styles.blobBottom} pointerEvents="none" />
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      
+<TouchableWithoutFeedback onPress={pickerOpen ? undefined : Keyboard.dismiss}>
           <View style={{ flex: 1 }}>
 
             {/* Header */}
@@ -528,39 +568,45 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 4,
     marginTop: 4,
+    maxWidth: '100%',    // stays within bubbleWrapper's 72% constraint
 },
 reactionBadge: {
-    backgroundColor: '#1e1b2e',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 0.5,
-    borderColor: '#9333ea',
+  backgroundColor: '#1e1b2e',
+  borderRadius: 12,
+  paddingHorizontal: 8,
+  paddingVertical: 3,
+  borderWidth: 0.5,
+  borderColor: '#9333ea',
 },
 reactionText: {
     fontSize: 12,
     color: '#e2e8f0',
 },
+
 emojiPicker: {
-    flexDirection: 'row',
-    backgroundColor: '#1e1b2e',
-    borderRadius: 24,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
-    position: 'absolute',
-    top: -50,
-    borderWidth: 0.5,
-    borderColor: '#9333ea',
-    zIndex: 10,
+  flexDirection: 'row',
+  flexWrap: 'wrap',          // ← wraps to new line
+  backgroundColor: '#1e1b2e',
+  borderRadius: 24,
+  paddingHorizontal: 16,
+  paddingVertical: 10,
+  gap: 8,
+  position: 'absolute',
+  bottom: 120,
+  borderWidth: 0.5,
+  borderColor: '#9333ea',
+  maxWidth: 220,             // ← forces wrap at ~3 per row
 },
 emojiPickerLeft: {
-    left: 48,
+  left: 48,
 },
 emojiPickerRight: {
-    right: 48,
+  right: 48,
 },
 emojiOption: {
     fontSize: 22,
 },
+
 });
+
+

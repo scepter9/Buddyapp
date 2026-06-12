@@ -45,7 +45,7 @@ const WARNING_MESSAGES = {
   'Impersonation': {
     user:  'Your account has been reported for impersonation. Please verify your identity within 48 hours.',
     story: 'This story has been flagged for impersonation. Review it or it will be removed.',
-    room:  'This room has been reported for impersonating an official organization.',
+    room:  'This room has been reported for impersonation. Review it or it will be removed.',
   },
   'Inappropriate content': {
     user:  'Your account has been reported for inappropriate content. This is a warning.',

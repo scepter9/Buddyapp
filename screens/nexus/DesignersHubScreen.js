@@ -110,7 +110,7 @@ function TheComments({
       const res = await fetch(`${API_BASE_URL}/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userisId, commentid }),
+        body: JSON.stringify({ userisId, commentid,thepostid,Roomid }),
       });
       if (!res.ok) {
         setLikebyme(wasLiked);
@@ -291,22 +291,7 @@ const PostChild = React.memo(function PostChild({
   const [loadingMore, setLoadingMore] = useState(false);
   const [book,setisbook]=useState(false)
   const bookref=useRef(new Animated.Value(1)).current;
-const isbookmark=()=>{
-setisbook(true);
-Animated.sequence([
-  Animated.timing(bookref,{
-    toValue:1.3,
-    duration:150,
-    useNativeDriver:true
-  }),
-  Animated.timing(bookref,{
-    toValue:1,
-    duration:150,
-    useNativeDriver:true
-  })
-]).start()
 
-}
   const didInitialLoad = useRef(false);
   const [showPost, setShowPost] = useState(false);
 
@@ -336,7 +321,7 @@ Animated.sequence([
     const fetchlikestate=async()=>{
      
       try{
-        const res=await fetch(`${API_BASE_URL}/fetchlikestate?user=${searchid}&room=${roomdetais}`)
+        const res=await fetch(`${API_BASE_URL}/fetchlikestate?user=${searchid}&postid=${roomdetais}&roomid=${Roomid}`)
         if(!res.ok){
           console.log('something went wrong');
           return;
@@ -348,12 +333,12 @@ Animated.sequence([
       }
         }
         fetchlikestate()
-  },[searchid,roomdetais])
+  },[searchid,roomdetais,Roomid])
    useEffect(()=>{
     const fetchlikes=async()=>{
       if(!searchid || !roomdetais) return
       try{
-        const res=await fetch(`${API_BASE_URL}/fetchlikes?room=${roomdetais}`)
+        const res=await fetch(`${API_BASE_URL}/fetchlikes?postid=${roomdetais}&roomid=${Roomid}`)
         if(!res.ok){
           console.log('something went wrong');
           return;
@@ -366,7 +351,24 @@ Animated.sequence([
     }
     fetchlikes()
    },[searchid,roomdetais])
-
+   useEffect(()=>{
+    if(!searchid || !roomdetais || !Roomid) return;
+    const fetchbookstate=async()=>{
+     
+      try{
+        const res=await fetch(`${API_BASE_URL}/fetchbookstate?user=${searchid}&postid=${roomdetais}&roomid=${Roomid}`)
+        if(!res.ok){
+          console.log('something went wrong');
+          return;
+        }
+        const data=await res.json()
+        setisbook(data.length>0)
+      }catch(err){
+        console.log(err);
+      }
+        }
+        fetchbookstate()
+  },[searchid,roomdetais,Roomid])
   // Fetch comments
   useEffect(() => {
     const fetchComments = async () => {
@@ -425,7 +427,7 @@ Animated.sequence([
       const res = await fetch(`${API_BASE_URL}/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ searchid, roomdetais }),
+        body: JSON.stringify({ searchid, roomdetais,Roomid }),
 
       });
       if (!res.ok) {
@@ -495,6 +497,62 @@ Animated.sequence([
     }
   };
 
+  const postBookmark=async()=>{
+    const prevbook=book;
+    const newbook=!book;
+    setisbook(newbook);
+    Animated.sequence([
+      Animated.timing(bookref,{
+        toValue:1.3,
+        duration:150,
+        useNativeDriver:true
+      }),
+      Animated.timing(bookref,{
+        toValue:1,
+        duration:150,
+        useNativeDriver:true
+      })
+    ]).start()
+    try{
+      const endpoint=newbook ?`add`:`remove`
+      const res=await fetch(`${API_BASE_URL}/postbook-${endpoint}`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({searchid,roomdetais,Roomid})
+      })
+      if(!res.ok){
+        console.log('Something is wrong');
+        setisbook(prevbook);
+    Animated.sequence([
+      Animated.timing(bookref,{
+        toValue:1.3,
+        duration:150,
+        useNativeDriver:true
+      }),
+      Animated.timing(bookref,{
+        toValue:1,
+        duration:150,
+        useNativeDriver:true
+      })
+    ]).start() 
+      }
+    }catch(err){
+      console.log(`Something is wrong,${err}`);
+        setisbook(prevbook);
+    Animated.sequence([
+      Animated.timing(bookref,{
+        toValue:1.3,
+        duration:150,
+        useNativeDriver:true
+      }),
+      Animated.timing(bookref,{
+        toValue:1,
+        duration:150,
+        useNativeDriver:true
+      })
+    ]).start() 
+    }
+  }
   const renderComment = useCallback(({ item: comment }) => {
     const replying = postComments.filter(c => c.replyid === comment.id);
     return (
@@ -627,7 +685,7 @@ Animated.sequence([
   <View style={styles.reactionSpacer} />
 
   
-  <TouchableOpacity style={styles.bookmarkBtn} onPress={isbookmark}>
+  <TouchableOpacity style={styles.bookmarkBtn} onPress={postBookmark}>
   <Animated.View style={{ transform: [{ scale: bookref }] }}>
     <Ionicons
       name={book ? 'bookmark' : 'bookmark-outline'}
@@ -771,7 +829,15 @@ export default function DesignersHubScreen({ navigation, route }) {
   const isAdmin = searchid === roomcreator;
 
   useEffect(() => { postsArrayRef.current = postsArray; }, [postsArray]);
+  const { thepost, saved } = route.params;
 
+  useEffect(() => {
+    if (!saved || !thepost || postsArray.length === 0) return;
+    const index = postsArray.findIndex(p => p.id === thepost);
+    if (index !== -1) {
+      flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.2 });
+    }
+  }, [postsArray, saved, thepost]);
   
   // Socket setup
   useEffect(() => {
@@ -851,7 +917,7 @@ const handler=(data)=>{
       );
       flatListRef.current?.scrollToOffset({offset:0,animated:true})
   }else{
-    triggerBanner[data]
+    triggerBanner(data)
   }
 }
 socket.on('PushResponse',handler);
@@ -1473,4 +1539,8 @@ postText: {
   viewReplyText: { color: "#1D9BF0", fontSize: 12, fontWeight: "600" },
   viewReplyIndent: { marginLeft: 18, borderLeftWidth: 1.5, borderLeftColor: "rgba(255,255,255,0.07)" },
   emptyText: { color: "rgba(255,255,255,0.3)", textAlign: "center", marginTop: 30, fontSize: 14 },
+  bookmarkBtn: {
+    padding: 6,
+    borderRadius: 999,
+  },
 });

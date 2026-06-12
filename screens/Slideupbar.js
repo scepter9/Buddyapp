@@ -119,7 +119,7 @@ export default function Slideupbar({
   return (
     <Modal
       visible={true}
-      transparent={true}
+      transparent={true} 
       animationType="none"
       onRequestClose={hideAnim}
       statusBarTranslucent={true}
