@@ -66,10 +66,9 @@ const BookmarkCard = React.memo(function BookmarkCard({ item, navigation, userId
     <TouchableOpacity
       style={s.bookCard}
       activeOpacity={0.85}
-      onPress={() => navigation.navigate('DesignersHubScreen', {
-        theroom: item.room_of_posts_id,
-        thepost: item.id,
-        saved: true,
+      onPress={() => navigation.navigate('SavedPostScreen', {
+        postId: item.id,
+        roomId: item.room_of_posts_id,
       })}
     >
       <View style={s.bookCardTop}>

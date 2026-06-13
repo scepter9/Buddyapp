@@ -120,7 +120,7 @@ const onSelect = (index) => {
   socket.emit('sendEmoji', {
       emojiId: index,
       messageId: item.id,
-      roomCode,
+      roomCode:room,
       type: alreadyReacted ? 'remove' : 'add'    // ← tell backend which
   });
   hideSlide();
@@ -606,7 +606,11 @@ emojiPickerRight: {
 emojiOption: {
     fontSize: 22,
 },
-
+reactionBadgeActive: {
+  backgroundColor: 'rgba(147,51,234,0.25)',
+  borderColor: '#9333ea',
+  borderWidth: 1,
+},
 });
 
 

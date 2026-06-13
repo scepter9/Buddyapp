@@ -830,14 +830,6 @@ export default function DesignersHubScreen({ navigation, route }) {
 
   useEffect(() => { postsArrayRef.current = postsArray; }, [postsArray]);
   const { thepost, saved } = route.params;
-
-  useEffect(() => {
-    if (!saved || !thepost || postsArray.length === 0) return;
-    const index = postsArray.findIndex(p => p.id === thepost);
-    if (index !== -1) {
-      flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.2 });
-    }
-  }, [postsArray, saved, thepost]);
   
   // Socket setup
   useEffect(() => {

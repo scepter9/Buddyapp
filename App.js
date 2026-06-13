@@ -6,7 +6,7 @@ import * as Font from 'expo-font';
 import Home from './screens/Home';
 import About from './screens/About';
 import Login from './screens/Login';
-import Profile from './screens/Profile';
+import Profile from './screens/Profile'; 
 import Register from './screens/Register';
 import SplashScreen from './screens/SplashScreen';
 import Editprofile from './screens/Editprofile';
@@ -22,7 +22,7 @@ import FriendList from './screens/FriendList';
 import Slideupbar from './screens/Slideupbar'
 import InterestRoom from './screens/nexus/InterestRoom';
 import MainRoom from './screens/nexus/MainRoom';
-
+import SavedPostScreen from './screens/nexus/SavedPostScreen'
 import Room from './screens/nexus/Room';
 import CampusPulse from './screens/nexus/CampusPulsed';
 import ViewImage from './screens/nexus/ViewImage';
@@ -82,6 +82,7 @@ export default function App() {
     <Stack.Screen name="MembersScreen" component={MembersScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Moderator" component={Moderator} options={{ headerShown: false }} />
     <Stack.Screen name="Slideupbar" component={Slideupbar} options={{ headerShown: false }} />
+    <Stack.Screen name="SavedPostScreen" component={SavedPostScreen}  options={{headerShown:false}}/>
    
   </Stack.Navigator> 
 </NavigationContainer>

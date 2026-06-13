@@ -15,8 +15,8 @@ const { result, last } = require('lodash');
 const bcrypt = require('bcrypt');
 const cron=require('node-cron');
 const { report } = require('process');
-const cloudinary=require("cloudinary")
-const {CloudinaryStorage}=require("multer-storage-cloudinary")
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 //"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" -u root -p buddy > backup.sql
 //very important
@@ -117,7 +117,8 @@ const db = mysql.createPool({
   port: process.env.DB_PORT,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  multipleStatements:true
 });
    
   console.log('MySQL pool created');
@@ -609,30 +610,32 @@ app.post('/reset-password', async (req, res) => {
 //     },
 // });
 
+const imageStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => ({
+    folder: 'buddyapp/images',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    resource_type: 'image',
+  }),
+});
+
+const videoStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => ({
+    folder: 'buddyapp/videos',
+    allowed_formats: ['mp4', 'mov', 'avi'],
+    resource_type: 'video',
+  }),
+});
+
 const audioStorage = new CloudinaryStorage({
-  cloudinary,
-  params:{
-    folder:'buddyapp/audio',
-    allowed_formats:['mp3','aac','m4a','wav'],
-    resource_type:'video'
-  }
-})
-const imageStorage=new CloudinaryStorage({
-  cloudinary,
-  params:{
-    folder:'buddyapp/images',
-    allowed_formats:['jpg','jpeg','png','webp'],
-    resource_type:'image'
-  }
-})
-const videoStorage=new CloudinaryStorage({
-  cloudinary,
-  params:{
-    folder:'buddyapp/videos',
-    allowed_formats:['mp4','mov','avi'],
-    resource_type:'video'
-  }
-})
+  cloudinary: cloudinary,
+  params: async (req, file) => ({
+    folder: 'buddyapp/audio',
+    allowed_formats: ['mp3', 'aac', 'm4a', 'wav'],
+    resource_type: 'video',
+  }),
+});
 const uploadAudio = multer({ storage: audioStorage});
 const uploadVideo = multer({ storage: videoStorage});
 const uploadImage = multer({ storage: imageStorage});
@@ -1532,138 +1535,7 @@ app.post('/block/:blockedId', (req, res) => {
   
 
 
-//     app.post('/api/submit-answers', (req, res) => {
-//     // Extract the userId and answers object from the request body.
-//     const { userId, answers } = req.body;
 
-//     if (!userId || !answers || Object.keys(answers).length === 0) {
-//         return res.status(400).json({ error: 'Invalid data provided.' });
-//     }
-
-//     // Step 1: Delete all previous answers for this user
-//     const deleteSql = `
-//         DELETE FROM user_answers
-//         WHERE user_id = ?
-//     `;
-    
-//     db.query(deleteSql, [userId], (err, result) => {
-//         if (err) {
-//             console.error('Error deleting old answers:', err);
-//             return res.status(500).json({ error: 'Database error on delete' });
-//         }
-
-//         // Step 2: Prepare a multi-row INSERT query for all new answers
-//         // We'll dynamically build the query and the values array.
-//         const values = [];
-//         const placeholders = [];
-
-//         for (const questionId in answers) {
-//             const answer = answers[questionId];
-//             if (answer) {
-//                 // Add values for each row: [userId, questionId, answer]
-//                 values.push(userId, parseInt(questionId), answer);
-//                 // Create a placeholder string for each row: (?, ?, ?)
-//                 placeholders.push('(?, ?, ?)');
-//             }
-//         }
-        
-//         // Join the placeholders to create the final SQL string.
-//         const insertSql = `
-//             INSERT INTO user_answers (user_id, question_id, answer)
-//             VALUES ${placeholders.join(', ')}
-//         `;
-
-//         // Execute the multi-row insert query
-//         db.query(insertSql, values, (err, result) => {
-//             if (err) {
-//                 console.error('Error inserting new answers:', err);
-//                 return res.status(500).json({ error: 'Database error on insert' });
-//             }
-            
-//             res.status(201).json({ 
-//                 message: 'Answers submitted successfully!', 
-//                 affectedRows: result.affectedRows 
-//             });
-//         });
-//     });
-// });
-// app.get('/api/matches',(req,res)=>{
-//   const {userId}=req.query;
-//   const sql = `
-//   WITH shared_all AS (
-//     SELECT
-//       a1.user_id AS base_user,
-//       a2.user_id AS other_user,
-//       a1.question_id
-//       from user_answers a1
-//     JOIN user_answers a2
-//       ON a1.question_id = a2.question_id
-//      AND a1.answer = a2.answer
-//      AND a1.user_id <> a2.user_id
-//      LEFT JOIN skipped_users su ON
-//      su.skipper_id=a1.user_id AND
-//      su.skipped_id=a2.user_id
-//     WHERE a1.user_id = ? and su.id is null
-//   ),
-  
-//   similarity AS (
-//     SELECT
-//       other_user,
-//       COUNT(*) / 20 * 100 AS similarity_percent
-//     FROM shared_all 
-//     GROUP BY other_user
-//   ),
-  
-//   shared_first_10 AS (
-//     SELECT
-//       a2.user_id AS other_user,
-//       a1.answer,
-//       ROW_NUMBER() OVER (
-//         PARTITION BY a2.user_id
-//         ORDER BY rand()
-//       ) AS rn
-//     FROM user_answers a1
-//     JOIN user_answers a2
-//       ON a1.question_id = a2.question_id
-//      AND a1.answer = a2.answer
-//      AND a1.user_id <> a2.user_id
-//     WHERE a1.user_id = ?
-//       AND a1.question_id <= 10
-//   ),
-  
-//   picked_two AS (
-//     SELECT *
-//     FROM shared_first_10
-//     WHERE rn <= 4
-//   )
-  
-//   SELECT
-//     s.other_user,
-//     s.similarity_percent,
-//     c.FULLNAME as thename,
-//       c.image as theimage,
-//     MAX(CASE WHEN p.rn = 1 THEN p.answer END) AS shared_answer_1,
-//     MAX(CASE WHEN p.rn = 2 THEN p.answer END) AS shared_answer_2,
-//     MAX(CASE WHEN p.rn = 3 THEN p.answer END) AS shared_answer_3,
-//     MAX(CASE WHEN p.rn = 4 THEN p.answer END) AS shared_answer_4
-//   FROM similarity s 
-//   LEFT JOIN projecttables c ON s.other_user=c.ID
-//   LEFT JOIN picked_two p
-//     ON s.other_user = p.other_user
-//   GROUP BY
-//     s.other_user,
-//     s.similarity_percent
-//   ORDER BY s.similarity_percent DESC
-//   LIMIT 100;
-  
-//     `;
-//     db.query(sql,[userId,userId],(err,result)=>{
-//       if(err){
-//         res.status(500).json({error:'An error occured'})
-//       }
-//       res.json(result)
-//     })
-// })
 
 
 
@@ -1789,57 +1661,65 @@ io.on('connection', (socket) => {
 });
 
  
-// cron.schedule('*/5 * * * *', async () => {
-//   const userId=req.session.user.id
-//   try {
-//     const usersocket=connectedUsers.get(String(userId))
-//     const [rows] = await db.promise().query(`
-//       SELECT 
-//         k.userid,
-//         k.roomcode,
-//         a.roomName
-//       FROM anontemp k
-//       JOIN newanongroup a ON k.roomcode = a.roomRandomCode
-//       WHERE a.starttime <= NOW() + INTERVAL 30 MINUTE
-//         AND a.starttime >= NOW()
-//         AND a.status = 'waiting'
-//     `);
+cron.schedule('*/5 * * * *', async () => {
+  const userId=req.session.user.id
+  try {
+    const usersocket=connectedUsers.get(String(userId))
+    const [rows] = await db.promise().query(`
+      SELECT 
+        k.userid,
+        k.roomcode,
+        a.roomName
+      FROM anontemp k
+      JOIN newanongroup a ON k.roomcode = a.roomRandomCode
+      WHERE a.starttime <= NOW() + INTERVAL 30 MINUTE
+        AND a.starttime >= NOW()
+        AND a.status = 'waiting'
+    `);
 
-//     if (rows.length === 0) return;
+    if (rows.length === 0) return;
 
-//     for (const row of rows) {
-//       // Insert notification
-//       await db.promise().query(`
-//         INSERT INTO notifications (sender_id, receiver_id, message, type, is_read)
-//         VALUES (?, ?, ?, ?, ?)
-//       `, [null, row.userid, `Your anonymous room "${row.roomName}" starts in 30 minutes`, 'anon', 0]);
+    for (const row of rows) {
+      // Insert notification
+      await db.promise().query(`
+        INSERT INTO notifications (sender_id, receiver_id, message, type, is_read)
+        VALUES (?, ?, ?, ?, ?)
+      `, [null, row.userid, `Your anonymous room "${row.roomName}" starts in 30 minutes`, 'anon', 0]);
 
 
 
-//       // Emit real-time notification if user is online
-//       io.to(usersocket).emit('newNotification', {
-//         message: `Your anonymous room "${row.roomName}" starts in 30 minutes`,
-//         type: 'anon',
-//       });
-//     }
+      // Emit real-time notification if user is online
+      io.to(usersocket).emit('newNotification', {
+        message: `Your anonymous room "${row.roomName}" starts in 30 minutes`,
+        type: 'anon',
+      });
+    }
 
     
-//     const roomCodes = [...new Set(rows.map(r => r.roomcode))];
-//     if (roomCodes.length > 0) {
-//       const placeholders = roomCodes.map(() => '?').join(',');
-//       await db.promise().query(
-//         `UPDATE newanongroup SET status = 'sent' WHERE roomRandomCode IN (${placeholders})`,
-//         roomCodes
-//       );
-//     }
+    const roomCodes = [...new Set(rows.map(r => r.roomcode))];
+    if (roomCodes.length > 0) {
+      const placeholders = roomCodes.map(() => '?').join(',');
+      await db.promise().query(
+        `UPDATE newanongroup SET status = 'sent' WHERE roomRandomCode IN (${placeholders})`,
+        roomCodes
+      );
+    }
 
-//     console.log(`Cron: notified ${rows.length} subscribers`);
-//   } catch (err) {
-//     // BUG FIX: never throw from cron — log and continue
-//     console.error('Cron error:', err.message);
-//   }
-// }, { timezone: 'Africa/Lagos' });
+    console.log(`Cron: notified ${rows.length} subscribers`);
+  } catch (err) {
+    // BUG FIX: never throw from cron — log and continue
+    console.error('Cron error:', err.message);
+  }
+}, { timezone: 'Africa/Lagos' });
 
+cron.schedule('0 * * * *', async () => {
+  db.query(`DELETE FROM newanongroup WHERE stoptime < NOW()`, (err, result) => {
+    if (err) return console.error('Cleanup failed', err);
+    if (result.affectedRows > 0) {
+      console.log(`Cleaned up ${result.affectedRows} expired rooms`);
+    }
+  });
+});
 // Use uploadImage which uses Cloudinary storage ✅
 app.post('/api/upload', uploadImage.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
@@ -2157,9 +2037,10 @@ res.json(result)
 app.get('/bookmarks',(req,res)=>{
   const {userId}=req.query;
   db.query(`select cr.id,cr.sender_id,cr.post,cr.posted_at,cr.room_of_posts_id,
-  cr.postvideo,cr.postimage,a.USERNAME as usersname,a.FULLNAME as fullname,a.image 
-   from roomposts cr  inner join projecttables a on cr.sender_id=a.ID inner join bookmarks br on br.roomid=cr.room_of_posts_id and br.postid=cr.id where br.userid=? order by  cr.posted_at desc 
-   limit 20`,[userId],(err,result)=>{
+  cr.postvideo,cr.postimage,a.USERNAME as usersname,a.FULLNAME as fullname,a.image ,c.roomname
+   from roomposts cr  inner join projecttables a on cr.sender_id=a.ID inner join bookmarks br on br.roomid=cr.room_of_posts_id and br.postid=cr.id inner join createinterestroom c on c.id=cr.room_of_posts_id  where br.userid=? order by  cr.posted_at desc 
+   limit 20
+`,[userId],(err,result)=>{
     if (err) {
       console.log(err); // log the actual error
       return res.status(500).json({ error: 'An error occurred' });
@@ -3078,7 +2959,56 @@ app.post('/modreports/:id/remove', isMod, (req, res) => {
 });
 
 
+app.get('/getpost', async (req, res) => {
+  const { postid, roomid, userIs } = req.query;
+  try {
+    const query = `
+     
+    SELECT p.*, u.fullname, u.USERNAME, u.image 
+    FROM roomposts p 
+    JOIN projecttables u ON p.sender_id = u.ID
+    WHERE p.id = ? AND p.room_of_posts_id = ?;
 
+    SELECT COUNT(*) as count FROM roomlikes 
+    WHERE postid = ? AND roomid = ?;
+
+    SELECT id FROM roomlikes 
+    WHERE postid = ? AND roomid = ? AND userid = ?;
+
+    SELECT id FROM bookmarks 
+    WHERE postid = ? AND roomid = ? AND userid = ?;
+
+    SELECT c.*, u.fullname AS usersfull, u.image,
+      (SELECT COUNT(*) FROM roomcommentlikes WHERE commentid = c.id) as likecount,
+      (SELECT COUNT(*) FROM roomcommentlikes WHERE commentid = c.id AND user_id = ?) as likestate
+    FROM commenting c
+    JOIN projecttables u ON c.senderid = u.ID
+    WHERE c.postid = ? AND c.room_of_posts_id = ?
+    ORDER BY c.posted_at ASC;
+  
+    `;
+    const [results] = await db.promise().query(query, [
+      postid, roomid,
+      postid, roomid,
+      postid, roomid, userIs,
+      postid, roomid, userIs,
+      userIs, postid, roomid,
+    ]);
+
+    if (results[0].length === 0) return res.status(404).json({ error: 'Post not found' });
+
+    return res.status(200).json({
+      post: results[0][0],
+      likeCount: results[1][0].count,
+      likedByMe: results[2].length > 0,
+      bookmarked: results[3].length > 0,
+      comments: results[4],
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // ✅ Render assigns the port dynamically
 const PORT = process.env.DB_PORT || 3000;
