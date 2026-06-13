@@ -696,10 +696,11 @@ app.post('/update-profile', uploadImage.single('image'), (req, res) => {
 
   // IMAGE
 
-  if (image) {
-    updates.push('IMAGE = ?');
-    values.push(image.path); // full Cloudinary URL
-  }
+ if (image) {
+  console.log('[profile image path]', image.path);
+  updates.push('IMAGE = ?');
+  values.push(image.path);
+}
 
 
   // NO CHANGES
@@ -1662,9 +1663,7 @@ io.on('connection', (socket) => {
 
  
 cron.schedule('*/5 * * * *', async () => {
-  const userId=req.session.user.id
   try {
-    const usersocket=connectedUsers.get(String(userId))
     const [rows] = await db.promise().query(`
       SELECT 
         k.userid,
@@ -1680,22 +1679,21 @@ cron.schedule('*/5 * * * *', async () => {
     if (rows.length === 0) return;
 
     for (const row of rows) {
-      // Insert notification
       await db.promise().query(`
         INSERT INTO notifications (sender_id, receiver_id, message, type, is_read)
         VALUES (?, ?, ?, ?, ?)
       `, [null, row.userid, `Your anonymous room "${row.roomName}" starts in 30 minutes`, 'anon', 0]);
 
-
-
-      // Emit real-time notification if user is online
-      io.to(usersocket).emit('newNotification', {
-        message: `Your anonymous room "${row.roomName}" starts in 30 minutes`,
-        type: 'anon',
-      });
+      // ✅ look up each user's socket individually
+      const usersocket = connectedUsers.get(String(row.userid));
+      if (usersocket) {
+        io.to(usersocket).emit('newNotification', {
+          message: `Your anonymous room "${row.roomName}" starts in 30 minutes`,
+          type: 'anon',
+        });
+      }
     }
 
-    
     const roomCodes = [...new Set(rows.map(r => r.roomcode))];
     if (roomCodes.length > 0) {
       const placeholders = roomCodes.map(() => '?').join(',');
@@ -1707,7 +1705,6 @@ cron.schedule('*/5 * * * *', async () => {
 
     console.log(`Cron: notified ${rows.length} subscribers`);
   } catch (err) {
-    // BUG FIX: never throw from cron — log and continue
     console.error('Cron error:', err.message);
   }
 }, { timezone: 'Africa/Lagos' });
