@@ -53,12 +53,12 @@ const MessageBubble = ({ item, myUserId, socket, emojiOptions, emojiMap, emojiCo
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const [showPicker, setShowPicker] = useState(false);
   const [reactions, setReactions] = useState({});
-  const reactionAnim=useRef(new Animated.Value(1)).current;
   const [activeEmoji, setActiveEmoji] = useState(null); // tracks YOUR current reaction
 
   useEffect(() => {
-      const handler = ({ messageId, emojiId, type }) => {
+      const handler = ({ messageId, emojiId, type, fromSelf }) => {
           if (item.id !== messageId) return;
+          if (fromSelf) return; // ← skip: optimistic update already handled it
           const emoji = emojiOptions[emojiId];
           if (!emoji) return;
           setReactions(prev => {
@@ -87,21 +87,6 @@ const MessageBubble = ({ item, myUserId, socket, emojiOptions, emojiMap, emojiCo
   };
 
   const onSelect = (index) => {
-    Animated.sequence([
-Animated.spring(reactionAnim,{
-  toValue:1.25,
-  friction:10,
-tension:60,
-useNativeDriver:true
-}),
-Animated.spring(reactionAnim,{
-  toValue:1,
-  friction:10,
-tension:60,
-useNativeDriver:true
-    })
-  ]).start()
-
       const emoji = emojiOptions[index];
       const isSameEmoji = activeEmoji === emoji;
 
@@ -208,18 +193,15 @@ useNativeDriver:true
                       { transform: [{ translateY: slideAnim }], opacity: opacityAnim }
                   ]}>
                       {emojiOptions.map((emo, index) => (
-                       
                           <Pressable
                               key={index}
                               onPress={() => onSelect(index)}
                               style={[
                                   styles.emojiOptionWrapper,
-                                  activeEmoji === emo && styles.emojiOptionActive  // 
+                                  activeEmoji === emo && styles.emojiOptionActive  // ← picker highlight
                               ]}
                           >
-                             <Animated.View style={{transform:[{scale:reactionAnim}]}}>
                               <Text style={styles.emojiOption}>{emo}</Text>
-                              </Animated.View>
                           </Pressable>
                       ))}
                   </Animated.View>

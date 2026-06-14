@@ -18,8 +18,8 @@ const { report } = require('process');
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_URL
 );
 
 //"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" -u root -p buddy > backup.sql
@@ -1652,9 +1652,9 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('sendEmoji', ({ emojiId, messageId, roomCode, type }) => {
-    if (emojiId === undefined || emojiId === null || !messageId || !roomCode) return;
-    socket.to(roomCode).emit('Receiveemoji', { messageId, emojiId, type });
+  socket.on('sendEmoji', ({ emojiId, messageId, roomCode, type ,fromSelf}) => {
+    if (emojiId === undefined || emojiId === null || !messageId || !roomCode || !fromSelf) return;
+    socket.to(roomCode).emit('Receiveemoji', { messageId, emojiId, type ,fromSelf});
 });
 
   // ── Disconnecting ──
