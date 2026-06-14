@@ -87,11 +87,10 @@ const MessageBubble = ({ item, myUserId, socket, emojiOptions, emojiMap, emojiCo
   };
 
   const onSelect = (index) => {
-    Animated.sequence(
+    Animated.sequence([
 Animated.spring(reactionAnim,{
   toValue:1.25,
   friction:10,
-duration: 350,
 tension:60,
 useNativeDriver:true
 }),
@@ -99,10 +98,9 @@ Animated.spring(reactionAnim,{
   toValue:1,
   friction:10,
 tension:60,
-duration: 350,
 useNativeDriver:true
-})
-    ).start()
+    })
+  ]).start()
 
       const emoji = emojiOptions[index];
       const isSameEmoji = activeEmoji === emoji;
