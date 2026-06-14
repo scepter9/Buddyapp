@@ -10,7 +10,7 @@ import {
   Alert,
   Modal,
   Platform,
-  StatusBar,
+  StatusBar, 
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
