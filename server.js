@@ -15,8 +15,12 @@ const { result, last } = require('lodash');
 const bcrypt = require('bcrypt');
 const cron=require('node-cron');
 const { report } = require('process');
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const { createClient } = require('@supabase/supabase-js');
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
 //"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe" -u root -p buddy > backup.sql
 //very important
@@ -43,17 +47,7 @@ app.use(session({
 }));
 
 
-cloudinary.config({
-  cloud_name: process.env.CLOUD_NAME,
-  api_key: process.env.CLOUD_API_KEY,
-  api_secret: process.env.CLOUD_API_SECRET,
-});
 
-console.log('[Cloudinary]', {
-  cloud_name: process.env.CLOUD_NAME,
-  api_key: process.env.CLOUD_API_KEY ? 'set' : 'MISSING',
-  api_secret: process.env.CLOUD_API_SECRET ? 'set' : 'MISSING',
-});
 
 const server = http.createServer(app);
 
@@ -610,40 +604,125 @@ app.post('/reset-password', async (req, res) => {
 //     },
 // });
 
-const imageStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => ({
-    folder: 'buddyapp/images',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    resource_type: 'image',
-  }),
+const upload = multer({ storage: multer.memoryStorage() });
+const uploadImage = upload;
+const uploadVideo = upload;
+const uploadAudio = upload;
+
+const uploadToSupabase = async (file, folder) => {
+  const ext = path.extname(file.originalname);
+  const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+  
+  const { data, error } = await supabase.storage
+    .from('buddyapp')
+    .upload(filename, file.buffer, {
+      contentType: file.mimetype,
+      upsert: false,
+    });
+
+  if (error) throw error;
+
+  const { data: urlData } = supabase.storage
+    .from('Buddy app')
+    .getPublicUrl(filename);
+
+  return urlData.publicUrl; // full https URL
+};
+
+app.post('/api/upload', uploadImage.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+  try {
+    const imageUrl = await uploadToSupabase(req.file, 'images');
+    res.json({ imageUrl });
+  } catch (err) {
+    console.error('[upload image]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-const videoStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => ({
-    folder: 'buddyapp/videos',
-    allowed_formats: ['mp4', 'mov', 'avi'],
-    resource_type: 'video',
-  }),
+app.post('/api/videoupload', uploadVideo.single('video'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+  try {
+    const VideoUrl = await uploadToSupabase(req.file, 'videos');
+    res.json({ VideoUrl });
+  } catch (err) {
+    console.error('[upload video]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-const audioStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => ({
-    folder: 'buddyapp/audio',
-    allowed_formats: ['mp3', 'aac', 'm4a', 'wav'],
-    resource_type: 'video',
-  }),
-});
-const uploadAudio = multer({ storage: audioStorage});
-const uploadVideo = multer({ storage: videoStorage});
-const uploadImage = multer({ storage: imageStorage});
-
-
-app.post('/api/upload-audio', uploadAudio.single('audio'), (req, res) => {
+app.post('/api/upload-audio', uploadAudio.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  res.json({ audioUrl:req.file.path });
+  try {
+    const audioUrl = await uploadToSupabase(req.file, 'audio');
+    res.json({ audioUrl });
+  } catch (err) {
+    console.error('[upload audio]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/uploads/images', uploadImage.array('images', 10), async (req, res) => {
+  if (!req.files?.length) return res.status(400).json({ message: 'No files uploaded' });
+  try {
+    const imageUrls = await Promise.all(
+      req.files.map(f => uploadToSupabase(f, 'images'))
+    );
+    res.json({ imageUrls });
+  } catch (err) {
+    console.error('[upload images]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/uploads/videos', uploadVideo.array('videos', 10), async (req, res) => {
+  if (!req.files?.length) return res.status(400).json({ message: 'No files uploaded' });
+  try {
+    const videoUrls = await Promise.all(
+      req.files.map(f => uploadToSupabase(f, 'videos'))
+    );
+    res.json({ videoUrls });
+  } catch (err) {
+    console.error('[upload videos]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Profile update — same pattern
+app.post('/update-profile', uploadImage.single('image'), async (req, res) => {
+  const { name, about, university } = req.body;
+  const userId = req.session.user?.id;
+
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+  let updates = [];
+  let values = [];
+
+  if (name?.trim()) { updates.push('FULLNAME = ?'); values.push(name.trim()); }
+  if (about?.trim()) { updates.push('BIO = ?'); values.push(about.trim()); }
+  if (university?.trim()) { updates.push('UNIVERSITY = ?'); values.push(university.trim()); }
+
+  if (req.file) {
+    try {
+      const imageUrl = await uploadToSupabase(req.file, 'profiles');
+      updates.push('IMAGE = ?');
+      values.push(imageUrl);
+    } catch (err) {
+      return res.status(500).json({ error: 'Image upload failed' });
+    }
+  }
+
+  if (updates.length === 0) return res.status(400).json({ error: 'No data provided' });
+
+  values.push(userId);
+  db.query(
+    `UPDATE projecttables SET ${updates.join(', ')} WHERE id = ?`,
+    values,
+    (err) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json({ message: 'Profile updated successfully.' });
+    }
+  );
 });
 
 app.get('/get-profile', (req, res) => {
@@ -664,75 +743,7 @@ app.get('/get-profile', (req, res) => {
 
 
 // Update profile route
-app.post('/update-profile', uploadImage.single('image'), (req, res) => {
-  const { name, about, university } = req.body;
-  const image = req.file;
-  const userId = req.session.user?.id;
 
-  if (!userId) {
-      return res.status(401).json({ error: 'Not authenticated' });
-  }
-
-  let updates = [];
-  let values = [];
-
-  // NAME
-  if (name && name.trim() !== '') {
-      updates.push('FULLNAME = ?');
-      values.push(name.trim());
-  }
-
-  // BIO
-  if (about && about.trim() !== '') {
-      updates.push('BIO = ?');
-      values.push(about.trim());
-  }
-
-  // UNIVERSITY
-  if (university && university.trim() !== '') {
-      updates.push('UNIVERSITY = ?');
-      values.push(university.trim());
-  }
-
-  // IMAGE
-
- if (image) {
-  console.log('[profile image path]', image.path);
-  updates.push('IMAGE = ?');
-  values.push(image.path);
-}
-
-
-  // NO CHANGES
-  if (updates.length === 0) {
-      return res.status(400).json({
-          error: 'No data provided for update.',
-      });
-  }
-
-  // FINAL QUERY
-  const sql = `
-      UPDATE projecttables 
-      SET ${updates.join(', ')} 
-      WHERE id = ?
-  `;
-
-  values.push(userId);
-
-  db.query(sql, values, (err, result) => {
-      if (err) {
-          console.error('Update profile error:', err);
-
-          return res.status(500).json({
-              error: 'Database error.',
-          });
-      }
-
-      res.json({
-          message: 'Profile updated successfully.',
-      });
-  });
-});
 
 app.get('/checkuser', (req, res) => {
   const userId = req.session.user?.id;
@@ -1643,7 +1654,7 @@ io.on('connection', (socket) => {
 
   socket.on('sendEmoji', ({ emojiId, messageId, roomCode, type }) => {
     if (emojiId === undefined || emojiId === null || !messageId || !roomCode) return;
-    io.to(roomCode).emit('Receiveemoji', { messageId, emojiId, type });
+    socket.to(roomCode).emit('Receiveemoji', { messageId, emojiId, type });
 });
 
   // ── Disconnecting ──
@@ -1708,7 +1719,6 @@ cron.schedule('*/5 * * * *', async () => {
     console.error('Cron error:', err.message);
   }
 }, { timezone: 'Africa/Lagos' });
-
 cron.schedule('0 * * * *', async () => {
   db.query(`DELETE FROM newanongroup WHERE stoptime < NOW()`, (err, result) => {
     if (err) return console.error('Cleanup failed', err);
@@ -1718,10 +1728,7 @@ cron.schedule('0 * * * *', async () => {
   });
 });
 // Use uploadImage which uses Cloudinary storage ✅
-app.post('/api/upload', uploadImage.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-  res.json({ imageUrl: req.file.path }); // full Cloudinary URL
-});
+
 
 
 
@@ -1929,47 +1936,7 @@ app.post('/postnewtextval',(req,res)=>{
   })
 });
 
-app.post('/api/videoupload',uploadVideo.single('video'),(req,res)=>{
-  if(!req.file){
-return res.status(400).json({message:'No file uploaded'})
-  }
-  const VideoUrl=req.file.path;
-  res.json({VideoUrl})
 
-  })
-
-
-  
-app.post(
-  "/api/uploads/images",
-  uploadImage.array("images", 10), // up to 10 images
-  (req, res) => {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: "No files uploaded" });
-    }
-
-    const imageUrls = req.files.map(
-      file => file.path
-    );
-
-    res.json({ imageUrls });
-  }
-);
-app.post(
-  "/api/uploads/videos",
-  uploadVideo.array("videos", 10), // up to 10 images
-  (req, res) => {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: "No files uploaded" });
-    }
-
-    const videoUrls = req.files.map(
-      file => file.path
-    );
-
-    res.json({ videoUrls });
-  }
-);
 app.post('/join-private-room', (req, res) => {
   const { roomId, userId, passcode } = req.body;
 
